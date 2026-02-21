@@ -10,11 +10,6 @@ type AuthPayload = {
   email: string;
 };
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "",
-});
-
 const PLANS = {
   Basic: 999,
   Pro: 1999,
@@ -34,6 +29,22 @@ export async function POST(req: NextRequest) {
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // ================= RAZORPAY ENV CHECK =================
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!keyId || !keySecret) {
+      return NextResponse.json(
+        { error: "Razorpay not configured" },
+        { status: 500 }
+      );
+    }
+
+    const razorpay = new Razorpay({
+      key_id: keyId,
+      key_secret: keySecret,
+    });
 
     // ================= PLAN =================
     const { planType } = await req.json();
