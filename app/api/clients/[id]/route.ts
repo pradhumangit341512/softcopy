@@ -10,9 +10,10 @@ export async function GET(
 ) {
   try {
     const { authorized, response, payload } = await requireAuth(req);
-    if (!authorized || !payload) return response;
 
-    // 🔥 NEXT 16 FIX
+    if (!authorized) return response;
+    if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const { id } = await context.params;
 
     if (!id) {
@@ -55,10 +56,11 @@ export async function PUT(
 ) {
   try {
     const { authorized, response, payload } = await requireAuth(req);
-    if (!authorized || !payload) return response;
+
+    if (!authorized) return response;
+    if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await context.params;
-
     const body: UpdateClientRequest = await req.json();
 
     const existing = await db.client.findUnique({ where: { id } });
@@ -75,10 +77,7 @@ export async function PUT(
     }
 
     if (!["admin", "manager"].includes(payload.role)) {
-      return NextResponse.json(
-        { error: "Forbidden" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const updated = await db.client.update({
@@ -111,7 +110,9 @@ export async function DELETE(
 ) {
   try {
     const { authorized, response, payload } = await requireAuth(req);
-    if (!authorized || !payload) return response;
+
+    if (!authorized) return response;
+    if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await context.params;
 
@@ -129,10 +130,7 @@ export async function DELETE(
     }
 
     if (payload.role !== "admin") {
-      return NextResponse.json(
-        { error: "Admin only" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Admin only" }, { status: 403 });
     }
 
     await db.client.delete({ where: { id } });

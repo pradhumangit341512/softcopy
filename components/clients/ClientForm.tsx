@@ -1,7 +1,8 @@
 'use client';
 
-import { useForm, SubmitHandler } from 'react-hook-form';
+import { useForm, SubmitHandler, Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 
 import { clientSchema } from '@/schemas/client.schema';
 
@@ -15,9 +16,14 @@ import {
 import Input from '@/components/common/ Input';
 import Button from '@/components/common/ Button';
 
+/* ================= TYPES ================= */
+
+// form values come from zod schema
+type FormValues = z.infer<typeof clientSchema>;
+
 interface ClientFormProps {
   onSubmit: (data: ClientFormData) => Promise<boolean>;
-  initialData?: Partial<ClientFormData>;
+  initialData?: Partial<FormValues>;
   isLoading?: boolean;
 }
 
@@ -26,16 +32,17 @@ export default function ClientForm({
   initialData,
   isLoading = false,
 }: ClientFormProps) {
+
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<ClientFormData>({
-    resolver: zodResolver(clientSchema),
+  } = useForm<FormValues>({
+    resolver: zodResolver(clientSchema) as unknown as Resolver<FormValues>, // 🔥 fix
     defaultValues: initialData,
   });
 
-  const submitHandler: SubmitHandler<ClientFormData> = async (data) => {
+  const submitHandler: SubmitHandler<FormValues> = async (data) => {
     const formatted: ClientFormData = {
       ...data,
       visitingDate: data.visitingDate
@@ -50,22 +57,10 @@ export default function ClientForm({
   };
 
   const selectStyle = `
-    w-full
-    px-4
-    py-2.5
-    border
-    border-gray-300
-    rounded-lg
-    bg-white
-    text-gray-900
-    font-semibold
-    shadow-sm
-    appearance-none
-    focus:outline-none
-    focus:ring-2
-    focus:ring-blue-500
-    focus:border-blue-500
-    transition
+    w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-white
+    text-gray-900 font-semibold shadow-sm appearance-none
+    focus:outline-none focus:ring-2 focus:ring-blue-500
+    focus:border-blue-500 transition
   `;
 
   return (
@@ -102,13 +97,8 @@ export default function ClientForm({
         <label className="block mb-2 font-medium text-gray-800">
           Requirement Type
         </label>
-        <select
-          {...register("requirementType")}
-          className={selectStyle}
-        >
-          <option value="" className="text-gray-400">
-            Select Requirement
-          </option>
+        <select {...register('requirementType')} className={selectStyle}>
+          <option value="">Select Requirement</option>
           {Object.values(RequirementType).map((value) => (
             <option key={value} value={value}>
               {value}
@@ -127,13 +117,8 @@ export default function ClientForm({
         <label className="block mb-2 font-medium text-gray-800">
           Inquiry Type
         </label>
-        <select
-          {...register("inquiryType")}
-          className={selectStyle}
-        >
-          <option value="" className="text-gray-400">
-            Select Inquiry
-          </option>
+        <select {...register('inquiryType')} className={selectStyle}>
+          <option value="">Select Inquiry</option>
           {Object.values(InquiryType).map((value) => (
             <option key={value} value={value}>
               {value}
@@ -149,13 +134,8 @@ export default function ClientForm({
 
       {/* STATUS */}
       <div>
-        <label className="block mb-2 font-medium text-gray-800">
-          Status
-        </label>
-        <select
-          {...register("status")}
-          className={selectStyle}
-        >
+        <label className="block mb-2 font-medium text-gray-800">Status</label>
+        <select {...register('status')} className={selectStyle}>
           {Object.values(ClientStatus).map((value) => (
             <option key={value} value={value}>
               {value}
@@ -188,25 +168,13 @@ export default function ClientForm({
       />
 
       {/* VISITING DATE */}
-      <Input
-        label="Visiting Date"
-        type="date"
-        {...register('visitingDate')}
-      />
+      <Input label="Visiting Date" type="date" {...register('visitingDate')} />
 
       {/* VISITING TIME */}
-      <Input
-        label="Visiting Time"
-        type="time"
-        {...register('visitingTime')}
-      />
+      <Input label="Visiting Time" type="time" {...register('visitingTime')} />
 
       {/* FOLLOW UP */}
-      <Input
-        label="Follow Up Date"
-        type="date"
-        {...register('followUpDate')}
-      />
+      <Input label="Follow Up Date" type="date" {...register('followUpDate')} />
 
       {/* SOURCE */}
       <Input
@@ -222,7 +190,6 @@ export default function ClientForm({
         {...register('notes')}
       />
 
-      {/* BUTTON */}
       <Button
         type="submit"
         loading={isLoading}

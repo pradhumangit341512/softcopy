@@ -1,15 +1,22 @@
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = global as unknown as {
-  prisma: PrismaClient | undefined;
+/**
+ * Prevent multiple Prisma instances in Next.js dev (hot reload issue)
+ */
+
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
 };
 
-export const prisma =
+export const db =
   globalForPrisma.prisma ??
-  new PrismaClient();
+  new PrismaClient({
+    log:
+      process.env.NODE_ENV === "development"
+        ? ["query", "error", "warn"]
+        : ["error"],
+  });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  globalForPrisma.prisma = db;
 }
-
-export const db = prisma;

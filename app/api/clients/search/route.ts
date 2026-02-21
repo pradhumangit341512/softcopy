@@ -1,27 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getTokenCookie, verifyToken } from '@/lib/auth';
+import { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
   try {
     const token = await getTokenCookie();
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    const payload = verifyToken(token);
-    if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const payload = await verifyToken(token);
+    if (!payload) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { searchParams } = new URL(req.url);
     const query = searchParams.get('q') || '';
     const page = parseInt(searchParams.get('page') || '1');
+
     const limit = 20;
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    // ✅ Proper Prisma typing
+    const where: Prisma.ClientWhereInput = {
       companyId: payload.companyId,
       OR: [
-        { clientName: { contains: query, mode: 'insensitive' } },
-        { phone: { contains: query } },
-        { email: { contains: query, mode: 'insensitive' } },
+        {
+          clientName: {
+            contains: query,
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
+        {
+          phone: {
+            contains: query,
+          },
+        },
+        {
+          email: {
+            contains: query,
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
       ],
     };
 
@@ -53,6 +74,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    console.error('Search error:', error);
     return NextResponse.json({ error: 'Search failed' }, { status: 500 });
   }
 }

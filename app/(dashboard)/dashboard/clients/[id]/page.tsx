@@ -4,53 +4,43 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+
 import Card, { CardBody, CardHeader } from '@/components/common/Card';
-import ClientForm from '@/components/clients/ClientForm';
 import { useClients } from '@/hooks/useClients';
 import { useToast } from '@/components/common/Toast';
 import Loader from '@/components/common/Loader';
 import Alert from '@/components/common/Alert';
 import Button from '@/components/common/ Button';
 
-interface ClientData {
-  id: string;
-  clientName: string;
-  phone: string;
-  email?: string;
-  requirementType: string;
-  inquiryType: string;
-  budget?: number;
-  preferredLocation?: string;
-  visitingDate?: string;
-  visitingTime?: string;
-  followUpDate?: string;
-  status: string;
-  notes?: string;
-  creator: { name: string };
-  createdAt: string;
-}
+import type { Client } from '@/lib/types';
+import ClientForm from '@/components/clients/ClientForm';
 
 export default function EditClientPage() {
   const router = useRouter();
   const params = useParams();
   const clientId = params.id as string;
+
   const { updateClient, deleteClient, loading } = useClients();
   const { addToast } = useToast();
 
-  const [client, setClient] = useState<ClientData | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    fetchClient();
+    if (clientId) fetchClient();
   }, [clientId]);
 
   const fetchClient = async () => {
     try {
       const response = await fetch(`/api/clients/${clientId}`);
-      if (!response.ok) throw new Error('Failed to fetch client');
-      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch client');
+      }
+
+      const data: Client = await response.json();
       setClient(data);
     } catch (err) {
       setError(String(err));
@@ -59,8 +49,9 @@ export default function EditClientPage() {
     }
   };
 
-  const handleSubmit = async (data: any) => {
-    const success = await updateClient(clientId, data);
+  const handleSubmit = async (formData: any) => {
+    const success = await updateClient(clientId, formData);
+
     if (success) {
       addToast({
         type: 'success',
@@ -73,11 +64,13 @@ export default function EditClientPage() {
         message: 'Failed to update client',
       });
     }
+
     return success;
   };
 
   const handleDelete = async () => {
     const success = await deleteClient(clientId);
+
     if (success) {
       addToast({
         type: 'success',
@@ -121,6 +114,7 @@ export default function EditClientPage() {
               Back
             </Button>
           </Link>
+
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
               {client.clientName}
@@ -159,7 +153,7 @@ export default function EditClientPage() {
         )}
       </div>
 
-      {/* Client Info Summary */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardBody>
@@ -169,6 +163,7 @@ export default function EditClientPage() {
             </p>
           </CardBody>
         </Card>
+
         <Card>
           <CardBody>
             <p className="text-sm text-gray-600">Inquiry Type</p>
@@ -177,6 +172,7 @@ export default function EditClientPage() {
             </p>
           </CardBody>
         </Card>
+
         <Card>
           <CardBody>
             <p className="text-sm text-gray-600">Budget</p>
@@ -187,13 +183,21 @@ export default function EditClientPage() {
         </Card>
       </div>
 
-      {/* Edit Form Card */}
+      {/* Edit Form */}
       <Card>
         <CardHeader title="Edit Client Details" />
         <CardBody>
           <ClientForm
             onSubmit={handleSubmit}
-            initialData={client}
+            initialData={{
+              ...client,
+              visitingDate: client.visitingDate
+                ? new Date(client.visitingDate).toISOString().split('T')[0]
+                : undefined,
+              followUpDate: client.followUpDate
+                ? new Date(client.followUpDate).toISOString().split('T')[0]
+                : undefined,
+            }}
             isLoading={loading}
           />
         </CardBody>

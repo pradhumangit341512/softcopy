@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { ReactNode } from 'react';
 
 interface StatsCardProps {
   title: string;
@@ -29,9 +30,16 @@ export default function StatsCard({
       <div className="flex items-start justify-between">
         <div>
           <p className="text-gray-600 text-sm font-medium">{title}</p>
-          <p className={clsx('text-2xl font-bold mt-2', highlight && 'text-red-600')}>
+
+          <p
+            className={clsx(
+              'text-2xl font-bold mt-2',
+              highlight && 'text-red-600'
+            )}
+          >
             {value}
           </p>
+
           {change && (
             <p
               className={clsx(
@@ -43,6 +51,7 @@ export default function StatsCard({
             </p>
           )}
         </div>
+
         {icon && <span className="text-3xl">{icon}</span>}
       </div>
     </div>
