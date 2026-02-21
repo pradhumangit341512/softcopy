@@ -3,37 +3,6 @@ import { db } from "@/lib/db";
 import twilio from "twilio";
 import crypto from "crypto";
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const phoneNumber = process.env.TWILIO_PHONE_NUMBER;
-
-/* =========================
-   ENV VALIDATION
-========================= */
-if (!accountSid) {
-  throw new Error("TWILIO_ACCOUNT_SID missing in .env.local");
-}
-
-if (!accountSid.startsWith("AC")) {
-  throw new Error(
-    "Invalid TWILIO_ACCOUNT_SID. Must start with 'AC'. Copy from Twilio dashboard."
-  );
-}
-
-if (!authToken) {
-  throw new Error("TWILIO_AUTH_TOKEN missing in .env.local");
-}
-
-if (!phoneNumber) {
-  throw new Error("TWILIO_PHONE_NUMBER missing in .env.local");
-}
-
-/* =========================
-   INIT TWILIO CLIENT
-========================= */
-const client = twilio(accountSid, authToken);
-
-
 /* =========================
    CONFIG
 ========================= */
@@ -61,7 +30,29 @@ function hashOTP(otp: string) {
 ========================= */
 export async function POST(req: NextRequest) {
   try {
+    // 🔒 Runtime Twilio env check (SAFE for build)
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const phoneNumber = process.env.TWILIO_PHONE_NUMBER;
+
+    if (!accountSid || !authToken || !phoneNumber) {
+      return NextResponse.json(
+        { error: "Twilio not configured" },
+        { status: 500 }
+      );
+    }
+
+    if (!accountSid.startsWith("AC")) {
+      return NextResponse.json(
+        { error: "Invalid Twilio SID" },
+        { status: 500 }
+      );
+    }
+
+    const client = twilio(accountSid, authToken);
+
     const { phone, companyId } = await req.json();
+
     const ip =
       req.headers.get("x-forwarded-for") ||
       req.headers.get("x-real-ip") ||
@@ -109,7 +100,7 @@ export async function POST(req: NextRequest) {
     /* Send SMS via Twilio */
     await client.messages.create({
       body: `Your OTP is ${otp}. Valid for 5 minutes.`,
-      from: process.env.TWILIO_PHONE_NUMBER,
+      from: phoneNumber,
       to: phone,
     });
 
