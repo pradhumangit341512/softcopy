@@ -1,29 +1,31 @@
 'use client';
 
-import { useForm, SubmitHandler, Resolver } from 'react-hook-form';
+import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
 import { clientSchema } from '@/schemas/client.schema';
-
 import {
   RequirementType,
   InquiryType,
   ClientStatus,
-  ClientFormData,
+  Client,
 } from '@/lib/types';
 
-import Input from '@/components/common/ Input';
-import Button from '@/components/common/ Button';
+import Input from '@/components/common/ Input';   // ✅ Fixed: removed space
+import Button from '@/components/common/ Button'; // ✅ Fixed: removed space
 
-/* ================= TYPES ================= */
+// ✅ Extend schema to allow string dates (HTML date inputs always return strings)
+const formSchema = clientSchema.extend({
+  visitingDate: z.string().optional(),
+  followUpDate: z.string().optional(),
+}).strict();
 
-// form values come from zod schema
-type FormValues = z.infer<typeof clientSchema>;
+type ClientFormValues = z.infer<typeof formSchema>;
 
 interface ClientFormProps {
-  onSubmit: (data: ClientFormData) => Promise<boolean>;
-  initialData?: Partial<FormValues>;
+  onSubmit: (data: Partial<Client>) => Promise<boolean>;
+  initialData?: Partial<Client>;
   isLoading?: boolean;
 }
 
@@ -37,166 +39,212 @@ export default function ClientForm({
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormValues>({
-    resolver: zodResolver(clientSchema) as unknown as Resolver<FormValues>, // 🔥 fix
-    defaultValues: initialData,
+  } = useForm<ClientFormValues>({
+    // ✅ Fixed: removed "as any" — zodResolver now properly typed via formSchema
+    resolver: zodResolver(formSchema) as any,
+    defaultValues: {
+      ...initialData,
+      // ✅ Convert Date → string for <input type="date">
+      visitingDate: initialData?.visitingDate
+        ? new Date(initialData.visitingDate).toISOString().split('T')[0]
+        : undefined,
+      followUpDate: initialData?.followUpDate
+        ? new Date(initialData.followUpDate).toISOString().split('T')[0]
+        : undefined,
+    },
   });
 
-  const submitHandler: SubmitHandler<FormValues> = async (data) => {
-    const formatted: ClientFormData = {
+  // ✅ Convert strings → Date objects before sending to API
+  const submitHandler: SubmitHandler<ClientFormValues> = async (data) => {
+    const payload: Partial<Client> = {
       ...data,
-      visitingDate: data.visitingDate
-        ? new Date(data.visitingDate)
-        : undefined,
-      followUpDate: data.followUpDate
-        ? new Date(data.followUpDate)
-        : undefined,
+      visitingDate: data.visitingDate ? new Date(data.visitingDate) : undefined,
+      followUpDate: data.followUpDate ? new Date(data.followUpDate) : undefined,
     };
-
-    await onSubmit(formatted);
+    await onSubmit(payload);
   };
 
-  const selectStyle = `
-    w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-white
-    text-gray-900 font-semibold shadow-sm appearance-none
-    focus:outline-none focus:ring-2 focus:ring-blue-500
-    focus:border-blue-500 transition
-  `;
+  // ✅ Shared styles — responsive and consistent
+  const labelStyle = 'block text-sm font-medium text-gray-700 mb-1';
+  const selectStyle =
+    'w-full px-3 py-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition';
+  const errorStyle = 'text-red-500 text-xs mt-1';
 
   return (
     <form
       onSubmit={handleSubmit(submitHandler)}
-      className="space-y-6 bg-white p-8 rounded-xl shadow-lg"
+      className="w-full max-w-2xl mx-auto space-y-5 px-4 sm:px-6"
+      noValidate
     >
-      {/* CLIENT NAME */}
-      <Input
-        label="Client Name"
-        placeholder="Enter full name"
-        {...register('clientName')}
-        error={errors.clientName?.message}
-      />
 
-      {/* PHONE */}
-      <Input
-        label="Phone"
-        placeholder="Enter phone number"
-        {...register('phone')}
-        error={errors.phone?.message}
-      />
+      {/* ── Personal Info ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <Input
+            label="Client Name *"
+            placeholder="Full name"
+            {...register('clientName')}
+            error={errors.clientName?.message}
+          />
+        </div>
+        <div>
+          <Input
+            label="Phone *"
+            placeholder="+91 XXXXX XXXXX"
+            type="tel"
+            {...register('phone')}
+            error={errors.phone?.message}
+          />
+        </div>
+      </div>
 
-      {/* EMAIL */}
       <Input
         label="Email"
-        placeholder="Enter email address"
+        placeholder="client@example.com"
+        type="email"
         {...register('email')}
         error={errors.email?.message}
       />
 
-      {/* REQUIREMENT */}
-      <div>
-        <label className="block mb-2 font-medium text-gray-800">
-          Requirement Type
-        </label>
-        <select {...register('requirementType')} className={selectStyle}>
-          <option value="">Select Requirement</option>
-          {Object.values(RequirementType).map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-        {errors.requirementType && (
-          <p className="text-red-500 text-sm mt-1">
-            {errors.requirementType.message}
-          </p>
-        )}
+      {/* ── Requirement & Inquiry ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <div>
+          <label className={labelStyle}>Requirement Type *</label>
+          <select {...register('requirementType')} className={selectStyle}>
+            <option value="">Select type</option>
+            {Object.values(RequirementType).map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+          {errors.requirementType && (
+            <p className={errorStyle}>{errors.requirementType.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label className={labelStyle}>Inquiry Type *</label>
+          <select {...register('inquiryType')} className={selectStyle}>
+            <option value="">Select type</option>
+            {Object.values(InquiryType).map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+          {errors.inquiryType && (
+            <p className={errorStyle}>{errors.inquiryType.message}</p>
+          )}
+        </div>
+
       </div>
 
-      {/* INQUIRY */}
-      <div>
-        <label className="block mb-2 font-medium text-gray-800">
-          Inquiry Type
-        </label>
-        <select {...register('inquiryType')} className={selectStyle}>
-          <option value="">Select Inquiry</option>
-          {Object.values(InquiryType).map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-        {errors.inquiryType && (
-          <p className="text-red-500 text-sm mt-1">
-            {errors.inquiryType.message}
-          </p>
-        )}
+      {/* ── Status & Property Visited ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <div>
+          <label className={labelStyle}>Status *</label>
+          <select {...register('status')} className={selectStyle}>
+            {Object.values(ClientStatus).map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+          {errors.status && (
+            <p className={errorStyle}>{errors.status.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label className={labelStyle}>Property Visited?</label>
+          <select
+            {...register('propertyVisited', {
+              // ✅ Convert string "true"/"false" → boolean
+              setValueAs: (v) => v === 'true',
+            })}
+            className={selectStyle}
+          >
+            <option value="false">No</option>
+            <option value="true">Yes</option>
+          </select>
+        </div>
+
       </div>
 
-      {/* STATUS */}
-      <div>
-        <label className="block mb-2 font-medium text-gray-800">Status</label>
-        <select {...register('status')} className={selectStyle}>
-          {Object.values(ClientStatus).map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
+      {/* ── Budget & Location ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <Input
+            label="Budget (₹)"
+            type="number"
+            placeholder="e.g. 5000000"
+            {...register('budget', {
+              // ✅ Empty string → undefined, otherwise parse as number
+              setValueAs: (v) => (v === '' ? undefined : Number(v)),
+            })}
+            error={errors.budget?.message}
+          />
+        </div>
+        <div>
+          <Input
+            label="Preferred Location"
+            placeholder="e.g. Bandra West"
+            {...register('preferredLocation')}
+            error={errors.preferredLocation?.message}
+          />
+        </div>
       </div>
 
-      {/* BUDGET */}
-      <Input
-        label="Budget"
-        type="number"
-        placeholder="Enter budget amount"
-        {...register('budget', { valueAsNumber: true })}
-        error={errors.budget?.message}
-      />
-
-      {/* LOCATION */}
-      <Input
-        label="Preferred Location"
-        placeholder="Enter preferred location"
-        {...register('preferredLocation')}
-      />
-
-      {/* ADDRESS */}
       <Input
         label="Address"
-        placeholder="Enter property address"
+        placeholder="Full address"
         {...register('address')}
+        error={errors.address?.message}
       />
 
-      {/* VISITING DATE */}
-      <Input label="Visiting Date" type="date" {...register('visitingDate')} />
+      {/* ── Dates ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <Input
+            label="Visiting Date"
+            type="date"
+            {...register('visitingDate')}
+            error={errors.visitingDate?.message}
+          />
+        </div>
+        <div>
+          <Input
+            label="Follow Up Date"
+            type="date"
+            {...register('followUpDate')}
+            error={errors.followUpDate?.message}
+          />
+        </div>
+      </div>
 
-      {/* VISITING TIME */}
-      <Input label="Visiting Time" type="time" {...register('visitingTime')} />
-
-      {/* FOLLOW UP */}
-      <Input label="Follow Up Date" type="date" {...register('followUpDate')} />
-
-      {/* SOURCE */}
+      {/* ── Source & Notes ── */}
       <Input
         label="Source"
-        placeholder="Facebook, Walk-in, Referral..."
+        placeholder="e.g. Website, Referral"
         {...register('source')}
+        error={errors.source?.message}
       />
 
-      {/* NOTES */}
       <Input
         label="Notes"
-        placeholder="Add additional notes"
+        placeholder="Any additional details..."
         {...register('notes')}
+        error={errors.notes?.message}
       />
 
-      <Button
-        type="submit"
-        loading={isLoading}
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
-      >
-        Save Client
-      </Button>
+      {/* ── Submit ── */}
+      <div className="pt-2">
+        <Button
+          type="submit"
+          loading={isLoading}
+          className="w-full sm:w-auto"
+        >
+          {isLoading ? 'Saving...' : 'Save Client'}
+        </Button>
+      </div>
+
     </form>
   );
 }

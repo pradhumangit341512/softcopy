@@ -29,7 +29,7 @@ export default function Home() {
 
   // Show nothing while checking auth
   if (isLoading) {
-    return <div className="h-screen flex items-center justify-center">Loading...</div>;
+    return <div className="h-screen flex items-center justify-center text-black">Loading...</div>;
   }
 
   return (

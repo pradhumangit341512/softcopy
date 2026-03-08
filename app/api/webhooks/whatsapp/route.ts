@@ -3,14 +3,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import twilio from 'twilio';
 
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+function getTwilioClient() {
+  return twilio(
+    process.env.TWILIO_ACCOUNT_SID!,
+    process.env.TWILIO_AUTH_TOKEN!
+  );
+}
+
+async function sendWhatsAppMessage(phone: string, message: string) {
+  const client = getTwilioClient();
+  return client.messages.create({
+    from: process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155552671',
+    to: `whatsapp:${phone}`,
+    body: message,
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // This is called by a cron job
     const now = new Date();
 
     // Get clients with visits tomorrow
@@ -76,12 +86,4 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
-}
-
-async function sendWhatsAppMessage(phone: string, message: string) {
-  return client.messages.create({
-    from: process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155552671',
-    to: `whatsapp:${phone}`,
-    body: message,
-  });
 }

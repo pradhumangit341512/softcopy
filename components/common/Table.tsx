@@ -32,7 +32,7 @@ export default function Table<T>({
 }: TableProps<T>) {
   if (loading) {
     return (
-      <div className="text-center py-8 text-gray-500">Loading...</div>
+      <div className="text-center py-8 text-black">Loading...</div>
     );
   }
 

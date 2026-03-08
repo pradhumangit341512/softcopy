@@ -237,3 +237,26 @@ export const AUTH_ERRORS = {
   OTP_INVALID: 'Invalid or expired OTP',
   OTP_SENT: 'OTP sent successfully',
 };
+// ==================== REQUIRE AUTH (FIXED FOR APP ROUTER) ====================
+
+export async function requireAuth() {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('token')?.value;
+
+    if (!token) {
+      return { authorized: false, payload: null };
+    }
+
+    const payload = await verifyToken(token);
+
+    if (!payload) {
+      return { authorized: false, payload: null };
+    }
+
+    return { authorized: true, payload };
+  } catch (error) {
+    console.error('Require auth error:', error);
+    return { authorized: false, payload: null };
+  }
+}

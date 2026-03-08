@@ -1,111 +1,150 @@
 'use client';
 
-import { Trash2, Edit2, Eye } from 'lucide-react';
+import { Edit2 } from 'lucide-react';
 import Badge from '@/components/common/Badge';
-import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
+import Button from '@/components/common/ Button'; // ✅ Fixed: removed space + use absolute path
 
-interface Client {
-  id: string;
-  clientName: string;
-  phone: string;
-  email?: string;
-  requirementType: string;
-  inquiryType: string;
-  budget?: number;
-  status: string;
-  creator: { name: string };
-}
+import type { Client } from '@/lib/types';
 
-interface ClientTableProps {
+export interface ClientTableProps {
   clients: Client[];
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
+  onEdit: (clientId: string) => void;
 }
 
-export default function ClientTable({
-  clients,
-  onEdit,
-  onDelete,
-}: ClientTableProps) {
+// ✅ Helper: format date safely — handles both Date objects and ISO strings from API
+const formatDate = (date?: Date | string | null): string => {
+  if (!date) return '—';
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+export default function ClientTable({ clients, onEdit }: ClientTableProps) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead className="bg-gray-50 border-b">
+    <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+      <table className="w-full text-sm min-w-[900px]">
+
+        {/* ── HEADER ── */}
+        <thead className="bg-gray-100 text-gray-600 uppercase text-xs tracking-wider">
           <tr>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-              Client Name
-            </th>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-              Contact
-            </th>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-              Requirement
-            </th>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-              Budget
-            </th>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-              Status
-            </th>
-            <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700">
-              Actions
-            </th>
+            <th className="px-4 py-3 text-center w-16">Action</th>
+            <th className="px-4 py-3 text-left">Client</th>
+            <th className="px-4 py-3 text-left">Contact</th>
+            <th className="px-4 py-3 text-left">Requirement</th>
+            <th className="px-4 py-3 text-left">Budget</th>
+            <th className="px-4 py-3 text-left">Location</th>
+            <th className="px-4 py-3 text-left">Visit Date</th>
+            <th className="px-4 py-3 text-left">Follow Up</th>
+            <th className="px-4 py-3 text-left">Visited</th>
+            <th className="px-4 py-3 text-left">Status</th>
           </tr>
         </thead>
-        <tbody>
-          {clients.map((client, index) => (
-            <tr
-              key={client.id}
-              className={`border-b transition hover:bg-gray-50 ${
-                index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-              }`}
-            >
-              <td className="px-6 py-4">
-                <div>
-                  <p className="font-medium text-gray-900">{client.clientName}</p>
-                  <p className="text-sm text-gray-500">{client.creator.name}</p>
-                </div>
-              </td>
-              <td className="px-6 py-4">
-                <div className="text-sm">
-                  <p className="text-gray-900">{client.phone}</p>
-                  <p className="text-gray-500">{client.email || '-'}</p>
-                </div>
-              </td>
-              <td className="px-6 py-4">
-                <div className="text-sm">
-                  <p className="text-gray-900">{client.requirementType}</p>
-                  <p className="text-gray-500">{client.inquiryType}</p>
-                </div>
-              </td>
-              <td className="px-6 py-4">
-                <p className="text-sm font-medium text-gray-900">
-                  {client.budget ? formatCurrency(client.budget) : '-'}
-                </p>
-              </td>
-              <td className="px-6 py-4">
-                <Badge label={client.status} variant={client.status === 'DealDone' ? 'success' : 'primary'} />
-              </td>
-              <td className="px-6 py-4 text-center">
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    onClick={() => onEdit(client.id)}
-                    className="text-blue-600 hover:text-blue-900 transition"
-                    title="Edit"
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                  <button
-                    onClick={() => onDelete(client.id)}
-                    className="text-red-600 hover:text-red-900 transition"
-                    title="Delete"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+
+        {/* ── BODY ── */}
+        <tbody className="divide-y divide-gray-100 bg-white">
+
+          {clients.length === 0 ? (
+            <tr>
+              <td colSpan={10} className="text-center py-12 text-gray-400 text-sm">
+                No clients found
               </td>
             </tr>
-          ))}
+          ) : (
+            clients.map((client) => (
+              <tr
+                key={client.id}
+                className="hover:bg-gray-50 transition-colors duration-150"
+              >
+
+                {/* ACTION */}
+                <td className="px-4 py-3 text-center">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onEdit(client.id)}
+                    title="Edit client"
+                  >
+                    <Edit2 size={15} />
+                  </Button>
+                </td>
+
+                {/* CLIENT */}
+                <td className="px-4 py-3">
+                  <p className="font-semibold text-gray-900 leading-tight">
+                    {client.clientName}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {client.creator?.name
+                      ? `by ${client.creator.name}`
+                      : 'Unassigned'}
+                  </p>
+                </td>
+
+                {/* CONTACT */}
+                <td className="px-4 py-3">
+                  <p className="text-gray-900">{client.phone}</p>
+                  {client.email && (
+                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[160px]">
+                      {client.email}
+                    </p>
+                  )}
+                </td>
+
+                {/* REQUIREMENT */}
+                <td className="px-4 py-3">
+                  <p className="text-gray-900">{client.requirementType}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{client.inquiryType}</p>
+                </td>
+
+                {/* BUDGET */}
+                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                  {client.budget ? formatCurrency(client.budget) : '—'}
+                </td>
+
+                {/* LOCATION */}
+                <td className="px-4 py-3 text-gray-700 max-w-[120px] truncate">
+                  {client.preferredLocation || '—'}
+                </td>
+
+                {/* VISIT DATE */}
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  {formatDate(client.visitingDate)}
+                </td>
+
+                {/* FOLLOW UP */}
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  {formatDate(client.followUpDate)}
+                </td>
+
+                {/* VISITED — ✅ uses optional chaining in case field missing */}
+                <td className="px-4 py-3">
+                  <Badge
+                    label={(client as any).propertyVisited ? 'Visited' : 'Not Visited'}
+                    variant={(client as any).propertyVisited ? 'success' : 'warning'}
+                  />
+                </td>
+
+                {/* STATUS */}
+                <td className="px-4 py-3">
+                  <Badge
+                    label={client.status}
+                    variant={
+                      client.status === 'DealDone'
+                        ? 'success'
+                        : client.status === 'Rejected'
+                        ? 'danger'
+                        : 'primary'
+                    }
+                  />
+                </td>
+
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>

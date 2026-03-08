@@ -10,9 +10,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//
 // ======================
 // COMPANY
 // ======================
+//
 model Company {
   id                 String   @id @default(auto()) @map("_id") @db.ObjectId
   companyName        String
@@ -33,9 +35,11 @@ model Company {
   @@index([subscriptionExpiry])
 }
 
+//
 // ======================
 // USER
 // ======================
+//
 model User {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   name         String
@@ -57,26 +61,40 @@ model User {
   @@index([role])
 }
 
+//
 // ======================
-// CLIENT
+// CLIENT (UPGRADED CRM)
 // ======================
+//
 model Client {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   clientName        String
   phone             String
   email             String?
   companyName       String?
+  
   requirementType   String
   inquiryType       String
   budget            Float?
   preferredLocation String?
   address           String?
+
+  // 🔹 Visit tracking
   visitingDate      DateTime?
   visitingTime      String?
+  propertyVisited   Boolean  @default(false)
+  visitStatus       String   @default("NotVisited") // Visited | NotVisited
+
+  // 🔹 Follow-up tracking
   followUpDate      DateTime?
+  nextFollowUp      DateTime?
+  lastContactDate   DateTime?
+
+  // 🔹 Lead management
   status            String   @default("New")
   source            String?
   notes             String?
+
   companyId         String   @db.ObjectId
   createdBy         String   @db.ObjectId
   createdAt         DateTime @default(now())
@@ -90,22 +108,28 @@ model Client {
   @@index([createdBy])
   @@index([status])
   @@index([visitingDate])
+  @@index([followUpDate])
   @@index([phone])
 }
 
+//
 // ======================
 // COMMISSION
 // ======================
+//
 model Commission {
   id                   String   @id @default(auto()) @map("_id") @db.ObjectId
   clientId             String   @db.ObjectId
   userId               String   @db.ObjectId
   companyId            String   @db.ObjectId
+
   dealAmount           Float
   commissionPercentage Float
   commissionAmount     Float
+
   paidStatus           String   @default("Pending")
   paymentDate          DateTime?
+
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -119,9 +143,11 @@ model Commission {
   @@index([paidStatus])
 }
 
+//
 // ======================
-// SECURE OTP (UPDATED)
+// SECURE OTP
 // ======================
+//
 model OTP {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   phone      String
@@ -138,9 +164,11 @@ model OTP {
   @@index([expiresAt])
 }
 
+//
 // ======================
 // INVOICE
 // ======================
+//
 model Invoice {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   companyId         String   @db.ObjectId

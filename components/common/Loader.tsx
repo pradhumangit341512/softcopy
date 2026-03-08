@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import clsx from 'clsx';
 
@@ -10,48 +12,54 @@ interface LoaderProps {
 export default function Loader({
   size = 'md',
   fullScreen = false,
-  message,
+  message = 'Loading...',
 }: LoaderProps) {
-  const sizeClasses = {
-    sm: 'w-8 h-8',
-    md: 'w-12 h-12',
-    lg: 'w-16 h-16',
+  const sizeMap = {
+    sm: 40,
+    md: 56,
+    lg: 72,
   };
 
-  const loaderContent = (
-    <div className="flex flex-col items-center gap-4">
-      {/* Spinner */}
-      <div className={clsx('relative', sizeClasses[size])}>
-        <div
-          className={clsx(
-            'absolute inset-0 rounded-full border-4 border-gray-200',
-            sizeClasses[size]
-          )}
-        />
-        <div
-          className={clsx(
-            'absolute inset-0 rounded-full border-4 border-transparent border-t-blue-600 animate-spin',
-            sizeClasses[size]
-          )}
-        />
+  const spinnerSize = sizeMap[size];
+
+  const loader = (
+    <div className="flex flex-col items-center justify-center gap-6">
+      {/* Premium animated spinner */}
+      <div
+        style={{ width: spinnerSize, height: spinnerSize }}
+        className="relative"
+      >
+        {/* soft glow */}
+        <div className="absolute inset-0 rounded-full blur-md bg-blue-100 opacity-60 animate-pulse" />
+
+        {/* outer ring */}
+        <div className="absolute inset-0 rounded-full border-[3px] border-gray-200" />
+
+        {/* animated gradient ring */}
+        <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-blue-600 border-r-indigo-500 animate-spin" />
+
+        {/* center dot */}
+        <div className="absolute inset-[30%] rounded-full bg-blue-600 shadow-md" />
       </div>
 
-      {/* Message */}
-      {message && (
-        <p className="text-gray-600 font-medium text-center text-sm">
-          {message}
-        </p>
-      )}
+      {/* message */}
+      <p className="text-black font-medium tracking-wide text-sm">
+        {message}
+      </p>
     </div>
   );
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
-        {loaderContent}
+      <div className="fixed inset-0 bg-white/90 backdrop-blur-sm flex items-center justify-center z-[9999]">
+        {loader}
       </div>
     );
   }
 
-  return <div className="flex justify-center items-center">{loaderContent}</div>;
+  return (
+    <div className="w-full flex items-center justify-center py-10">
+      {loader}
+    </div>
+  );
 }

@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import twilio from 'twilio';
 
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
 export async function POST(req: NextRequest) {
   // Verify cron secret
   if (
@@ -17,6 +12,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Initialize Twilio INSIDE the function (not at top level)
+    const twilioClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID!,
+      process.env.TWILIO_AUTH_TOKEN!
+    );
+
     const now = new Date();
 
     // Tomorrow's visits
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
     for (const client of upcomingVisits) {
       try {
         await twilioClient.messages.create({
-          from: process.env.TWILIO_WHATSAPP_NUMBER,
+          from: process.env.TWILIO_WHATSAPP_NUMBER!,
           to: `whatsapp:${client.phone}`,
           body: `Hi ${client.clientName}, This is a reminder about your property visit scheduled for tomorrow at ${client.visitingTime}. Please confirm if you can make it. Thank you!`,
         });

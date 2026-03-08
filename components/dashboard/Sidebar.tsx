@@ -3,16 +3,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Users,
-  TrendingUp,
-  BarChart3,
-  Settings,
-  Menu,
-  X,
+  LayoutDashboard, Users, TrendingUp,
+  BarChart3, Settings, X,
 } from 'lucide-react';
 import clsx from 'clsx';
-import Button from '../common/ Button';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -21,82 +15,120 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/dashboard/clients', icon: Users, label: 'Clients' },
-  { href: '/dashboard/commissions', icon: TrendingUp, label: 'Commissions' },
-  { href: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
-  { href: '/dashboard/settings', icon: Settings, label: 'Settings' },
+  { href: '/dashboard',             icon: LayoutDashboard, label: 'Dashboard'   },
+  { href: '/dashboard/clients',     icon: Users,           label: 'Clients'     },
+  { href: '/dashboard/commissions', icon: TrendingUp,      label: 'Commissions' },
+  { href: '/dashboard/analytics',   icon: BarChart3,       label: 'Analytics'   },
+  { href: '/dashboard/settings',    icon: Settings,        label: 'Settings'    },
 ];
 
 export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
   const pathname = usePathname();
 
+  // initials from name
+  const initials = user?.name
+    ? user.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
+    : 'U';
+
   return (
     <>
-      {/* Mobile Backdrop */}
+      {/* ── Mobile backdrop ── */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar */}
+      {/* ── Sidebar ── */}
       <aside
         className={clsx(
-          'fixed md:static inset-y-0 left-0 w-64 bg-gray-900 text-white transition-transform duration-300 z-50',
+          'fixed md:static inset-y-0 left-0 z-50',
+          'w-64 flex flex-col',
+          'bg-gray-900 text-white',
+          'transition-transform duration-300 ease-in-out',
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
       >
-        {/* Close Button (Mobile) */}
-        <Button
-          onClick={onClose}
-          className="absolute top-4 right-4 md:hidden text-gray-400 hover:text-white"
-        >
-          <X size={24} />
-        </Button>
+        {/* ── Logo ── */}
+        <div className="flex items-center justify-between px-5 py-5 border-b border-gray-800">
+          <div>
+            <h1 className="text-lg font-bold tracking-tight text-white">
+              RealEstate CRM
+            </h1>
+            <p className="text-xs text-gray-500 mt-0.5">v1.0</p>
+          </div>
 
-        {/* Logo */}
-        <div className="p-6 border-b border-gray-800">
-          <h1 className="text-2xl font-bold">RealEstate CRM</h1>
-          <p className="text-sm text-gray-400 mt-1">v1.0</p>
+          {/* Close button — mobile only */}
+          <button
+            onClick={onClose}
+            className="md:hidden w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700
+              flex items-center justify-center text-gray-400 hover:text-white
+              transition-colors"
+          >
+            <X size={16} />
+          </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+        {/* ── Navigation ── */}
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          {navItems.map(({ href, icon: Icon, label }) => {
+            const isActive =
+              pathname === href || pathname.startsWith(href + '/');
 
             return (
-              <Link key={item.href} href={item.href}>
+              <Link key={href} href={href} onClick={onClose}>
                 <span
-                  onClick={onClose}
                   className={clsx(
-                    'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
+                    'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150',
+                    'text-sm font-medium cursor-pointer',
                     isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-900/40'
+                      : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                   )}
                 >
-                  <Icon size={20} />
-                  <span className="font-medium">{item.label}</span>
+                  <Icon
+                    size={18}
+                    className={clsx(
+                      'flex-shrink-0 transition-colors',
+                      isActive ? 'text-white' : 'text-gray-500'
+                    )}
+                  />
+                  {label}
+
+                  {/* Active indicator dot */}
+                  {isActive && (
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60" />
+                  )}
                 </span>
               </Link>
             );
           })}
         </nav>
 
-        {/* User Info */}
-        <div className="p-4 border-t border-gray-800">
+        {/* ── User info ── */}
+        <div className="px-4 py-4 border-t border-gray-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center font-bold">
-              {user?.name?.charAt(0) || 'U'}
+            {/* Avatar with initials */}
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600
+              flex items-center justify-center font-bold text-sm text-white flex-shrink-0 shadow-md">
+              {initials}
             </div>
-            <div>
-              <p className="text-sm font-medium">{user?.name}</p>
-              <p className="text-xs text-gray-400">{user?.email}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white truncate">
+                {user?.name || 'User'}
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {user?.email}
+              </p>
             </div>
+            {/* Role pill */}
+            {user?.role && (
+              <span className="text-xs font-semibold text-blue-400 bg-blue-900/40
+                px-2 py-0.5 rounded-full capitalize flex-shrink-0">
+                {user.role}
+              </span>
+            )}
           </div>
         </div>
       </aside>

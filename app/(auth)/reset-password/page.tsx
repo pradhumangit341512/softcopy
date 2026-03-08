@@ -15,7 +15,7 @@ import Input from '@/components/common/ Input';
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
+    <Suspense fallback={<div className="p-6 text-center text-black">Loading...</div>}>
       <ResetPasswordContent />
     </Suspense>
   );

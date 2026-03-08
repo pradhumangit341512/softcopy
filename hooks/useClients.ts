@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/common/Toast';
 
 export interface ClientFormData {
@@ -41,26 +40,13 @@ export interface ClientResponse {
   updatedAt: string;
 }
 
-interface UseClientsReturn {
-  clients: ClientResponse[];
-  loading: boolean;
-  error: string | null;
-  fetchClients: (filters?: any) => Promise<void>;
-  getClient: (id: string) => Promise<ClientResponse | null>;
-  addClient: (data: ClientFormData) => Promise<boolean>;
-  updateClient: (id: string, data: Partial<ClientFormData>) => Promise<boolean>;
-  deleteClient: (id: string) => Promise<boolean>;
-  searchClients: (query: string) => Promise<ClientResponse[]>;
-  exportClients: (type: 'all' | 'filtered' | 'today') => Promise<void>;
-}
-
-export function useClients(): UseClientsReturn {
+export function useClients() {
   const [clients, setClients] = useState<ClientResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { addToast } = useToast();
-  const router = useRouter();
 
+  // ================= FETCH CLIENTS =================
   const fetchClients = useCallback(async (filters?: any) => {
     try {
       setLoading(true);
@@ -69,16 +55,21 @@ export function useClients(): UseClientsReturn {
       const params = new URLSearchParams();
       if (filters?.search) params.append('search', filters.search);
       if (filters?.status) params.append('status', filters.status);
-      if (filters?.inquiryType) params.append('inquiryType', filters.inquiryType);
       if (filters?.page) params.append('page', filters.page.toString());
 
-      const response = await fetch(`/api/clients?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch clients');
+      const response = await fetch(`/api/clients?${params}`, {
+        credentials: 'include', // ✅ IMPORTANT
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to fetch clients');
+      }
 
       const data = await response.json();
       setClients(data.clients || data);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch clients';
+    } catch (err: any) {
+      const errorMsg = err.message || 'Failed to fetch clients';
       setError(errorMsg);
       addToast({ type: 'error', message: errorMsg });
     } finally {
@@ -86,22 +77,31 @@ export function useClients(): UseClientsReturn {
     }
   }, [addToast]);
 
-  const getClient = useCallback(async (id: string): Promise<ClientResponse | null> => {
+  // ================= GET CLIENT =================
+  const getClient = useCallback(async (id: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/clients/${id}`);
-      if (!response.ok) throw new Error('Client not found');
+
+      const response = await fetch(`/api/clients/${id}`, {
+        credentials: 'include', // ✅ IMPORTANT
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Client not found');
+      }
+
       return await response.json();
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch client';
-      setError(errorMsg);
+    } catch (err: any) {
+      setError(err.message);
       return null;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const addClient = useCallback(async (data: ClientFormData): Promise<boolean> => {
+  // ================= ADD CLIENT =================
+  const addClient = useCallback(async (data: ClientFormData) => {
     try {
       setLoading(true);
       setError(null);
@@ -109,124 +109,84 @@ export function useClients(): UseClientsReturn {
       const response = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // ✅ IMPORTANT
         body: JSON.stringify(data),
       });
 
-      if (!response.ok) throw new Error('Failed to add client');
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to add client');
+      }
 
-      addToast({
-        type: 'success',
-        message: 'Client added successfully!',
-      });
+      addToast({ type: 'success', message: 'Client added successfully!' });
 
-      await fetchClients();
       return true;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to add client';
-      setError(errorMsg);
-      addToast({ type: 'error', message: errorMsg });
+    } catch (err: any) {
+      setError(err.message);
+      addToast({ type: 'error', message: err.message });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [addToast, fetchClients]);
+  }, [addToast]);
 
-  const updateClient = useCallback(
-    async (id: string, data: Partial<ClientFormData>): Promise<boolean> => {
-      try {
-        setLoading(true);
-        setError(null);
+  // ================= UPDATE CLIENT =================
+  const updateClient = useCallback(async (id: string, data: Partial<ClientFormData>) => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        const response = await fetch(`/api/clients/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
+      const response = await fetch(`/api/clients/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // ✅ IMPORTANT FIX
+        body: JSON.stringify(data),
+      });
 
-        if (!response.ok) throw new Error('Failed to update client');
-
-        addToast({
-          type: 'success',
-          message: 'Client updated successfully!',
-        });
-
-        await fetchClients();
-        return true;
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to update client';
-        setError(errorMsg);
-        addToast({ type: 'error', message: errorMsg });
-        return false;
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to update client');
       }
-    },
-    [addToast, fetchClients]
-  );
 
-  const deleteClient = useCallback(async (id: string): Promise<boolean> => {
+      addToast({ type: 'success', message: 'Client updated successfully!' });
+
+      return true;
+    } catch (err: any) {
+      setError(err.message);
+      addToast({ type: 'error', message: err.message });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
+
+  // ================= DELETE CLIENT =================
+  const deleteClient = useCallback(async (id: string) => {
     try {
       setLoading(true);
       setError(null);
 
       const response = await fetch(`/api/clients/${id}`, {
         method: 'DELETE',
+        credentials: 'include', // ✅ IMPORTANT
       });
 
-      if (!response.ok) throw new Error('Failed to delete client');
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to delete client');
+      }
 
-      addToast({
-        type: 'success',
-        message: 'Client deleted successfully',
-      });
+      addToast({ type: 'success', message: 'Client deleted successfully!' });
 
-      await fetchClients();
       return true;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to delete client';
-      setError(errorMsg);
-      addToast({ type: 'error', message: errorMsg });
+    } catch (err: any) {
+      setError(err.message);
+      addToast({ type: 'error', message: err.message });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [addToast, fetchClients]);
-
-  const searchClients = useCallback(async (query: string): Promise<ClientResponse[]> => {
-    try {
-      const response = await fetch(`/api/clients/search?q=${encodeURIComponent(query)}`);
-      if (!response.ok) throw new Error('Search failed');
-      const data = await response.json();
-      return data.clients || [];
-    } catch (err) {
-      addToast({ type: 'error', message: 'Search failed' });
-      return [];
-    }
   }, [addToast]);
-
-  const exportClients = useCallback(
-    async (type: 'all' | 'filtered' | 'today') => {
-      try {
-        const response = await fetch(`/api/clients/export?type=${type}`);
-        if (!response.ok) throw new Error('Export failed');
-
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `clients-${new Date().toISOString().split('T')[0]}.xlsx`;
-        a.click();
-
-        addToast({
-          type: 'success',
-          message: 'Clients exported successfully',
-        });
-      } catch (err) {
-        addToast({ type: 'error', message: 'Export failed' });
-      }
-    },
-    [addToast]
-  );
 
   return {
     clients,
@@ -237,7 +197,7 @@ export function useClients(): UseClientsReturn {
     addClient,
     updateClient,
     deleteClient,
-    searchClients,
-    exportClients,
+    searchClients: async () => [],
+    exportClients: async () => {},
   };
 }

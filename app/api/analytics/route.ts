@@ -12,15 +12,20 @@ type AuthPayload = {
   email: string;
 };
 
-// 🔐 Verify token
+// ================= VERIFY AUTH =================
 async function verifyAuth(req: NextRequest): Promise<AuthPayload | null> {
   try {
     const token = req.cookies.get("token")?.value;
+
     if (!token) return null;
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET missing");
+      return null;
+    }
 
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET as string
+      process.env.JWT_SECRET
     ) as AuthPayload;
 
     return decoded;
@@ -29,9 +34,10 @@ async function verifyAuth(req: NextRequest): Promise<AuthPayload | null> {
   }
 }
 
+// ================= GET ANALYTICS =================
 export async function GET(req: NextRequest) {
   try {
-    // ================= AUTH =================
+    // 🔐 AUTH
     const payload = await verifyAuth(req);
 
     if (!payload) {
@@ -48,7 +54,7 @@ export async function GET(req: NextRequest) {
     const monthEnd = endOfMonth(now);
 
     // ================= TOTAL CLIENTS =================
-    const totalClients = await db.client.count({
+    const totalClientsPromise = db.client.count({
       where: { companyId },
     });
 
@@ -62,7 +68,8 @@ export async function GET(req: NextRequest) {
     const todayEnd = new Date(todayStart);
     todayEnd.setDate(todayEnd.getDate() + 1);
 
-    const todayVisits = await db.client.count({
+    // count for dashboard
+    const todayVisitsCountPromise = db.client.count({
       where: {
         companyId,
         visitingDate: {
@@ -72,8 +79,30 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // list for 🔔 bell dropdown
+    const todayVisitListPromise = db.client.findMany({
+      where: {
+        companyId,
+        visitingDate: {
+          gte: todayStart,
+          lt: todayEnd,
+        },
+      },
+      select: {
+        id: true,
+        clientName: true,
+        phone: true,
+        visitingDate: true,
+        visitingTime: true,
+        preferredLocation: true,
+      },
+      orderBy: {
+        visitingTime: "asc",
+      },
+    });
+
     // ================= CLOSED DEALS =================
-    const closedDeals = await db.client.count({
+    const closedDealsPromise = db.client.count({
       where: {
         companyId,
         status: "DealDone",
@@ -85,7 +114,7 @@ export async function GET(req: NextRequest) {
     });
 
     // ================= COMMISSION =================
-    const commissions = await db.commission.aggregate({
+    const commissionsPromise = db.commission.aggregate({
       where: {
         companyId,
         createdAt: {
@@ -97,14 +126,14 @@ export async function GET(req: NextRequest) {
     });
 
     // ================= LEADS BY STATUS =================
-    const leadsByStatus = await db.client.groupBy({
+    const leadsByStatusPromise = db.client.groupBy({
       by: ["status"],
       where: { companyId },
       _count: true,
     });
 
     // ================= MONTHLY DATA =================
-    const monthlyData = [];
+    const monthlyData: any[] = [];
 
     for (let i = 11; i >= 0; i--) {
       const date = new Date(now);
@@ -113,20 +142,21 @@ export async function GET(req: NextRequest) {
       const mStart = startOfMonth(date);
       const mEnd = endOfMonth(date);
 
-      const leads = await db.client.count({
-        where: {
-          companyId,
-          createdAt: { gte: mStart, lte: mEnd },
-        },
-      });
-
-      const deals = await db.client.count({
-        where: {
-          companyId,
-          status: "DealDone",
-          updatedAt: { gte: mStart, lte: mEnd },
-        },
-      });
+      const [leads, deals] = await Promise.all([
+        db.client.count({
+          where: {
+            companyId,
+            createdAt: { gte: mStart, lte: mEnd },
+          },
+        }),
+        db.client.count({
+          where: {
+            companyId,
+            status: "DealDone",
+            updatedAt: { gte: mStart, lte: mEnd },
+          },
+        }),
+      ]);
 
       monthlyData.push({
         month: date.toLocaleDateString("en-US", {
@@ -138,13 +168,35 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ================= PARALLEL EXECUTION =================
+    const [
+      totalClients,
+      todayVisitsCount,
+      todayVisitList,
+      closedDeals,
+      commissions,
+      leadsByStatus,
+    ] = await Promise.all([
+      totalClientsPromise,
+      todayVisitsCountPromise,
+      todayVisitListPromise,
+      closedDealsPromise,
+      commissionsPromise,
+      leadsByStatusPromise,
+    ]);
+
+    // ================= RESPONSE =================
     return NextResponse.json({
       summary: {
         totalClients,
-        todayVisits,
+        todayVisitsCount, // 🔁 updated name
         closedDeals,
         totalCommission: commissions._sum.commissionAmount ?? 0,
       },
+
+      // 🔔 bell dropdown data
+      todayVisits: todayVisitList,
+
       leadsByStatus,
       monthlyData,
     });
