@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
-    // IMPORTANT: await verifyToken
     const payload = (await verifyToken(token)) as AuthPayload | null;
 
     if (!payload) {
@@ -25,12 +24,18 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
+
     const status = searchParams.get("status");
     const search = searchParams.get("search");
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
+    const page = Number(searchParams.get("page") || 1);
+    const take = 10;
+    const skip = (page - 1) * take;
 
-    const where: any = { companyId: payload.companyId };
+    const where: any = {
+      companyId: payload.companyId,
+    };
 
     if (status) where.status = status;
 
@@ -48,13 +53,25 @@ export async function GET(req: NextRequest) {
       if (dateTo) where.createdAt.lte = new Date(dateTo);
     }
 
-    const clients = await db.client.findMany({
-      where,
-      include: { creator: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-    });
+    const [clients, total] = await Promise.all([
+      db.client.findMany({
+        where,
+        include: { creator: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+      }),
+      db.client.count({ where }),
+    ]);
 
-    return NextResponse.json(clients);
+    return NextResponse.json({
+      clients,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / take),
+      },
+    });
   } catch (error) {
     console.error("Fetch clients error:", error);
     return NextResponse.json(
