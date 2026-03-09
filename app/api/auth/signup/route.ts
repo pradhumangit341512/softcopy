@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db"; // ✅ FIXED
+import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, email, phone, password, companyName } = body;
 
-    // Validation
+    // ✅ Validation
     if (!name || !email || !phone || !password || !companyName) {
       return NextResponse.json(
         { error: "All fields are required" },
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check existing user
+    // ✅ Check existing user
     const existingUser = await db.user.findUnique({
       where: { email },
     });
@@ -43,14 +43,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash password
+    // ✅ Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create subscription expiry
+    // ✅ Create subscription expiry (30 days)
     const subscriptionExpiry = new Date();
     subscriptionExpiry.setDate(subscriptionExpiry.getDate() + 30);
 
-    // Create company
+    // ✅ Create company
     const company = await db.company.create({
       data: {
         companyName,
@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Create admin user
-    const user = await db.user.create({
+    // ✅ Create admin user
+    const newUser = await db.user.create({
       data: {
         name,
         email,
@@ -73,7 +73,20 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // JWT secret check
+    // ✅ FIX: Re-fetch user WITH company relation (same shape as login response)
+    const fullUser = await db.user.findUnique({
+      where: { id: newUser.id },
+      include: { company: true },
+    });
+
+    if (!fullUser) {
+      return NextResponse.json(
+        { error: "Failed to retrieve created user" },
+        { status: 500 }
+      );
+    }
+
+    // ✅ JWT secret check
     if (!process.env.JWT_SECRET) {
       console.error("JWT_SECRET is missing");
       return NextResponse.json(
@@ -82,33 +95,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate token
+    // ✅ Generate token
     const token = jwt.sign(
       {
-        userId: user.id,
-        companyId: user.companyId,
-        role: user.role,
-        email: user.email,
+        userId: fullUser.id,
+        companyId: fullUser.companyId,
+        role: fullUser.role,
+        email: fullUser.email,
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // Response
+    // ✅ FIX: Strip password before sending to client
+    const { password: _, ...userWithoutPassword } = fullUser;
+
     const response = NextResponse.json(
       {
         message: "Account created successfully",
-        user,
+        user: userWithoutPassword,
       },
       { status: 201 }
     );
 
-    // Set cookie
+    // ✅ FIX: Cookie name is now "auth_token" — matches login route
     response.cookies.set("auth_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
     return response;

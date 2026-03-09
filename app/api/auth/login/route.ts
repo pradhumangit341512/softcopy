@@ -7,6 +7,15 @@ export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json();
 
+    // ✅ Validation
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: "Email and password are required" },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Find user with company
     const user = await db.user.findUnique({
       where: { email },
       include: { company: true },
@@ -19,6 +28,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ✅ Check account status
     if (user.status !== "active") {
       return NextResponse.json(
         { error: "Account is inactive" },
@@ -26,8 +36,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ✅ Verify password
     const passwordMatch = await bcrypt.compare(password, user.password);
-
     if (!passwordMatch) {
       return NextResponse.json(
         { error: "Invalid email or password" },
@@ -35,6 +45,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ✅ Check subscription expiry
     if (user.company && new Date() > user.company.subscriptionExpiry) {
       return NextResponse.json(
         { error: "Subscription expired" },
@@ -42,7 +53,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 🔐 Create JWT
+    // ✅ JWT secret check
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is missing");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+
+    // ✅ Create JWT
     const token = jwt.sign(
       {
         userId: user.id,
@@ -50,10 +70,11 @@ export async function POST(req: NextRequest) {
         role: user.role,
         email: user.email,
       },
-      process.env.JWT_SECRET!,
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
+    // ✅ Strip password before sending to client
     const { password: _, ...userWithoutPassword } = user;
 
     const response = NextResponse.json(
@@ -64,13 +85,13 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
 
-    // ✅ IMPORTANT: use SAME cookie name used in APIs
-    response.cookies.set("token", token, {
+    // ✅ FIX: Cookie name is now "auth_token" — matches signup route
+    response.cookies.set("auth_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
     return response;

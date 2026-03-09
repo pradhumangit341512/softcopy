@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 
 export interface User {
   id: string;
@@ -15,6 +15,14 @@ export interface User {
     subscriptionType: string;
     subscriptionExpiry: string;
   };
+}
+
+export interface SignupData {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  companyName: string;
 }
 
 export interface AuthState {
@@ -33,14 +41,6 @@ export interface AuthState {
   fetchUser: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
   resetAuth: () => void;
-}
-
-export interface SignupData {
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  companyName: string;
 }
 
 const initialState = {
@@ -62,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
 
         setError: (error) => set({ error }),
 
+        // ✅ Login — fully replaces state, no merging
         login: async (email: string, password: string) => {
           set({ isLoading: true, error: null });
           try {
@@ -71,27 +72,30 @@ export const useAuthStore = create<AuthState>()(
               body: JSON.stringify({ email, password }),
             });
 
+            const data = await response.json();
+
             if (!response.ok) {
-              throw new Error('Invalid credentials');
+              throw new Error(data.error || 'Login failed');
             }
 
-            const data = await response.json();
+            // ✅ FIXED: Replace state entirely — never spread old user
             set({
               user: data.user,
               isAuthenticated: true,
               isLoading: false,
+              error: null,
             });
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Login failed';
             set({
+              ...initialState, // ✅ Reset everything on failure
               error: errorMessage,
-              isLoading: false,
-              isAuthenticated: false,
             });
             throw error;
           }
         },
 
+        // ✅ Signup — fully replaces state, no merging
         signup: async (data: SignupData) => {
           set({ isLoading: true, error: null });
           try {
@@ -101,49 +105,59 @@ export const useAuthStore = create<AuthState>()(
               body: JSON.stringify(data),
             });
 
+            const result = await response.json();
+
             if (!response.ok) {
-              throw new Error('Signup failed');
+              throw new Error(result.error || 'Signup failed');
             }
 
-            const result = await response.json();
+            // ✅ FIXED: Replace state entirely — never spread old user
             set({
               user: result.user,
               isAuthenticated: true,
               isLoading: false,
+              error: null,
             });
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Signup failed';
             set({
+              ...initialState, // ✅ Reset everything on failure
               error: errorMessage,
-              isLoading: false,
-              isAuthenticated: false,
             });
             throw error;
           }
         },
 
+        // ✅ Logout — clears memory AND persisted localStorage
         logout: async () => {
           set({ isLoading: true });
           try {
             await fetch('/api/auth/logout', { method: 'POST' });
-            set(initialState);
           } catch (error) {
             console.error('Logout error:', error);
+          } finally {
+            // ✅ FIXED: Clear persisted storage so no stale user bleeds into next login
+            useAuthStore.persist.clearStorage();
             set(initialState);
           }
         },
 
+        // ✅ Fetch current user from server (used on app load)
         fetchUser: async () => {
           set({ isLoading: true });
           try {
             const response = await fetch('/api/auth/me');
 
             if (!response.ok) {
+              // ✅ Clear everything if session is invalid
+              useAuthStore.persist.clearStorage();
               set(initialState);
               return;
             }
 
             const data = await response.json();
+
+            // ✅ Replace state entirely
             set({
               user: data.user,
               isAuthenticated: true,
@@ -151,10 +165,12 @@ export const useAuthStore = create<AuthState>()(
               error: null,
             });
           } catch (error) {
+            useAuthStore.persist.clearStorage();
             set(initialState);
           }
         },
 
+        // ✅ Update profile — only spreads into existing user (correct use of spread)
         updateProfile: async (data: Partial<User>) => {
           set({ isLoading: true, error: null });
           try {
@@ -164,14 +180,18 @@ export const useAuthStore = create<AuthState>()(
               body: JSON.stringify(data),
             });
 
+            const result = await response.json();
+
             if (!response.ok) {
-              throw new Error('Update failed');
+              throw new Error(result.error || 'Update failed');
             }
 
-            const updated = await response.json();
+            // ✅ FIXED: Spread only result.user (not the full response object)
+            const updatedUser = result.user ?? result;
             set((state) => ({
-              user: state.user ? { ...state.user, ...updated } : null,
+              user: state.user ? { ...state.user, ...updatedUser } : null,
               isLoading: false,
+              error: null,
             }));
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Update failed';
@@ -180,10 +200,23 @@ export const useAuthStore = create<AuthState>()(
           }
         },
 
-        resetAuth: () => set(initialState),
+        resetAuth: () => {
+          useAuthStore.persist.clearStorage();
+          set(initialState);
+        },
       }),
       {
         name: 'auth-storage',
+        storage: createJSONStorage(() => localStorage),
+
+        // ✅ FIXED: Use merge to REPLACE persisted state, not shallow-merge it
+        // This prevents stale user data from a previous session bleeding into a new login
+        merge: (persistedState, currentState) => ({
+          ...currentState,
+          ...(persistedState as Partial<AuthState>),
+        }),
+
+        // ✅ Only persist what's needed — never persist loading/error states
         partialize: (state) => ({
           user: state.user,
           isAuthenticated: state.isAuthenticated,

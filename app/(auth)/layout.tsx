@@ -11,7 +11,7 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-blue-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       {/* Left Side - Branding (Hidden on Mobile) */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-center">
         <div className="max-w-md">

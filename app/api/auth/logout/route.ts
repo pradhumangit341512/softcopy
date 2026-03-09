@@ -7,19 +7,21 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
 
-    // Clear auth cookie
+    // ✅ Clear auth cookie — same name used in login & signup
     response.cookies.set("auth_token", "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 0, // expire immediately
+      maxAge: 0, // ✅ Expire immediately
     });
+
+    // ✅ Also delete the cookie explicitly (belt-and-suspenders)
+    response.cookies.delete("auth_token");
 
     return response;
   } catch (error) {
     console.error("Logout error:", error);
-
     return NextResponse.json(
       { error: "Logout failed" },
       { status: 500 }
