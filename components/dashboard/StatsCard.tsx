@@ -24,7 +24,7 @@ export default function StatsCard({
       className={clsx(
         'relative rounded-2xl p-4 sm:p-5 border transition-all duration-200 overflow-hidden',
         highlight
-          ? 'border-red-200 bg-gradient-to-br from-red-50 to-orange-50 shadow-sm shadow-red-100'
+          ? 'border-red-200 bg-linear-to-br from-red-50 to-orange-50 shadow-sm shadow-red-100'
           : 'border-gray-100 bg-white hover:border-blue-200 hover:shadow-md hover:shadow-blue-50'
       )}
     >
@@ -72,7 +72,7 @@ export default function StatsCard({
         {/* Icon */}
         {icon && (
           <div className={clsx(
-            'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl',
+            'w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xl',
             highlight ? 'bg-red-100' : 'bg-gray-50'
           )}>
             {icon}

@@ -7,6 +7,7 @@ import {
   BarChart3, Settings, X,
 } from 'lucide-react';
 import clsx from 'clsx';
+import Button from '../common/ Button';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -60,14 +61,14 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
           </div>
 
           {/* Close button — mobile only */}
-          <button
+          <Button
             onClick={onClose}
             className="md:hidden w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700
               flex items-center justify-center text-gray-400 hover:text-white
               transition-colors"
           >
             <X size={16} />
-          </button>
+          </Button>
         </div>
 
         {/* ── Navigation ── */}
@@ -90,7 +91,7 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
                   <Icon
                     size={18}
                     className={clsx(
-                      'flex-shrink-0 transition-colors',
+                      'shrink-0 transition-colors',
                       isActive ? 'text-white' : 'text-gray-500'
                     )}
                   />
@@ -110,8 +111,8 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
         <div className="px-4 py-4 border-t border-gray-800">
           <div className="flex items-center gap-3">
             {/* Avatar with initials */}
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600
-              flex items-center justify-center font-bold text-sm text-white flex-shrink-0 shadow-md">
+            <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-blue-600
+              flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-md">
               {initials}
             </div>
             <div className="flex-1 min-w-0">
@@ -125,7 +126,7 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
             {/* Role pill */}
             {user?.role && (
               <span className="text-xs font-semibold text-blue-400 bg-blue-900/40
-                px-2 py-0.5 rounded-full capitalize flex-shrink-0">
+                px-2 py-0.5 rounded-full capitalize -shrink-0">
                 {user.role}
               </span>
             )}

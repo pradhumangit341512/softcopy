@@ -1,18 +1,18 @@
 'use client';
 
-import { Edit2 } from 'lucide-react';
+import { Edit2, Trash2 } from 'lucide-react';
 import Badge from '@/components/common/Badge';
 import { formatCurrency } from '@/lib/utils';
-import Button from '@/components/common/ Button'; // ✅ Fixed: removed space + use absolute path
+import Button from '@/components/common/ Button';
 
 import type { Client } from '@/lib/types';
 
-export interface ClientTableProps {
+interface ClientTableProps {
   clients: Client[];
-  onEdit: (clientId: string) => void;
+  onEdit: (id: string) => void;
+  onDelete?: (id: string) => Promise<void>;
 }
 
-// ✅ Helper: format date safely — handles both Date objects and ISO strings from API
 const formatDate = (date?: Date | string | null): string => {
   if (!date) return '—';
   const d = new Date(date);
@@ -23,7 +23,7 @@ const formatDate = (date?: Date | string | null): string => {
   });
 };
 
-export default function ClientTable({ clients, onEdit }: ClientTableProps) {
+export default function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
       <table className="w-full text-sm min-w-[900px]">
@@ -31,7 +31,7 @@ export default function ClientTable({ clients, onEdit }: ClientTableProps) {
         {/* ── HEADER ── */}
         <thead className="bg-gray-100 text-gray-600 uppercase text-xs tracking-wider">
           <tr>
-            <th className="px-4 py-3 text-center w-16">Action</th>
+            <th className="px-4 py-3 text-center w-20">Actions</th>
             <th className="px-4 py-3 text-left">Client</th>
             <th className="px-4 py-3 text-left">Contact</th>
             <th className="px-4 py-3 text-left">Requirement</th>
@@ -46,7 +46,6 @@ export default function ClientTable({ clients, onEdit }: ClientTableProps) {
 
         {/* ── BODY ── */}
         <tbody className="divide-y divide-gray-100 bg-white">
-
           {clients.length === 0 ? (
             <tr>
               <td colSpan={10} className="text-center py-12 text-gray-400 text-sm">
@@ -60,16 +59,30 @@ export default function ClientTable({ clients, onEdit }: ClientTableProps) {
                 className="hover:bg-gray-50 transition-colors duration-150"
               >
 
-                {/* ACTION */}
+                {/* ACTIONS */}
                 <td className="px-4 py-3 text-center">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onEdit(client.id)}
-                    title="Edit client"
-                  >
-                    <Edit2 size={15} />
-                  </Button>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onEdit(client.id)}
+                      title="Edit client"
+                    >
+                      <Edit2 size={14} />
+                    </Button>
+
+                    {onDelete && (
+                      <button
+                        onClick={() => onDelete(client.id)}
+                        title="Delete client"
+                        className="w-7 h-7 rounded-lg border border-red-100 bg-red-50
+                          flex items-center justify-center text-red-400
+                          hover:bg-red-100 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
                 </td>
 
                 {/* CLIENT */}
@@ -78,9 +91,7 @@ export default function ClientTable({ clients, onEdit }: ClientTableProps) {
                     {client.clientName}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {client.creator?.name
-                      ? `by ${client.creator.name}`
-                      : 'Unassigned'}
+                    {client.creator?.name ? `by ${client.creator.name}` : 'Unassigned'}
                   </p>
                 </td>
 
@@ -120,7 +131,7 @@ export default function ClientTable({ clients, onEdit }: ClientTableProps) {
                   {formatDate(client.followUpDate)}
                 </td>
 
-                {/* VISITED — ✅ uses optional chaining in case field missing */}
+                {/* VISITED */}
                 <td className="px-4 py-3">
                   <Badge
                     label={(client as any).propertyVisited ? 'Visited' : 'Not Visited'}

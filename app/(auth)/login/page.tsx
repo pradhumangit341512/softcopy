@@ -166,15 +166,7 @@ export default function LoginPage() {
         <div className="flex-1 border-t border-gray-300"></div>
       </div>
 
-      {/* Social Login (Optional) */}
-      <div className="space-y-3">
-        <Button variant="outline" className="w-full">
-          🔵 Continue with Google
-        </Button>
-        <Button variant="outline" className="w-full">
-          🟦 Continue with Facebook
-        </Button>
-      </div>
+     
 
       {/* Sign Up Link */}
       <p className="mt-6 text-center text-gray-600">

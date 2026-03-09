@@ -11,28 +11,23 @@ type AuthPayload = {
 
 export async function GET(req: NextRequest) {
   try {
-    // ================= AUTH =================
+    // ── AUTH ──
     const token = await getTokenCookie();
-
-    if (!token) {
+    if (!token)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
-    // verifyToken is async → MUST await
     const payload = (await verifyToken(token)) as AuthPayload | null;
-
-    if (!payload) {
+    if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const companyId = payload.companyId;
 
-    // ================= DATE RANGE =================
-    const now = new Date();
+    // ── DATE RANGE ──
+    const now        = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-    // ================= COMMISSION BY STATUS =================
+    // ── COMMISSION BY STATUS ──
     const byStatus = await db.commission.groupBy({
       by: ["paidStatus"],
       where: {
@@ -43,43 +38,72 @@ export async function GET(req: NextRequest) {
       _count: true,
     });
 
-    // ================= TOP PERFORMERS =================
+    // ── TOP PERFORMERS ──
+    // userId is optional (String?) — group only where userId is set
     const topPerformersRaw = await db.commission.groupBy({
       by: ["userId"],
-      where: { companyId },
+      where: {
+        companyId,
+        userId: { not: null },   // skip commissions with no linked user
+      },
       _sum: { commissionAmount: true },
       _count: true,
       orderBy: { _sum: { commissionAmount: "desc" } },
       take: 10,
     });
 
-    // ================= FETCH USER DETAILS =================
+    // ── FETCH USER DETAILS ──
     const performers = await Promise.all(
       topPerformersRaw.map(async (perf) => {
+        // After filtering `not: null` above, userId is guaranteed non-null here
+        const userId = perf.userId as string;
+
         const user = await db.user.findUnique({
-          where: { id: perf.userId },
+          where: { id: userId },
           select: { name: true },
         });
 
         return {
-          userId: perf.userId,
-          userName: user?.name || "Unknown",
-          totalCommission: perf._sum.commissionAmount || 0,
-          deals: perf._count,
+          userId,
+          userName:        user?.name ?? "Unknown",
+          totalCommission: perf._sum.commissionAmount ?? 0,
+          deals:           perf._count,
         };
       })
     );
 
-    // ================= RESPONSE =================
+    // ── Also include salesPersonName-only performers (no userId) ──
+    const namedPerformersRaw = await db.commission.groupBy({
+      by: ["salesPersonName"],
+      where: {
+        companyId,
+        userId: null,
+        salesPersonName: { not: null },
+      },
+      _sum: { commissionAmount: true },
+      _count: true,
+      orderBy: { _sum: { commissionAmount: "desc" } },
+      take: 10,
+    });
+
+    const namedPerformers = namedPerformersRaw.map((perf) => ({
+      userId:          null,
+      userName:        perf.salesPersonName ?? "Unknown",
+      totalCommission: perf._sum.commissionAmount ?? 0,
+      deals:           perf._count,
+    }));
+
+    // Merge and sort combined list by totalCommission desc
+    const allPerformers = [...performers, ...namedPerformers]
+      .sort((a, b) => b.totalCommission - a.totalCommission)
+      .slice(0, 10);
+
     return NextResponse.json({
       byStatus,
-      topPerformers: performers,
+      topPerformers: allPerformers,
     });
   } catch (error) {
     console.error("Commission analytics error:", error);
-    return NextResponse.json(
-      { error: "Analytics failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Analytics failed" }, { status: 500 });
   }
 }

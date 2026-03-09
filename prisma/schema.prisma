@@ -10,50 +10,47 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-//
 // ======================
 // COMPANY
 // ======================
-//
 model Company {
-  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  id                 String          @id @default(auto()) @map("_id") @db.ObjectId
   companyName        String
   logo               String?
-  subscriptionType   String   @default("Basic")
+  subscriptionType   String          @default("Basic")
   subscriptionExpiry DateTime
-  status             String   @default("active")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  status             String          @default("active")
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   users              User[]
   clients            Client[]
   commissions        Commission[]
   otps               OTP[]
   invoices           Invoice[]
+  monthlyBudgets     MonthlyBudget[]
 
   @@index([status])
   @@index([subscriptionExpiry])
 }
 
-//
 // ======================
 // USER
 // ======================
-//
 model User {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
   name         String
-  phone        String   @unique
-  email        String   @unique
+  phone        String       @unique
+  email        String       @unique
   password     String
-  role         String   @default("user")
-  companyId    String?  @db.ObjectId
+  role         String       @default("user")
+  companyId    String?      @db.ObjectId
   profilePhoto String?
-  status       String   @default("active")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  status       String       @default("active")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  company      Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clients      Client[]
   commissions  Commission[]
 
@@ -61,47 +58,42 @@ model User {
   @@index([role])
 }
 
-//
 // ======================
-// CLIENT (UPGRADED CRM)
+// CLIENT
 // ======================
-//
 model Client {
-  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  id                String       @id @default(auto()) @map("_id") @db.ObjectId
   clientName        String
   phone             String
   email             String?
   companyName       String?
-  
+
   requirementType   String
   inquiryType       String
   budget            Float?
   preferredLocation String?
   address           String?
 
-  // 🔹 Visit tracking
   visitingDate      DateTime?
   visitingTime      String?
-  propertyVisited   Boolean  @default(false)
-  visitStatus       String   @default("NotVisited") // Visited | NotVisited
+  propertyVisited   Boolean      @default(false)
+  visitStatus       String       @default("NotVisited")
 
-  // 🔹 Follow-up tracking
   followUpDate      DateTime?
   nextFollowUp      DateTime?
   lastContactDate   DateTime?
 
-  // 🔹 Lead management
-  status            String   @default("New")
+  status            String       @default("New")
   source            String?
   notes             String?
 
-  companyId         String   @db.ObjectId
-  createdBy         String   @db.ObjectId
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  companyId         String       @db.ObjectId
+  createdBy         String       @db.ObjectId
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  creator           User     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator           User         @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   commissions       Commission[]
 
   @@index([companyId])
@@ -112,30 +104,32 @@ model Client {
   @@index([phone])
 }
 
-//
 // ======================
 // COMMISSION
 // ======================
-//
 model Commission {
-  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
-  clientId             String   @db.ObjectId
-  userId               String   @db.ObjectId
-  companyId            String   @db.ObjectId
+  id                   String    @id @default(auto()) @map("_id") @db.ObjectId
+  clientId             String    @db.ObjectId
+  companyId            String    @db.ObjectId
+
+  // Sales person: free-text name (optional), userId kept optional for backward compat
+  salesPersonName      String?
+  userId               String?   @db.ObjectId
 
   dealAmount           Float
   commissionPercentage Float
   commissionAmount     Float
 
-  paidStatus           String   @default("Pending")
+  paidStatus           String    @default("Pending")
   paymentDate          DateTime?
+  paymentReference     String?
 
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  client               Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  company              Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client               Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user                 User?     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([userId])
@@ -143,11 +137,9 @@ model Commission {
   @@index([paidStatus])
 }
 
-//
 // ======================
-// SECURE OTP
+// OTP
 // ======================
-//
 model OTP {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   phone      String
@@ -164,11 +156,9 @@ model OTP {
   @@index([expiresAt])
 }
 
-//
 // ======================
 // INVOICE
 // ======================
-//
 model Invoice {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   companyId         String   @db.ObjectId
@@ -187,4 +177,22 @@ model Invoice {
 
   @@index([companyId])
   @@index([paymentStatus])
+}
+
+// ======================
+// MONTHLY BUDGET
+// ======================
+model MonthlyBudget {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId     String   @db.ObjectId
+  month         String
+  targetAmount  Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, month])
+  @@index([companyId])
+  @@map("monthly_budgets")
 }

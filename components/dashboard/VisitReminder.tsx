@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, AlertCircle, Calendar, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Button from '../common/ Button';
 
 interface VisitReminderProps {
   visitCount: number;
@@ -26,13 +27,13 @@ export default function VisitReminder({ visitCount }: VisitReminderProps) {
     <>
       {/* ── Banner ── */}
       <div className="relative flex items-start sm:items-center gap-3 px-4 py-3.5
-        bg-gradient-to-r from-red-50 to-orange-50
+        bg-linear-to-r from-red-50 to-orange-50
         border border-red-200 rounded-2xl shadow-sm overflow-hidden">
 
         {/* Decorative left bar */}
         <span className="absolute left-0 inset-y-0 w-1 bg-red-500 rounded-l-2xl" />
 
-        <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+        <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
           <AlertCircle size={18} className="text-red-600" />
         </div>
 
@@ -45,7 +46,7 @@ export default function VisitReminder({ visitCount }: VisitReminderProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => router.push('/dashboard/clients')}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
@@ -53,13 +54,13 @@ export default function VisitReminder({ visitCount }: VisitReminderProps) {
           >
             View <ArrowRight size={11} />
           </button>
-          <button
+          <Button
             onClick={() => setIsVisible(false)}
             className="w-7 h-7 rounded-lg hover:bg-red-100 flex items-center justify-center
               text-red-400 hover:text-red-600 transition-colors"
           >
             <X size={15} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -71,7 +72,7 @@ export default function VisitReminder({ visitCount }: VisitReminderProps) {
             animate-in fade-in slide-in-from-bottom-4 duration-200">
 
             {/* Header */}
-            <div className="bg-gradient-to-r from-red-500 to-orange-500 px-6 py-5">
+            <div className="bg-linear-to-r from-red-500 to-orange-500 px-6 py-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
                   <Calendar size={20} className="text-white" />
