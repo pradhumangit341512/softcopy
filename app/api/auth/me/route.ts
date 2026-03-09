@@ -6,15 +6,14 @@ export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
-    // ✅ MUST MATCH LOGIN COOKIE NAME
-    const token = req.cookies.get("token")?.value;
+    // ✅ "auth_token" — matches login & signup cookie name
+    const token = req.cookies.get("auth_token")?.value;
 
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     let decoded: any;
-
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET!);
     } catch {
@@ -31,15 +30,9 @@ export async function GET(req: NextRequest) {
     }
 
     const { password, ...safeUser } = user;
-
     return NextResponse.json({ user: safeUser }, { status: 200 });
-
   } catch (error) {
     console.error("AUTH ME ERROR:", error);
-
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
