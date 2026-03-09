@@ -6,6 +6,8 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-secret-key-min-32-characters'
 );
 
+const COOKIE_NAME = 'auth_token'; // ✅ single source of truth — matches login & signup
+
 const JWT_EXPIRY = 7 * 24 * 60 * 60; // 7 days in seconds
 
 // ==================== TOKEN GENERATION ====================
@@ -17,17 +19,11 @@ export async function generateToken(
   email: string
 ): Promise<string> {
   try {
-    const token = await new SignJWT({
-      userId,
-      companyId,
-      role,
-      email,
-    })
+    const token = await new SignJWT({ userId, companyId, role, email })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
       .setExpirationTime('7d')
       .sign(JWT_SECRET);
-
     return token;
   } catch (error) {
     console.error('Token generation error:', error);
@@ -54,16 +50,18 @@ export async function verifyToken(token: string): Promise<{
 
 // ==================== COOKIE MANAGEMENT ====================
 
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: JWT_EXPIRY,
+};
+
 export async function setTokenCookie(token: string): Promise<void> {
   try {
     const cookieStore = await cookies();
-    cookieStore.set('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: JWT_EXPIRY,
-      path: '/',
-    });
+    cookieStore.set(COOKIE_NAME, token, COOKIE_OPTIONS);
   } catch (error) {
     console.error('Set token cookie error:', error);
   }
@@ -72,8 +70,7 @@ export async function setTokenCookie(token: string): Promise<void> {
 export async function getTokenCookie(): Promise<string | null> {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-    return token || null;
+    return cookieStore.get(COOKIE_NAME)?.value ?? null;
   } catch (error) {
     console.error('Get token cookie error:', error);
     return null;
@@ -82,8 +79,7 @@ export async function getTokenCookie(): Promise<string | null> {
 
 export function getTokenFromRequest(req: NextRequest): string | null {
   try {
-    const token = req.cookies.get('token')?.value;
-    return token || null;
+    return req.cookies.get(COOKIE_NAME)?.value ?? null;
   } catch (error) {
     console.error('Get token from request error:', error);
     return null;
@@ -93,13 +89,7 @@ export function getTokenFromRequest(req: NextRequest): string | null {
 export async function clearTokenCookie(): Promise<void> {
   try {
     const cookieStore = await cookies();
-    cookieStore.set('token', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 0,
-      path: '/',
-    });
+    cookieStore.set(COOKIE_NAME, '', { ...COOKIE_OPTIONS, maxAge: 0 });
   } catch (error) {
     console.error('Clear token cookie error:', error);
   }
@@ -114,17 +104,38 @@ export async function verifyAuth(req: NextRequest): Promise<{
   email: string;
 } | null> {
   try {
-    const token = getTokenFromRequest(req);
+    // Try request cookies first (fastest path)
+    let token = getTokenFromRequest(req);
 
+    // Fallback to next/headers (needed in some server contexts)
     if (!token) {
-      return null;
+      try {
+        const cookieStore = await cookies();
+        token = cookieStore.get(COOKIE_NAME)?.value ?? null;
+      } catch {}
     }
 
-    const payload = await verifyToken(token);
-    return payload;
+    if (!token) return null;
+    return await verifyToken(token);
   } catch (error) {
     console.error('Auth verification error:', error);
     return null;
+  }
+}
+
+// ==================== REQUIRE AUTH ====================
+
+export async function requireAuth() {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(COOKIE_NAME)?.value;
+    if (!token) return { authorized: false, payload: null };
+    const payload = await verifyToken(token);
+    if (!payload) return { authorized: false, payload: null };
+    return { authorized: true, payload };
+  } catch (error) {
+    console.error('Require auth error:', error);
+    return { authorized: false, payload: null };
   }
 }
 
@@ -134,8 +145,7 @@ export async function hashPassword(password: string): Promise<string> {
   try {
     const bcrypt = require('bcryptjs');
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    return hashedPassword;
+    return await bcrypt.hash(password, salt);
   } catch (error) {
     console.error('Password hashing error:', error);
     throw new Error('Failed to hash password');
@@ -148,8 +158,7 @@ export async function comparePasswords(
 ): Promise<boolean> {
   try {
     const bcrypt = require('bcryptjs');
-    const match = await bcrypt.compare(password, hashedPassword);
-    return match;
+    return await bcrypt.compare(password, hashedPassword);
   } catch (error) {
     console.error('Password comparison error:', error);
     return false;
@@ -159,14 +168,11 @@ export async function comparePasswords(
 // ==================== VALIDATION ====================
 
 export function validateEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export function validatePhone(phone: string): boolean {
-  // Accept various phone formats
-  const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-  return phoneRegex.test(phone.replace(/\s/g, ''));
+  return /^\+?[1-9]\d{1,14}$/.test(phone.replace(/\s/g, ''));
 }
 
 export function validatePassword(password: string): {
@@ -174,38 +180,18 @@ export function validatePassword(password: string): {
   errors: string[];
 } {
   const errors: string[] = [];
-
-  if (password.length < 6) {
-    errors.push('Password must be at least 6 characters');
-  }
-
-  if (!/[A-Z]/.test(password)) {
-    errors.push('Password must contain at least one uppercase letter');
-  }
-
-  if (!/[a-z]/.test(password)) {
-    errors.push('Password must contain at least one lowercase letter');
-  }
-
-  if (!/[0-9]/.test(password)) {
-    errors.push('Password must contain at least one number');
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
+  if (password.length < 6)       errors.push('Password must be at least 6 characters');
+  if (!/[A-Z]/.test(password))   errors.push('Password must contain at least one uppercase letter');
+  if (!/[a-z]/.test(password))   errors.push('Password must contain at least one lowercase letter');
+  if (!/[0-9]/.test(password))   errors.push('Password must contain at least one number');
+  return { isValid: errors.length === 0, errors };
 }
 
-// ==================== UTILITY FUNCTIONS ====================
+// ==================== UTILITY ====================
 
-export function generateRandomString(length: number = 32): string {
+export function generateRandomString(length = 32): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 export function isTokenExpired(expiresAt: Date): boolean {
@@ -218,45 +204,22 @@ export function getTokenExpiry(): Date {
   return expiry;
 }
 
-// ==================== ERROR RESPONSES ====================
+// ==================== ERROR MESSAGES ====================
 
 export const AUTH_ERRORS = {
-  INVALID_CREDENTIALS: 'Invalid email or password',
-  ACCOUNT_INACTIVE: 'Account is inactive',
-  SUBSCRIPTION_EXPIRED: 'Subscription has expired',
-  INVALID_TOKEN: 'Invalid or expired token',
-  NOT_AUTHENTICATED: 'Not authenticated',
-  UNAUTHORIZED: 'Unauthorized access',
-  USER_NOT_FOUND: 'User not found',
-  EMAIL_ALREADY_EXISTS: 'Email already registered',
-  PHONE_ALREADY_EXISTS: 'Phone number already registered',
-  INVALID_EMAIL: 'Invalid email format',
-  INVALID_PHONE: 'Invalid phone number',
-  WEAK_PASSWORD: 'Password does not meet requirements',
-  PASSWORDS_DONT_MATCH: 'Passwords do not match',
-  OTP_INVALID: 'Invalid or expired OTP',
-  OTP_SENT: 'OTP sent successfully',
+  INVALID_CREDENTIALS:    'Invalid email or password',
+  ACCOUNT_INACTIVE:       'Account is inactive',
+  SUBSCRIPTION_EXPIRED:   'Subscription has expired',
+  INVALID_TOKEN:          'Invalid or expired token',
+  NOT_AUTHENTICATED:      'Not authenticated',
+  UNAUTHORIZED:           'Unauthorized access',
+  USER_NOT_FOUND:         'User not found',
+  EMAIL_ALREADY_EXISTS:   'Email already registered',
+  PHONE_ALREADY_EXISTS:   'Phone number already registered',
+  INVALID_EMAIL:          'Invalid email format',
+  INVALID_PHONE:          'Invalid phone number',
+  WEAK_PASSWORD:          'Password does not meet requirements',
+  PASSWORDS_DONT_MATCH:   'Passwords do not match',
+  OTP_INVALID:            'Invalid or expired OTP',
+  OTP_SENT:               'OTP sent successfully',
 };
-// ==================== REQUIRE AUTH (FIXED FOR APP ROUTER) ====================
-
-export async function requireAuth() {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
-
-    if (!token) {
-      return { authorized: false, payload: null };
-    }
-
-    const payload = await verifyToken(token);
-
-    if (!payload) {
-      return { authorized: false, payload: null };
-    }
-
-    return { authorized: true, payload };
-  } catch (error) {
-    console.error('Require auth error:', error);
-    return { authorized: false, payload: null };
-  }
-}
