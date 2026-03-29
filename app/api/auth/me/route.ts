@@ -15,7 +15,10 @@ export async function GET(req: NextRequest) {
 
     let decoded: any;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET!);
+      if (!process.env.JWT_SECRET) {
+        return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+      }
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }

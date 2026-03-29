@@ -30,6 +30,34 @@ export enum RequirementType {
   COMMERCIAL = 'Commercial',
 }
 
+export enum PropertyType {
+  FLAT = 'Flat',
+  HOUSE = 'House',
+  VILLA = 'Villa',
+  PLOT = 'Plot',
+  LAND = 'Land',
+  COMMERCIAL = 'Commercial',
+  SHOP = 'Shop',
+  OFFICE = 'Office',
+  WAREHOUSE = 'Warehouse',
+}
+
+export enum BHKType {
+  STUDIO = 'Studio',
+  ONE_BHK = '1BHK',
+  TWO_BHK = '2BHK',
+  THREE_BHK = '3BHK',
+  FOUR_BHK = '4BHK',
+  FIVE_BHK = '5BHK',
+}
+
+export enum PropertyStatus {
+  AVAILABLE = 'Available',
+  RENTED = 'Rented',
+  SOLD = 'Sold',
+  UNAVAILABLE = 'Unavailable',
+}
+
 export enum CommissionStatus {
   PENDING = 'Pending',
   PAID = 'Paid',
@@ -124,6 +152,31 @@ export type ClientFormValues = Omit<
   followUpDate?: string;     // ✅ MUST be string
 };
 
+
+// ==================== PROPERTY ====================
+
+export interface Property extends BaseModel {
+  propertyName: string;
+  address: string;
+  propertyType: PropertyType;
+  bhkType?: string;
+  vacateDate?: string;
+  askingRent?: number;
+  sellingPrice?: number;
+  area?: string;
+  description?: string;
+  status: PropertyStatus;
+
+  // Owner details
+  ownerName: string;
+  ownerPhone: string;
+  ownerEmail?: string;
+
+  companyId?: string;
+  createdBy?: string;
+  creator?: User;
+  company?: Company;
+}
 
 // ==================== COMMISSION ====================
 
@@ -348,6 +401,41 @@ export const INQUIRY_TYPE_OPTIONS = [
   { value: InquiryType.BUY, label: 'Buy' },
   { value: InquiryType.SELL, label: 'Sell' },
   { value: InquiryType.RENT, label: 'Rent' },
+];
+
+export const PROPERTY_TYPE_OPTIONS = [
+  { value: PropertyType.FLAT, label: 'Flat' },
+  { value: PropertyType.HOUSE, label: 'House' },
+  { value: PropertyType.VILLA, label: 'Villa' },
+  { value: PropertyType.PLOT, label: 'Plot' },
+  { value: PropertyType.LAND, label: 'Land' },
+  { value: PropertyType.COMMERCIAL, label: 'Commercial' },
+  { value: PropertyType.SHOP, label: 'Shop' },
+  { value: PropertyType.OFFICE, label: 'Office' },
+  { value: PropertyType.WAREHOUSE, label: 'Warehouse' },
+];
+
+export const PROPERTY_STATUS_OPTIONS = [
+  { value: PropertyStatus.AVAILABLE, label: 'Available' },
+  { value: PropertyStatus.RENTED, label: 'Rented' },
+  { value: PropertyStatus.SOLD, label: 'Sold' },
+  { value: PropertyStatus.UNAVAILABLE, label: 'Unavailable' },
+];
+
+export const BHK_TYPE_OPTIONS = [
+  { value: BHKType.STUDIO, label: 'Studio' },
+  { value: BHKType.ONE_BHK, label: '1 BHK' },
+  { value: BHKType.TWO_BHK, label: '2 BHK' },
+  { value: BHKType.THREE_BHK, label: '3 BHK' },
+  { value: BHKType.FOUR_BHK, label: '4 BHK' },
+  { value: BHKType.FIVE_BHK, label: '5 BHK' },
+];
+
+/** Property types that should show the BHK sub-type selector */
+export const PROPERTY_TYPES_WITH_BHK: string[] = [
+  PropertyType.FLAT,
+  PropertyType.HOUSE,
+  PropertyType.VILLA,
 ];
 
 export const REQUIREMENT_TYPE_OPTIONS = [

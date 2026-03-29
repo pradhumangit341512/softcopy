@@ -1,62 +1,77 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import Card, { CardBody, CardHeader } from '@/components/common/Card';
-import ClientForm from '@/components/clients/ClientForm';
-import { useClients } from '@/hooks/useClients';
+import PropertyForm from '@/components/properties/PropertyForm';
 import { useToast } from '@/components/common/Toast';
 import Loader from '@/components/common/Loader';
 import Button from '@/components/common/ Button';
 
-export default function AddClientPage() {
+export default function AddPropertyPage() {
   const router = useRouter();
-  const { addClient, loading, error } = useClients();
   const { addToast } = useToast();
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (data: any) => {
-    const success = await addClient(data);
-    if (success) {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/properties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to add property');
+      }
+
       addToast({
         type: 'success',
-        message: 'Client added successfully!',
+        message: 'Property added successfully!',
       });
-      router.push('/dashboard/clients');
-    } else {
+      router.push('/dashboard/properties');
+      return true;
+    } catch (err: any) {
       addToast({
         type: 'error',
-        message: error || 'Failed to add client',
+        message: err.message || 'Failed to add property',
       });
+      return false;
+    } finally {
+      setLoading(false);
     }
-    return success;
   };
 
   return (
     <div className="py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6">
       {/* Header with Back Button */}
       <div className="flex items-center gap-3 sm:gap-4">
-        <Link href="/dashboard/clients">
+        <Link href="/dashboard/properties">
           <Button variant="outline" size="sm" icon={<ArrowLeft size={18} />}>
             <span className="hidden sm:inline">Back</span>
           </Button>
         </Link>
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Add New Client</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Add New Property</h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-            Fill in the details to add a new property lead
+            Fill in the property and owner details
           </p>
         </div>
       </div>
 
       {/* Form Card */}
       <Card>
-        <CardHeader title="Client Information" />
+        <CardHeader title="Property Information" />
         <CardBody>
           {loading ? (
             <Loader size="md" message="Saving..." />
           ) : (
-            <ClientForm onSubmit={handleSubmit} isLoading={loading} />
+            <PropertyForm onSubmit={handleSubmit} isLoading={loading} />
           )}
         </CardBody>
       </Card>

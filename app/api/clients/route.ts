@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken } from "@/lib/auth";
+import { getTokenCookie, verifyToken, isValidObjectId } from "@/lib/auth";
 
 type AuthPayload = {
   userId: string;
@@ -23,6 +23,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
+    if (!isValidObjectId(payload.companyId)) {
+      return NextResponse.json({
+        clients: [],
+        pagination: { total: 0, page: 1, pages: 1 },
+      });
+    }
+
     const { searchParams } = new URL(req.url);
 
     const status = searchParams.get("status");
@@ -33,9 +40,7 @@ export async function GET(req: NextRequest) {
     const take = 10;
     const skip = (page - 1) * take;
 
-    const where: any = {
-      companyId: payload.companyId,
-    };
+    const where: any = { companyId: payload.companyId };
 
     if (status) where.status = status;
 
@@ -95,15 +100,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (!isValidObjectId(payload.companyId)) {
+      return NextResponse.json({ error: "Invalid session. Please log out and log in again." }, { status: 400 });
+    }
+
     const body = await req.json();
 
+    // Whitelist allowed fields to prevent mass assignment
     const client = await db.client.create({
       data: {
-        ...body,
-        companyId: payload.companyId,
-        createdBy: payload.userId,
-        visitingDate: body.visitingDate ? new Date(body.visitingDate) : null,
-        followUpDate: body.followUpDate ? new Date(body.followUpDate) : null,
+        clientName:        body.clientName,
+        phone:             body.phone,
+        email:             body.email || null,
+        companyName:       body.companyName || null,
+        requirementType:   body.requirementType,
+        inquiryType:       body.inquiryType,
+        budget:            body.budget ?? null,
+        preferredLocation: body.preferredLocation || null,
+        address:           body.address || null,
+        visitingTime:      body.visitingTime || null,
+        status:            body.status || 'New',
+        source:            body.source || null,
+        notes:             body.notes || null,
+        companyId:         payload.companyId,
+        createdBy:         payload.userId,
+        visitingDate:      body.visitingDate ? new Date(body.visitingDate) : null,
+        followUpDate:      body.followUpDate ? new Date(body.followUpDate) : null,
       },
     });
 

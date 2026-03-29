@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 
+// ─────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────
 export interface User {
   id: string;
   name: string;
@@ -26,50 +29,67 @@ export interface SignupData {
 }
 
 export interface AuthState {
-  user: User | null;
-  isLoading: boolean;
+  user:            User | null;
+  isLoading:       boolean;
   isAuthenticated: boolean;
-  error: string | null;
+  hasFetched:      boolean;   // ✅ prevents infinite fetchUser loop
+  error:           string | null;
 
   // Actions
-  setUser: (user: User | null) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (data: SignupData) => Promise<void>;
-  logout: () => Promise<void>;
-  fetchUser: () => Promise<void>;
+  setUser:       (user: User | null) => void;
+  setLoading:    (loading: boolean) => void;
+  setError:      (error: string | null) => void;
+  login:         (email: string, password: string) => Promise<{ requireOTP: boolean; message?: string }>;
+  signup:        (data: SignupData) => Promise<{ requireOTP: boolean; message?: string }>;
+  logout:        () => Promise<void>;
+  fetchUser:     () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
-  resetAuth: () => void;
+  resetAuth:     () => void;
 }
 
+// ─────────────────────────────────────────
+// Initial state
+// ─────────────────────────────────────────
 const initialState = {
-  user: null,
-  isLoading: false,
+  user:            null,
+  isLoading:       false,
   isAuthenticated: false,
-  error: null,
+  hasFetched:      false,
+  error:           null,
 };
 
+// ─────────────────────────────────────────
+// Store
+// ─────────────────────────────────────────
 export const useAuthStore = create<AuthState>()(
   devtools(
     persist(
       (set, get) => ({
         ...initialState,
 
-        setUser: (user) => set({ user, isAuthenticated: !!user }),
+        // ✅ setUser — called after OTP verify, sets all flags correctly
+        setUser: (user: User | null) => set({
+          user,
+          isAuthenticated: !!user,
+          hasFetched:      true,
+          isLoading:       false,
+          error:           null,
+        }),
 
         setLoading: (isLoading) => set({ isLoading }),
 
         setError: (error) => set({ error }),
 
-        // ✅ Login — fully replaces state, no merging
+        // ── Login Step 1: validate creds → returns requireOTP: true
+        // ── Login Step 2: handled directly in LoginPage with otp param
         login: async (email: string, password: string) => {
           set({ isLoading: true, error: null });
           try {
             const response = await fetch('/api/auth/login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, password }),
+              method:      'POST',
+              headers:     { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body:        JSON.stringify({ email, password }),
             });
 
             const data = await response.json();
@@ -78,31 +98,38 @@ export const useAuthStore = create<AuthState>()(
               throw new Error(data.error || 'Login failed');
             }
 
-            // ✅ FIXED: Replace state entirely — never spread old user
+            // OTP required — not an error (only trust this on 2xx responses)
+            if (data.requireOTP) {
+              set({ isLoading: false });
+              return { requireOTP: true, message: data.message };
+            }
+
+            // Direct login success (no OTP) — set user
             set({
-              user: data.user,
+              user:            data.user,
               isAuthenticated: true,
-              isLoading: false,
-              error: null,
+              hasFetched:      true,
+              isLoading:       false,
+              error:           null,
             });
+            return { requireOTP: false };
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Login failed';
-            set({
-              ...initialState, // ✅ Reset everything on failure
-              error: errorMessage,
-            });
+            const msg = error instanceof Error ? error.message : 'Login failed';
+            set({ ...initialState, error: msg });
             throw error;
           }
         },
 
-        // ✅ Signup — fully replaces state, no merging
+        // ── Signup Step 1: validate + send OTP → returns requireOTP: true
+        // ── Signup Step 2: handled directly in SignupPage with otp param
         signup: async (data: SignupData) => {
           set({ isLoading: true, error: null });
           try {
             const response = await fetch('/api/auth/signup', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(data),
+              method:      'POST',
+              headers:     { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body:        JSON.stringify(data),
             });
 
             const result = await response.json();
@@ -111,73 +138,83 @@ export const useAuthStore = create<AuthState>()(
               throw new Error(result.error || 'Signup failed');
             }
 
-            // ✅ FIXED: Replace state entirely — never spread old user
+            // OTP required — not an error (only trust this on 2xx responses)
+            if (result.requireOTP) {
+              set({ isLoading: false });
+              return { requireOTP: true, message: result.message };
+            }
+
+            // Direct signup success (no OTP) — set user
             set({
-              user: result.user,
+              user:            result.user,
               isAuthenticated: true,
-              isLoading: false,
-              error: null,
+              hasFetched:      true,
+              isLoading:       false,
+              error:           null,
             });
+            return { requireOTP: false };
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Signup failed';
-            set({
-              ...initialState, // ✅ Reset everything on failure
-              error: errorMessage,
-            });
+            const msg = error instanceof Error ? error.message : 'Signup failed';
+            set({ ...initialState, error: msg });
             throw error;
           }
         },
 
-        // ✅ Logout — clears memory AND persisted localStorage
+        // ── Logout ──
         logout: async () => {
           set({ isLoading: true });
           try {
-            await fetch('/api/auth/logout', { method: 'POST' });
+            await fetch('/api/auth/logout', {
+              method:      'POST',
+              credentials: 'include',
+            });
           } catch (error) {
             console.error('Logout error:', error);
           } finally {
-            // ✅ FIXED: Clear persisted storage so no stale user bleeds into next login
             useAuthStore.persist.clearStorage();
             set(initialState);
           }
         },
 
-        // ✅ Fetch current user from server (used on app load)
+        // ── Fetch user on app load — runs once via hasFetched guard in useAuth ──
         fetchUser: async () => {
-          set({ isLoading: true });
+          if (get().hasFetched || get().isLoading) return;
+
+          set({ isLoading: true, hasFetched: true });
           try {
-            const response = await fetch('/api/auth/me');
+            const response = await fetch('/api/auth/me', {
+              credentials: 'include',
+              cache:       'no-store',
+            });
 
             if (!response.ok) {
-              // ✅ Clear everything if session is invalid
-              useAuthStore.persist.clearStorage();
-              set(initialState);
+              // 401 = not logged in — not an error
+              set({ ...initialState, hasFetched: true });
               return;
             }
 
             const data = await response.json();
-
-            // ✅ Replace state entirely
             set({
-              user: data.user,
+              user:            data.user,
               isAuthenticated: true,
-              isLoading: false,
-              error: null,
+              hasFetched:      true,
+              isLoading:       false,
+              error:           null,
             });
-          } catch (error) {
-            useAuthStore.persist.clearStorage();
-            set(initialState);
+          } catch {
+            set({ ...initialState, hasFetched: true });
           }
         },
 
-        // ✅ Update profile — only spreads into existing user (correct use of spread)
+        // ── Update profile ──
         updateProfile: async (data: Partial<User>) => {
           set({ isLoading: true, error: null });
           try {
             const response = await fetch('/api/users/profile', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(data),
+              method:      'PUT',
+              headers:     { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body:        JSON.stringify(data),
             });
 
             const result = await response.json();
@@ -186,40 +223,44 @@ export const useAuthStore = create<AuthState>()(
               throw new Error(result.error || 'Update failed');
             }
 
-            // ✅ FIXED: Spread only result.user (not the full response object)
             const updatedUser = result.user ?? result;
             set((state) => ({
-              user: state.user ? { ...state.user, ...updatedUser } : null,
+              user:      state.user ? { ...state.user, ...updatedUser } : null,
               isLoading: false,
-              error: null,
+              error:     null,
             }));
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Update failed';
-            set({ error: errorMessage, isLoading: false });
+            const msg = error instanceof Error ? error.message : 'Update failed';
+            set({ error: msg, isLoading: false });
             throw error;
           }
         },
 
+        // ── Reset ──
         resetAuth: () => {
           useAuthStore.persist.clearStorage();
           set(initialState);
         },
       }),
+
       {
-        name: 'auth-storage',
+        name:    'auth-storage',
         storage: createJSONStorage(() => localStorage),
 
-        // ✅ FIXED: Use merge to REPLACE persisted state, not shallow-merge it
-        // This prevents stale user data from a previous session bleeding into a new login
+        // ✅ Only persist these — never persist loading/error/hasFetched
+        partialize: (state) => ({
+          user:            state.user,
+          isAuthenticated: state.isAuthenticated,
+        }),
+
+        // ✅ Replace don't merge — prevents stale user bleeding into new session
         merge: (persistedState, currentState) => ({
           ...currentState,
           ...(persistedState as Partial<AuthState>),
-        }),
-
-        // ✅ Only persist what's needed — never persist loading/error states
-        partialize: (state) => ({
-          user: state.user,
-          isAuthenticated: state.isAuthenticated,
+          // Always reset these on rehydrate
+          isLoading:  false,
+          hasFetched: false,  // ✅ force re-verify on every page load
+          error:      null,
         }),
       }
     )

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken } from "@/lib/auth";
+import { getTokenCookie, verifyToken, isValidObjectId } from "@/lib/auth";
 
 type AuthPayload = {
   userId: string;
@@ -19,6 +19,14 @@ export async function GET(req: NextRequest) {
     const payload = (await verifyToken(token)) as AuthPayload | null;
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    if (!isValidObjectId(payload.companyId)) {
+      return NextResponse.json({
+        commissionsByStatus: [],
+        monthlyCommissions: [],
+        totals: { totalCommission: 0, pendingCommission: 0, paidCommission: 0 },
+      });
+    }
 
     const companyId = payload.companyId;
 

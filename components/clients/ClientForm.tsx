@@ -15,11 +15,13 @@ import {
 import Input from '@/components/common/ Input';   // ✅ Fixed: removed space
 import Button from '@/components/common/ Button'; // ✅ Fixed: removed space
 
-// ✅ Extend schema to allow string dates (HTML date inputs always return strings)
+// Extend schema to allow string dates (HTML date inputs always return strings)
+// Use .passthrough() instead of .strict() so extra fields from initialData
+// (id, companyId, createdAt, etc.) don't cause silent validation failures
 const formSchema = clientSchema.extend({
   visitingDate: z.string().optional(),
   followUpDate: z.string().optional(),
-}).strict();
+});
 
 type ClientFormValues = z.infer<typeof formSchema>;
 
@@ -35,23 +37,41 @@ export default function ClientForm({
   isLoading = false,
 }: ClientFormProps) {
 
+  // Pick only the fields the form uses — prevents extra API fields
+  // (id, companyId, createdAt, etc.) from leaking into form state
+  const cleanDefaults = initialData
+    ? {
+        clientName:        initialData.clientName ?? '',
+        phone:             initialData.phone ?? '',
+        email:             initialData.email ?? '',
+        companyName:       (initialData as any).companyName ?? '',
+        requirementType:   initialData.requirementType ?? '',
+        inquiryType:       initialData.inquiryType ?? '',
+        budget:            initialData.budget,
+        preferredLocation: initialData.preferredLocation ?? '',
+        address:           initialData.address ?? '',
+        visitingDate:      initialData.visitingDate
+          ? new Date(initialData.visitingDate).toISOString().split('T')[0]
+          : '',
+        visitingTime:      (initialData as any).visitingTime ?? '',
+        followUpDate:      initialData.followUpDate
+          ? new Date(initialData.followUpDate).toISOString().split('T')[0]
+          : '',
+        status:            initialData.status ?? 'New',
+        source:            initialData.source ?? '',
+        notes:             initialData.notes ?? '',
+        propertyVisited:   (initialData as any).propertyVisited ?? false,
+        visitStatus:       (initialData as any).visitStatus ?? 'NotVisited',
+      }
+    : undefined;
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<ClientFormValues>({
-    // ✅ Fixed: removed "as any" — zodResolver now properly typed via formSchema
     resolver: zodResolver(formSchema) as any,
-    defaultValues: {
-      ...initialData,
-      // ✅ Convert Date → string for <input type="date">
-      visitingDate: initialData?.visitingDate
-        ? new Date(initialData.visitingDate).toISOString().split('T')[0]
-        : undefined,
-      followUpDate: initialData?.followUpDate
-        ? new Date(initialData.followUpDate).toISOString().split('T')[0]
-        : undefined,
-    },
+    defaultValues: cleanDefaults as any,
   });
 
   // ✅ Convert strings → Date objects before sending to API

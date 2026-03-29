@@ -68,15 +68,7 @@ export default function Dashboard() {
   const totalClients = data.summary.totalClients || 1;
 
   return (
-    <div className="py-6 sm:py-8 space-y-5 px-2 sm:px-0">
-
-      {/* ── HEADER ── */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-          Dashboard
-        </h1>
-        <p className="text-gray-500 text-sm mt-1">Welcome back — here's your overview</p>
-      </div>
+    <div className="space-y-5">
 
       {/* ── STATS ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -111,7 +103,7 @@ export default function Dashboard() {
       {/* ── TODAY'S VISITS ── */}
       {todayVisits.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+          <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
               <CalendarCheck size={14} className="text-blue-500" />
             </div>
@@ -199,7 +191,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Monthly Performance */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
           <div className="mb-4">
             <h3 className="text-base font-semibold text-gray-800">Monthly Performance</h3>
             <p className="text-xs text-gray-400 mt-0.5">Leads vs Deals over time</p>
@@ -221,7 +213,7 @@ export default function Dashboard() {
         </div>
 
         {/* Lead Status */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
           <div className="mb-4">
             <h3 className="text-base font-semibold text-gray-800">Lead Status</h3>
             <p className="text-xs text-gray-400 mt-0.5">Distribution across pipeline</p>

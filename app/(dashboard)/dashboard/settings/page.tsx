@@ -148,7 +148,7 @@ export default function SettingsPage() {
     : '?';
 
   return (
-    <div className="py-6 sm:py-8 space-y-5 px-2 sm:px-0 max-w-2xl">
+    <div className="py-4 sm:py-6 lg:py-8 space-y-5 max-w-2xl">
 
       {/* ── PAGE HEADER ── */}
       <div>

@@ -165,8 +165,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { UpdateClientRequest } from "@/lib/types";
-
 
 /* ==================== GET ==================== */
 export async function GET(
@@ -230,7 +228,7 @@ export async function PUT(
     }
 
     const { id } = await context.params;
-    const body: UpdateClientRequest = await req.json();
+    const body = await req.json() as Record<string, any>;
 
     const existing = await db.client.findUnique({ where: { id } });
 
@@ -246,25 +244,42 @@ export async function PUT(
       );
     }
 
-    // 🚀 NO ROLE CHECK — ANY LOGGED USER CAN UPDATE
+    // Build update data — only include fields that were actually sent
+    const updateData: Record<string, any> = {};
+
+    if (body.clientName !== undefined)      updateData.clientName = body.clientName;
+    if (body.phone !== undefined)           updateData.phone = body.phone;
+    if (body.email !== undefined)           updateData.email = body.email || null;
+    if (body.companyName !== undefined)     updateData.companyName = body.companyName || null;
+    if (body.requirementType !== undefined) updateData.requirementType = body.requirementType;
+    if (body.inquiryType !== undefined)     updateData.inquiryType = body.inquiryType;
+    if (body.budget !== undefined)          updateData.budget = body.budget ?? null;
+    if (body.preferredLocation !== undefined) updateData.preferredLocation = body.preferredLocation || null;
+    if (body.address !== undefined)         updateData.address = body.address || null;
+    if (body.status !== undefined)          updateData.status = body.status;
+    if (body.source !== undefined)          updateData.source = body.source || null;
+    if (body.notes !== undefined)           updateData.notes = body.notes || null;
+    if (body.visitingTime !== undefined)    updateData.visitingTime = body.visitingTime || null;
+    if (body.propertyVisited !== undefined) updateData.propertyVisited = Boolean(body.propertyVisited);
+    if (body.visitStatus !== undefined)     updateData.visitStatus = body.visitStatus;
+
+    // Handle date fields — convert string/Date to Date or null
+    if (body.visitingDate !== undefined) {
+      updateData.visitingDate = body.visitingDate ? new Date(body.visitingDate) : null;
+    }
+    if (body.followUpDate !== undefined) {
+      updateData.followUpDate = body.followUpDate ? new Date(body.followUpDate) : null;
+    }
+    if (body.nextFollowUp !== undefined) {
+      updateData.nextFollowUp = body.nextFollowUp ? new Date(body.nextFollowUp) : null;
+    }
+    if (body.lastContactDate !== undefined) {
+      updateData.lastContactDate = body.lastContactDate ? new Date(body.lastContactDate) : null;
+    }
 
     const updated = await db.client.update({
       where: { id },
-      data: {
-        clientName: body.clientName,
-        phone: body.phone,
-        email: body.email,
-        budget: body.budget,
-        preferredLocation: body.preferredLocation,
-        status: body.status,
-        notes: body.notes,
-        visitingDate: body.visitingDate
-          ? new Date(body.visitingDate)
-          : null,
-        followUpDate: body.followUpDate
-          ? new Date(body.followUpDate)
-          : null,
-      },
+      data: updateData,
     });
 
     return NextResponse.json(updated);

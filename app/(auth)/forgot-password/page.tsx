@@ -118,8 +118,8 @@ export default function ForgotPasswordPage() {
   return (
     <div>
       {/* Header */}
-      <h2 className="text-3xl font-bold text-gray-900 mb-2">Forgot Password?</h2>
-      <p className="text-gray-600 mb-6">
+      <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Forgot Password?</h2>
+      <p className="text-gray-500 text-sm mb-6">
         No problem. We'll help you reset it.
       </p>
 

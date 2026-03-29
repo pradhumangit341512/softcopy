@@ -11,7 +11,7 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 to-blue-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-blue-100 flex flex-col lg:flex-row items-center justify-center py-8 px-4 sm:px-6 lg:px-8 gap-8 lg:gap-12">
       {/* Left Side - Branding (Hidden on Mobile) */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-center">
         <div className="max-w-md">
@@ -65,7 +65,7 @@ export default function AuthLayout({
 
       {/* Right Side - Auth Form */}
       <div className="w-full lg:w-1/2 max-w-md">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
+        <div className="bg-white rounded-2xl shadow-lg p-5 sm:p-8">
           {/* Mobile Logo - Show only on mobile */}
           <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
@@ -79,8 +79,8 @@ export default function AuthLayout({
         </div>
 
         {/* Bottom Links */}
-        <div className="text-center mt-6 text-gray-600">
-          <p>
+        <div className="text-center mt-4 sm:mt-6 text-gray-600">
+          <p className="text-xs sm:text-sm">
             Protected by industry-standard security and encryption
           </p>
         </div>

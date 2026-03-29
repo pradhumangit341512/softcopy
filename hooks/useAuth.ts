@@ -1,114 +1,92 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 
-/**
- * useAuth Hook
- * Handles authentication state and navigation protection
- * 
- * @returns {Object} user, isAuthenticated, isLoading, logout, login, signup
- */
+const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/'];
+
+// ─────────────────────────────────────────
+// useAuth — main hook
+// ─────────────────────────────────────────
 export function useAuth() {
-  const router = useRouter();
+  const router   = useRouter();
   const pathname = usePathname();
+
   const {
     user,
     isAuthenticated,
     isLoading,
+    hasFetched,
     fetchUser,
-    logout: authLogout,
-    login: authLogin,
-    signup: authSignup,
+    setUser,
+    logout:  authLogout,
   } = useAuthStore();
 
-  // Fetch user on component mount
+  // ── Fetch user only once on first mount ──
   useEffect(() => {
-    if (!isAuthenticated && !isLoading) {
+    if (!hasFetched && !isLoading) {
       fetchUser();
     }
-  }, [isAuthenticated, isLoading, fetchUser]);
+  }, []); // ✅ empty deps — run once only, no infinite loop
 
-  // Handle protected routes
+  // ── Redirect unauthenticated users away from protected pages ──
   useEffect(() => {
-    const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/'];
-    const isPublicPath = publicPaths.some((p) => pathname?.startsWith(p));
+    if (isLoading) return;                          // still loading — wait
+    if (!hasFetched) return;                        // not tried yet — wait
 
-    if (!isAuthenticated && !isLoading && !isPublicPath && pathname) {
-      router.push('/login');
+    const isPublic = PUBLIC_PATHS.some(p =>
+      pathname === p || pathname?.startsWith(p + '/')
+    );
+
+    if (!isAuthenticated && !isPublic) {
+      router.replace('/login');
     }
-  }, [isAuthenticated, isLoading, pathname, router]);
+  }, [isAuthenticated, isLoading, hasFetched, pathname, router]);
 
+  // ── Logout helper ──
   const logout = async () => {
     await authLogout();
-    router.push('/login');
-  };
-
-  const login = async (email: string, password: string) => {
-    await authLogin(email, password);
-    router.push('/dashboard');
-  };
-
-  const signup = async (data: {
-    name: string;
-    email: string;
-    phone: string;
-    password: string;
-    companyName: string;
-  }) => {
-    await authSignup(data);
-    router.push('/dashboard');
+    router.replace('/login');
   };
 
   return {
     user,
     isAuthenticated,
     isLoading,
+    hasFetched,
+    setUser,
     logout,
-    login,
-    signup,
   };
 }
 
-/**
- * useRequireAuth Hook
- * Forces authentication check and redirects if not logged in
- * Use in protected pages
- */
+// ─────────────────────────────────────────
+// useRequireAuth — for protected pages
+// ─────────────────────────────────────────
 export function useRequireAuth() {
-  const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+  const { user, isAuthenticated, isLoading, hasFetched } = useAuthStore();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
+    if (!isLoading && hasFetched && !isAuthenticated) {
+      router.replace('/login');
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, hasFetched, router]);
 
   return { user, isLoading };
 }
 
-/**
- * useCanAccess Hook
- * Check if user has required role
- * 
- * @param requiredRole - 'superadmin' | 'admin' | 'user'
- * @returns {boolean} canAccess
- */
+// ─────────────────────────────────────────
+// useCanAccess — role-based access check
+// ─────────────────────────────────────────
 export function useCanAccess(requiredRole: 'superadmin' | 'admin' | 'user') {
-  const { user } = useAuth();
+  const { user } = useAuthStore();
 
   if (!user) return false;
 
-  const roleHierarchy = {
-    superadmin: 3,
-    admin: 2,
-    user: 1,
-  };
-
-  const userLevel = roleHierarchy[user.role as keyof typeof roleHierarchy] || 0;
-  const requiredLevel = roleHierarchy[requiredRole];
+  const hierarchy = { superadmin: 3, admin: 2, user: 1 };
+  const userLevel     = hierarchy[user.role as keyof typeof hierarchy] || 0;
+  const requiredLevel = hierarchy[requiredRole];
 
   return userLevel >= requiredLevel;
 }

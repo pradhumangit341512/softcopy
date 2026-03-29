@@ -1,6 +1,3 @@
-// ======================
-// GENERATOR + DATABASE
-// ======================
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,9 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ======================
-// COMPANY
-// ======================
 model Company {
   id                 String          @id @default(auto()) @map("_id") @db.ObjectId
   companyName        String
@@ -22,21 +16,17 @@ model Company {
   status             String          @default("active")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
-
   users              User[]
   clients            Client[]
   commissions        Commission[]
   otps               OTP[]
   invoices           Invoice[]
   monthlyBudgets     MonthlyBudget[]
-
+  properties         Property[]
   @@index([status])
   @@index([subscriptionExpiry])
 }
 
-// ======================
-// USER
-// ======================
 model User {
   id           String       @id @default(auto()) @map("_id") @db.ObjectId
   name         String
@@ -49,53 +39,42 @@ model User {
   status       String       @default("active")
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
-
   company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clients      Client[]
   commissions  Commission[]
-
+  properties   Property[]   @relation("PropertyCreator")
   @@index([companyId])
   @@index([role])
 }
 
-// ======================
-// CLIENT
-// ======================
 model Client {
   id                String       @id @default(auto()) @map("_id") @db.ObjectId
   clientName        String
   phone             String
   email             String?
   companyName       String?
-
   requirementType   String
   inquiryType       String
   budget            Float?
   preferredLocation String?
   address           String?
-
   visitingDate      DateTime?
   visitingTime      String?
   propertyVisited   Boolean      @default(false)
   visitStatus       String       @default("NotVisited")
-
   followUpDate      DateTime?
   nextFollowUp      DateTime?
   lastContactDate   DateTime?
-
   status            String       @default("New")
   source            String?
   notes             String?
-
   companyId         String       @db.ObjectId
   createdBy         String       @db.ObjectId
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
-
   company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   creator           User         @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   commissions       Commission[]
-
   @@index([companyId])
   @@index([createdBy])
   @@index([status])
@@ -104,42 +83,29 @@ model Client {
   @@index([phone])
 }
 
-// ======================
-// COMMISSION
-// ======================
 model Commission {
   id                   String    @id @default(auto()) @map("_id") @db.ObjectId
   clientId             String    @db.ObjectId
   companyId            String    @db.ObjectId
-
-  // Sales person: free-text name (optional), userId kept optional for backward compat
   salesPersonName      String?
   userId               String?   @db.ObjectId
-
   dealAmount           Float
   commissionPercentage Float
   commissionAmount     Float
-
   paidStatus           String    @default("Pending")
   paymentDate          DateTime?
   paymentReference     String?
-
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
-
   client               Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user                 User?     @relation(fields: [userId], references: [id], onDelete: Restrict)
   company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
   @@index([companyId])
   @@index([userId])
   @@index([clientId])
   @@index([paidStatus])
 }
 
-// ======================
-// OTP
-// ======================
 model OTP {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   phone      String
@@ -149,16 +115,24 @@ model OTP {
   ipAddress  String?
   expiresAt  DateTime
   createdAt  DateTime @default(now())
-
   company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
   @@index([phone, companyId])
   @@index([expiresAt])
 }
 
-// ======================
-// INVOICE
-// ======================
+model EmailOTP {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String
+  otpHash   String
+  purpose   String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([email])
+  @@index([expiresAt])
+  @@map("email_otps")
+}
+
 model Invoice {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   companyId         String   @db.ObjectId
@@ -172,16 +146,43 @@ model Invoice {
   validUpto         DateTime
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-
   company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
   @@index([companyId])
   @@index([paymentStatus])
 }
 
-// ======================
-// MONTHLY BUDGET
-// ======================
+model Property {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  propertyName   String
+  address        String
+  propertyType   String
+  bhkType        String?
+  vacateDate     DateTime?
+  askingRent     Float?
+  sellingPrice   Float?
+  area           String?
+  description    String?
+  status         String   @default("Available")
+
+  // Owner details
+  ownerName      String
+  ownerPhone     String
+  ownerEmail     String?
+
+  companyId      String   @db.ObjectId
+  createdBy      String   @db.ObjectId
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator        User     @relation("PropertyCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([createdBy])
+  @@index([ownerPhone])
+  @@index([status])
+}
+
 model MonthlyBudget {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
   companyId     String   @db.ObjectId
@@ -189,9 +190,7 @@ model MonthlyBudget {
   targetAmount  Float    @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
   company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
   @@unique([companyId, month])
   @@index([companyId])
   @@map("monthly_budgets")

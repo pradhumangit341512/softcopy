@@ -96,7 +96,7 @@ function ResetPasswordContent() {
         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle className="text-green-600" size={32} />
         </div>
-        <h2 className="text-3xl font-bold mb-2">Password Reset Successful</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold mb-2">Password Reset Successful</h2>
         <p className="text-gray-600 mb-8">
           Redirecting to login page...
         </p>
@@ -113,8 +113,8 @@ function ResetPasswordContent() {
 
   return (
     <div>
-      <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
-      <p className="text-gray-600 mb-6">
+      <h2 className="text-2xl sm:text-3xl font-bold mb-2">Reset Password</h2>
+      <p className="text-gray-500 text-sm mb-6">
         Enter your new secure password.
       </p>
 

@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const firstName = user?.name?.split(' ')[0] || 'there';
 
   return (
-    <div className="py-6 sm:py-8 space-y-6 px-2 sm:px-0">
+    <div className="py-4 sm:py-6 lg:py-8 space-y-5 sm:space-y-6">
 
       {/* ── HEADER ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

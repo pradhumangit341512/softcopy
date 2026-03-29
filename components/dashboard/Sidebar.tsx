@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, TrendingUp,
-  BarChart3, Settings, X,
+  BarChart3, Settings, X, Building2,
 } from 'lucide-react';
 import clsx from 'clsx';
 import Button from '../common/ Button';
@@ -18,6 +18,7 @@ interface SidebarProps {
 const navItems = [
   { href: '/dashboard',             icon: LayoutDashboard, label: 'Dashboard'   },
   { href: '/dashboard/clients',     icon: Users,           label: 'Clients'     },
+  { href: '/dashboard/properties',  icon: Building2,       label: 'Properties'  },
   { href: '/dashboard/commissions', icon: TrendingUp,      label: 'Commissions' },
   { href: '/dashboard/analytics',   icon: BarChart3,       label: 'Analytics'   },
   { href: '/dashboard/settings',    icon: Settings,        label: 'Settings'    },
@@ -75,7 +76,9 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           {navItems.map(({ href, icon: Icon, label }) => {
             const isActive =
-              pathname === href || pathname.startsWith(href + '/');
+              href === '/dashboard'
+                ? pathname === '/dashboard'
+                : pathname === href || pathname.startsWith(href + '/');
 
             return (
               <Link key={href} href={href} onClick={onClose}>

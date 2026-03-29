@@ -2,9 +2,11 @@ import { jwtVerify, SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key-min-32-characters'
-);
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set.');
+}
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? '');
 
 const COOKIE_NAME = 'auth_token'; // ✅ single source of truth — matches login & signup
 
@@ -202,6 +204,16 @@ export function getTokenExpiry(): Date {
   const expiry = new Date();
   expiry.setSeconds(expiry.getSeconds() + JWT_EXPIRY);
   return expiry;
+}
+
+// ==================== BYPASS / OBJECTID HELPERS ====================
+
+export const IS_BYPASS_AUTH =
+  process.env.NODE_ENV === "development" && process.env.BYPASS_AUTH === "true";
+
+/** Returns true if the string is a valid 24-char hex MongoDB ObjectId */
+export function isValidObjectId(id: string | null | undefined): boolean {
+  return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
 }
 
 // ==================== ERROR MESSAGES ====================

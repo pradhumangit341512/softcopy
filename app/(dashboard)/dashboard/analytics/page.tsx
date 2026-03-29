@@ -62,20 +62,20 @@ const StatCard = ({
   trend?: 'up' | 'down';
 }) => (
   <div
-    className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-4
+    className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 flex flex-col gap-3 sm:gap-4
       hover:shadow-md transition-shadow duration-200"
   >
     <div className="flex items-center justify-between">
-      <span className="text-sm font-medium text-gray-500">{title}</span>
+      <span className="text-xs sm:text-sm font-medium text-gray-500">{title}</span>
       <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center"
+        className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0"
         style={{ backgroundColor: `${color}18` }}
       >
-        <Icon size={20} style={{ color }} />
+        <Icon size={18} style={{ color }} />
       </div>
     </div>
     <div className="flex items-end justify-between">
-      <span className="text-3xl font-bold text-gray-900 tracking-tight">{value}</span>
+      <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 tracking-tight">{value}</span>
       {sub && (
         <div
           className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full
@@ -212,10 +212,10 @@ export default function AnalyticsPage() {
   ];
 
   return (
-    <div className="py-6 sm:py-8 space-y-6 px-2 sm:px-0">
+    <div className="py-4 sm:py-6 lg:py-8 space-y-5 sm:space-y-6">
 
       {/* ── Header ── */}
-      <div className="px-1">
+      <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
           Analytics
         </h1>
@@ -236,7 +236,7 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
           {/* Line Chart */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
             <div className="mb-4">
               <h2 className="text-base font-semibold text-gray-800">Monthly Leads</h2>
               <p className="text-xs text-gray-400 mt-0.5">Leads vs Deals over time</p>
@@ -262,7 +262,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Bar Chart */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
             <div className="mb-4">
               <h2 className="text-base font-semibold text-gray-800">Monthly Comparison</h2>
               <p className="text-xs text-gray-400 mt-0.5">Side-by-side leads and deals</p>
@@ -290,7 +290,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
         {/* Pie Chart */}
-        <div className="lg:col-span-3 bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="lg:col-span-3 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
           <div className="mb-4">
             <h2 className="text-base font-semibold text-gray-800">Leads by Status</h2>
             <p className="text-xs text-gray-400 mt-0.5">Distribution across pipeline stages</p>
@@ -326,7 +326,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Status Breakdown List */}
-        <div className="lg:col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="lg:col-span-2 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
           <div className="mb-4">
             <h2 className="text-base font-semibold text-gray-800">Status Breakdown</h2>
             <p className="text-xs text-gray-400 mt-0.5">Count per stage</p>

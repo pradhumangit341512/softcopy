@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { startOfMonth, endOfMonth } from "date-fns";
 import jwt from "jsonwebtoken";
+import { isValidObjectId } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 type AuthPayload = { userId: string; companyId: string; role: string; email: string };
 
-// ✅ FIXED: reads "auth_token" cookie — matches login & signup routes
-async function verifyAuth(req: NextRequest): Promise<AuthPayload | null> {
+async function verifyAuthFromCookie(req: NextRequest): Promise<AuthPayload | null> {
   try {
-    // ✅ Was reading "token" — now reads "auth_token" to match login/signup
     const token = req.cookies.get("auth_token")?.value;
     if (!token) return null;
     if (!process.env.JWT_SECRET) return null;
@@ -20,14 +19,35 @@ async function verifyAuth(req: NextRequest): Promise<AuthPayload | null> {
   }
 }
 
+// Empty analytics response for dev bypass or missing company
+function emptyAnalytics() {
+  return NextResponse.json({
+    summary: {
+      totalClients: 0,
+      todayVisits: 0,
+      todayVisitsCount: 0,
+      closedDeals: 0,
+      totalCommission: 0,
+    },
+    todayVisits: [],
+    leadsByStatus: [],
+    monthlyData: [],
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
-    const payload = await verifyAuth(req);
+    const payload = await verifyAuthFromCookie(req);
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const companyId = payload.companyId;
-    const now       = new Date();
+
+    if (!isValidObjectId(companyId)) {
+      return emptyAnalytics();
+    }
+
+    const now = new Date();
     const monthStart = startOfMonth(now);
     const monthEnd   = endOfMonth(now);
 

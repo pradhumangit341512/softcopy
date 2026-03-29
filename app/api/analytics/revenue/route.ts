@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, isValidObjectId } from "@/lib/auth";
 import { startOfMonth, endOfMonth } from "date-fns";
 
 type AuthPayload = {
@@ -14,12 +14,16 @@ export async function GET(req: NextRequest) {
   try {
     // ================= AUTH =================
     const payload = (await verifyAuth(req)) as AuthPayload | null;
-    
+
     if (!payload) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
       );
+    }
+
+    if (!isValidObjectId(payload.companyId)) {
+      return NextResponse.json({ revenueData: [], summary: { totalRevenue: 0, avgDealSize: 0, totalDeals: 0 } });
     }
 
     const companyId = payload.companyId;
