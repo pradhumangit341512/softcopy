@@ -55,7 +55,7 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
         {/* ── Logo ── */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-gray-800">
           <div>
-            <h1 className="text-lg font-bold tracking-tight text-white">
+            <h1 className="text-lg font-bold font-display tracking-tight text-white">
               RealEstate CRM
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">v1.0</p>

@@ -30,7 +30,7 @@ export default function Pagination({
   }
 
   return (
-    <div className="flex items-center gap-2 justify-center">
+    <div className="flex items-center gap-1.5 sm:gap-2 justify-center flex-wrap">
       {/* Previous Button */}
       <Button
         variant="outline"
@@ -48,12 +48,13 @@ export default function Pagination({
             <>
               <button
                 onClick={() => onPageChange(1)}
-                className="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 transition"
+                className="w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm rounded-lg border border-gray-200
+                  hover:bg-gray-50 transition-colors flex items-center justify-center"
               >
                 1
               </button>
               {visiblePages[0] > 2 && (
-                <span className="px-2 py-1 text-gray-500">...</span>
+                <span className="w-6 h-8 sm:h-9 flex items-center justify-center text-gray-400 text-xs">...</span>
               )}
             </>
           )}
@@ -63,10 +64,10 @@ export default function Pagination({
               key={page}
               onClick={() => onPageChange(page)}
               className={clsx(
-                'px-3 py-1 rounded transition',
+                'w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm rounded-lg transition-colors flex items-center justify-center font-medium',
                 page === currentPage
-                  ? 'bg-blue-600 text-white font-semibold'
-                  : 'border border-gray-300 hover:bg-gray-50'
+                  ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                  : 'border border-gray-200 hover:bg-gray-50 text-gray-700'
               )}
               disabled={isLoading}
             >
@@ -77,11 +78,12 @@ export default function Pagination({
           {visiblePages[visiblePages.length - 1] < pages.length && (
             <>
               {visiblePages[visiblePages.length - 1] < pages.length - 1 && (
-                <span className="px-2 py-1 text-gray-500">...</span>
+                <span className="w-6 h-8 sm:h-9 flex items-center justify-center text-gray-400 text-xs">...</span>
               )}
               <button
                 onClick={() => onPageChange(pages.length)}
-                className="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 transition"
+                className="w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm rounded-lg border border-gray-200
+                  hover:bg-gray-50 transition-colors flex items-center justify-center"
               >
                 {pages.length}
               </button>

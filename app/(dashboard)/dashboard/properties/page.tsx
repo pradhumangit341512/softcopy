@@ -143,7 +143,7 @@ export default function PropertiesPage() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
             Properties
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">

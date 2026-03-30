@@ -101,7 +101,7 @@ export default function RootLayout({
         )}
       </head>
 
-      <body  suppressHydrationWarning={true}  className={`${inter.variable} ${poppins.variable} bg-white text-gray-900`}>
+      <body  suppressHydrationWarning={true}  className={`${inter.variable} ${poppins.variable} font-sans bg-white text-gray-900 antialiased`}>
         {/* Toast Provider Wrapper */}
         <ToastProvider>
           {/* Main Content */}

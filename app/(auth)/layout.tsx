@@ -11,7 +11,7 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 to-blue-100 flex flex-col lg:flex-row items-center justify-center py-8 px-4 sm:px-6 lg:px-8 gap-8 lg:gap-12">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-blue-100 flex flex-col lg:flex-row items-center justify-center py-6 sm:py-8 px-4 sm:px-6 lg:px-8 gap-6 sm:gap-8 lg:gap-12">
       {/* Left Side - Branding (Hidden on Mobile) */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-center">
         <div className="max-w-md">
@@ -24,11 +24,11 @@ export default function AuthLayout({
           </div>
 
           {/* Tagline */}
-          <h2 className="text-4xl font-bold text-gray-900 mb-6">
+          <h2 className="text-3xl lg:text-4xl font-bold font-display text-gray-900 mb-6">
             Manage Your Real Estate Business
           </h2>
 
-          <p className="text-xl text-gray-600 mb-8">
+          <p className="text-lg lg:text-xl text-gray-600 mb-8 leading-relaxed">
             Complete CRM solution for real estate builders and brokers. Track clients,
             visits, follow-ups, and commissions in one place.
           </p>

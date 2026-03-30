@@ -158,7 +158,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">
+      <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 mb-1">
         {step === 'credentials' ? 'Welcome Back' : 'Verify Your Email'}
       </h2>
       <p className="text-gray-500 mb-6 text-sm">

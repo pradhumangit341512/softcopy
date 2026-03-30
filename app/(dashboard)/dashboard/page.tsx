@@ -33,17 +33,17 @@ export default function DashboardPage() {
       {/* ── HEADER ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
             {greeting}, {firstName}! 👋
           </h1>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">
             Here's what's happening with your business today.
           </p>
         </div>
 
         {/* Today's date pill */}
-        <div className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-100
-          rounded-xl shadow-sm w-fit text-sm text-gray-500 font-medium self-start sm:self-auto">
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-white border border-gray-100
+          rounded-xl shadow-sm w-fit text-xs sm:text-sm text-gray-500 font-medium self-start sm:self-auto">
           📅 {new Date().toLocaleDateString('en-IN', {
             weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
           })}

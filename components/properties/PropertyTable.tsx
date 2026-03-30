@@ -26,23 +26,23 @@ const formatDate = (date?: Date | string | null): string => {
 export default function PropertyTable({ properties, onEdit, onDelete }: PropertyTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-      <table className="w-full text-sm min-w-[1000px]">
+      <table className="w-full text-sm min-w-[900px]">
 
         {/* HEADER */}
-        <thead className="bg-gray-100 text-gray-600 uppercase text-xs tracking-wider">
+        <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-semibold tracking-wider">
           <tr>
-            <th className="px-4 py-3 text-center w-20">Actions</th>
-            <th className="px-4 py-3 text-left">Property</th>
-            <th className="px-4 py-3 text-left">Type</th>
-            <th className="px-4 py-3 text-left">Address</th>
-            <th className="px-4 py-3 text-left">Owner</th>
-            <th className="px-4 py-3 text-left">Owner Contact</th>
-            <th className="px-4 py-3 text-left">Asking Rent</th>
-            <th className="px-4 py-3 text-left">Selling Price</th>
-            <th className="px-4 py-3 text-left">Area</th>
-            <th className="px-4 py-3 text-left">Vacate Date</th>
-            <th className="px-4 py-3 text-left">Status</th>
-            <th className="px-4 py-3 text-left">Added</th>
+            <th className="px-3 sm:px-4 py-3 text-center w-20">Actions</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Property</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Type</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Address</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Owner</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Owner Contact</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Asking Rent</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Selling Price</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Area</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Vacate Date</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Status</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Added</th>
           </tr>
         </thead>
 
@@ -61,7 +61,7 @@ export default function PropertyTable({ properties, onEdit, onDelete }: Property
                 className="hover:bg-gray-50 transition-colors duration-150"
               >
                 {/* ACTIONS */}
-                <td className="px-4 py-3 text-center">
+                <td className="px-3 sm:px-4 py-3 text-center">
                   <div className="flex items-center justify-center gap-1.5">
                     <Button
                       size="sm"
@@ -87,7 +87,7 @@ export default function PropertyTable({ properties, onEdit, onDelete }: Property
                 </td>
 
                 {/* PROPERTY NAME */}
-                <td className="px-4 py-3">
+                <td className="px-3 sm:px-4 py-3">
                   <p className="font-semibold text-gray-900 leading-tight">
                     {property.propertyName}
                   </p>
@@ -99,7 +99,7 @@ export default function PropertyTable({ properties, onEdit, onDelete }: Property
                 </td>
 
                 {/* TYPE */}
-                <td className="px-4 py-3">
+                <td className="px-3 sm:px-4 py-3">
                   <div className="flex flex-col gap-0.5">
                     <Badge label={property.propertyType} variant="primary" />
                     {property.bhkType && (
@@ -109,17 +109,17 @@ export default function PropertyTable({ properties, onEdit, onDelete }: Property
                 </td>
 
                 {/* ADDRESS */}
-                <td className="px-4 py-3 text-gray-700 max-w-[160px] truncate">
+                <td className="px-3 sm:px-4 py-3 text-gray-700 max-w-[160px] truncate">
                   {property.address}
                 </td>
 
                 {/* OWNER NAME */}
-                <td className="px-4 py-3">
+                <td className="px-3 sm:px-4 py-3">
                   <p className="font-medium text-gray-900">{property.ownerName}</p>
                 </td>
 
                 {/* OWNER CONTACT */}
-                <td className="px-4 py-3">
+                <td className="px-3 sm:px-4 py-3">
                   <p className="text-gray-900">{property.ownerPhone}</p>
                   {property.ownerEmail && (
                     <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[160px]">
@@ -129,22 +129,22 @@ export default function PropertyTable({ properties, onEdit, onDelete }: Property
                 </td>
 
                 {/* ASKING RENT */}
-                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                <td className="px-3 sm:px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
                   {property.askingRent ? formatCurrency(property.askingRent) : '—'}
                 </td>
 
                 {/* SELLING PRICE */}
-                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                <td className="px-3 sm:px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
                   {property.sellingPrice ? formatCurrency(property.sellingPrice) : '—'}
                 </td>
 
                 {/* AREA */}
-                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                <td className="px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap">
                   {property.area || '—'}
                 </td>
 
                 {/* VACATE DATE */}
-                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                <td className="px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap">
                   {property.vacateDate
                     ? new Date(property.vacateDate).toLocaleDateString('en-IN', {
                         day: '2-digit',
@@ -155,7 +155,7 @@ export default function PropertyTable({ properties, onEdit, onDelete }: Property
                 </td>
 
                 {/* STATUS */}
-                <td className="px-4 py-3">
+                <td className="px-3 sm:px-4 py-3">
                   <Badge
                     label={property.status}
                     variant={
@@ -171,7 +171,7 @@ export default function PropertyTable({ properties, onEdit, onDelete }: Property
                 </td>
 
                 {/* ADDED DATE */}
-                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                <td className="px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap">
                   {formatDate(property.createdAt)}
                 </td>
               </tr>
