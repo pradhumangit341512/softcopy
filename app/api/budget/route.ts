@@ -37,6 +37,11 @@ export async function POST(req: NextRequest) {
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    // Only admin/superadmin can set budgets
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      return NextResponse.json({ error: "Only admins can set budgets" }, { status: 403 });
+    }
+
     if (!isValidObjectId(payload.companyId)) {
       return NextResponse.json({ error: "Invalid session. Please log out and log in again." }, { status: 400 });
     }

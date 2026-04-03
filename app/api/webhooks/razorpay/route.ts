@@ -7,13 +7,21 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get('x-razorpay-signature') || '';
     const body = await req.text();
 
-    // Verify Razorpay signature
+    // Verify Razorpay secret is configured
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      console.error('RAZORPAY_KEY_SECRET not configured');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
+    // Verify Razorpay signature using constant-time comparison
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
       .update(body)
       .digest('hex');
 
-    if (signature !== expectedSignature) {
+    const sigBuffer = Buffer.from(signature, 'hex');
+    const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+    if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 

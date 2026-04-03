@@ -8,7 +8,8 @@ import {
 import StatsCard from './StatsCard';
 import VisitReminder from './VisitReminder';
 import { TodayVisit } from '@/lib/types';
-import { Users, CheckCircle2, TrendingUp, CalendarCheck, Phone, MapPin, Clock } from 'lucide-react';
+import Link from 'next/link';
+import { Users, CheckCircle2, TrendingUp, CalendarCheck, Phone, MapPin, Clock, UserCheck, Bell } from 'lucide-react';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -90,10 +91,45 @@ export default function Dashboard() {
         />
         <StatsCard
           title="Commission"
-          value={`₹${(data.summary.totalCommission || 0).toLocaleString('en-IN')}`}
+          value={`₹${(data.summary.allTimeCommission || data.summary.totalCommission || 0).toLocaleString('en-IN')}`}
           icon="💰"
         />
       </div>
+
+      {/* ── MY WORK (Assigned Leads) ── */}
+      {(data.summary.myAssignedLeads > 0 || data.summary.myPendingFollowUps > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <Link href="/dashboard/my-work">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl border border-blue-200 p-4 sm:p-5
+              flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer">
+              <div className="w-11 h-11 rounded-xl bg-blue-500 flex items-center justify-center shrink-0">
+                <UserCheck size={20} className="text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-medium text-blue-600">My Assigned Leads</p>
+                <p className="text-2xl font-bold text-blue-900">{data.summary.myAssignedLeads}</p>
+                <p className="text-[11px] text-blue-500 mt-0.5">Tap to view your work</p>
+              </div>
+            </div>
+          </Link>
+
+          {data.summary.myPendingFollowUps > 0 && (
+            <Link href="/dashboard/my-work">
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-2xl border border-orange-200 p-4 sm:p-5
+                flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer">
+                <div className="w-11 h-11 rounded-xl bg-orange-500 flex items-center justify-center shrink-0">
+                  <Bell size={20} className="text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-orange-600">Pending Follow-ups</p>
+                  <p className="text-2xl font-bold text-orange-900">{data.summary.myPendingFollowUps}</p>
+                  <p className="text-[11px] text-orange-500 mt-0.5">Tap to view follow-ups</p>
+                </div>
+              </div>
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* ── VISIT REMINDER ── */}
       {data.summary.todayVisitsCount > 0 && (

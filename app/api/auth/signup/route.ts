@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
         const token = jwt.sign(
           { userId: fullUser.id, companyId: fullUser.companyId, role: fullUser.role, email: fullUser.email },
           process.env.JWT_SECRET,
-          { expiresIn: '7d' }
+          { expiresIn: '24h' }
         );
 
         const { password: _, ...safeUser } = fullUser;
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
           secure:   process.env.NODE_ENV === 'production',
           sameSite: 'lax',
           path:     '/',
-          maxAge:   60 * 60 * 24 * 7,
+          maxAge:   60 * 60 * 24, // 24 hours
         });
 
         return response;

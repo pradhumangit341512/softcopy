@@ -6,11 +6,11 @@ if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is not set.');
 }
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? '');
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'MISSING_JWT_SECRET_WILL_FAIL_VERIFICATION');
 
 const COOKIE_NAME = 'auth_token'; // ✅ single source of truth — matches login & signup
 
-const JWT_EXPIRY = 7 * 24 * 60 * 60; // 7 days in seconds
+const JWT_EXPIRY = 24 * 60 * 60; // 24 hours in seconds
 
 // ==================== TOKEN GENERATION ====================
 
@@ -24,7 +24,7 @@ export async function generateToken(
     const token = await new SignJWT({ userId, companyId, role, email })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
-      .setExpirationTime('7d')
+      .setExpirationTime('24h')
       .sign(JWT_SECRET);
     return token;
   } catch (error) {

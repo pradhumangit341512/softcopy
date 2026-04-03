@@ -72,13 +72,18 @@ export default function LoginPage() {
       if (!res.ok) {
         setLocalError(data.error || 'Login failed');
         // Still transition to OTP step if server says OTP is required (even on rate-limit)
-        if (data.requireOTP && step !== 'otp') setStep('otp');
+        if (data.requireOTP && step !== 'otp') {
+          setStep('otp');
+          startCountdown();
+        }
         return;
       }
 
-      setStep('otp');
-      startCountdown();
-      addToast({ type: 'success', message: 'OTP sent to your email!' });
+      if (data.requireOTP) {
+        setStep('otp');
+        startCountdown();
+        addToast({ type: 'success', message: data.message || 'OTP sent to your email!' });
+      }
     } catch {
       setLocalError('Something went wrong. Please try again.');
     } finally {

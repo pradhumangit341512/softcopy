@@ -16,7 +16,14 @@ const createUserSchema = z.object({
   phone: z.string().regex(/^\+?[1-9]\d{1,14}$/),
   password: z.string().min(6),
   role: z.enum(["admin", "user"]),
+  designation: z.string().optional(),
 });
+
+function generateEmployeeId(companyPrefix: string, count: number): string {
+  const num = String(count + 1).padStart(3, "0");
+  const prefix = companyPrefix.substring(0, 3).toUpperCase();
+  return `${prefix}-${num}`;
+}
 
 // ================= GET USERS =================
 export async function GET(req: NextRequest) {
@@ -50,9 +57,13 @@ export async function GET(req: NextRequest) {
         email: true,
         phone: true,
         role: true,
+        employeeId: true,
+        designation: true,
+        profilePhoto: true,
         status: true,
         createdAt: true,
       },
+      orderBy: { createdAt: "asc" },
     });
 
     return NextResponse.json(users);
@@ -84,7 +95,7 @@ export async function POST(req: NextRequest) {
       where: { id: payload.userId },
     });
 
-    if (!requester || requester.role !== "admin") {
+    if (!requester || !["admin", "superadmin"].includes(requester.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -107,10 +118,23 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await hashPassword(validated.password);
 
+    // Auto-generate employee ID
+    const company = await db.company.findUnique({
+      where: { id: payload.companyId },
+      select: { companyName: true },
+    });
+    const userCount = await db.user.count({ where: { companyId: payload.companyId } });
+    const employeeId = generateEmployeeId(company?.companyName || "EMP", userCount);
+
     const newUser = await db.user.create({
       data: {
-        ...validated,
+        name: validated.name,
+        email: validated.email,
+        phone: validated.phone,
         password: hashedPassword,
+        role: validated.role,
+        designation: validated.designation || null,
+        employeeId,
         companyId: payload.companyId,
       },
       select: {
@@ -119,6 +143,9 @@ export async function POST(req: NextRequest) {
         email: true,
         phone: true,
         role: true,
+        employeeId: true,
+        designation: true,
+        status: true,
       },
     });
 

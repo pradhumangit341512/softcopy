@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         const token = jwt.sign(
           { userId: user.id, companyId: company.id, role: 'admin', email },
           process.env.JWT_SECRET,
-          { expiresIn: '7d' }
+          { expiresIn: '24h' }
         );
 
         const fullUser = await db.user.findUnique({
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
           path: '/',
-          maxAge: 60 * 60 * 24 * 7,
+          maxAge: 60 * 60 * 24, // 24 hours
         });
 
         return response;
@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
     // STEP 2: OTP provided → verify it
     // ════════════════════════════════════
     if (otp) {
+      // Get the LATEST OTP only — ignore any older ones
       const record = await db.emailOTP.findFirst({
         where: { email, purpose: 'login' },
         orderBy: { createdAt: 'desc' },
@@ -140,11 +141,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'No OTP found. Please request a new one.' }, { status: 400 });
       }
       if (record.expiresAt < new Date()) {
-        await db.emailOTP.delete({ where: { id: record.id } });
+        // Expired — clean up ALL OTPs for this email
+        await db.emailOTP.deleteMany({ where: { email, purpose: 'login' } });
         return NextResponse.json({ error: 'OTP expired. Please try logging in again.' }, { status: 400 });
       }
       if (record.attempts >= MAX_ATTEMPTS) {
-        await db.emailOTP.delete({ where: { id: record.id } });
+        await db.emailOTP.deleteMany({ where: { email, purpose: 'login' } });
         return NextResponse.json({ error: 'Too many failed attempts. Please try again.' }, { status: 429 });
       }
 
@@ -161,8 +163,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // OTP correct — delete and issue JWT
-      await db.emailOTP.delete({ where: { id: record.id } });
+      // OTP correct — delete ALL OTPs for this email to prevent reuse
+      await db.emailOTP.deleteMany({ where: { email, purpose: 'login' } });
 
       if (!process.env.JWT_SECRET) {
         return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
@@ -171,7 +173,7 @@ export async function POST(req: NextRequest) {
       const token = jwt.sign(
         { userId: user.id, companyId: user.companyId, role: user.role, email: user.email },
         process.env.JWT_SECRET,
-        { expiresIn: '7d' }
+        { expiresIn: '24h' }
       );
 
       const { password: _, ...safeUser } = user;
@@ -185,7 +187,7 @@ export async function POST(req: NextRequest) {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 60 * 60 * 24 * 7,
+        maxAge: 60 * 60 * 24, // 24 hours
       });
 
       return response;
@@ -195,13 +197,14 @@ export async function POST(req: NextRequest) {
     // STEP 1: Password correct → send OTP
     // ════════════════════════════════════
 
-    // Enforce resend cooldown
+    // Enforce resend cooldown — but ALWAYS ensure an OTP exists
     const lastOTP = await db.emailOTP.findFirst({
       where: { email, purpose: 'login' },
       orderBy: { createdAt: 'desc' },
     });
 
     if (lastOTP && Date.now() - new Date(lastOTP.createdAt).getTime() < RESEND_COOLDOWN) {
+      // OTP was recently sent — tell user to check email
       return NextResponse.json(
         { requireOTP: true, message: 'OTP already sent. Please check your email.' },
         { status: 200 }
@@ -224,7 +227,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    await sendOTPEmail(email, newOTP, 'login');
+    try {
+      await sendOTPEmail(email, newOTP, 'login');
+    } catch (emailError) {
+      console.error('Failed to send OTP email:', emailError);
+      // OTP is saved in DB — user can still verify if email arrives later
+      // Don't block login flow, but warn
+      return NextResponse.json(
+        { requireOTP: true, message: 'OTP generated but email delivery may be delayed. Please check your inbox or try resending.' },
+        { status: 200 }
+      );
+    }
 
     return NextResponse.json(
       { requireOTP: true, message: 'OTP sent to your email address' },

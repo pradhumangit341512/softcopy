@@ -13,10 +13,10 @@ type AuthPayload = {
 
 export async function PUT(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> } // 🔥 params is Promise
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await context.params; // 🔥 MUST await
+    const { id } = await context.params;
 
     const token = await getTokenCookie();
     if (!token) {
@@ -28,20 +28,56 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Fetch target user to verify company ownership
+    const targetUser = await db.user.findUnique({ where: { id } });
+    if (!targetUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // SECURITY: Company isolation — cannot modify users from other companies
+    if (targetUser.companyId !== payload.companyId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const isSelfUpdate = id === payload.userId;
+    const isAdmin = ["admin", "superadmin"].includes(payload.role);
+
+    // Regular users can only update their OWN profile (name, email, phone only)
+    if (!isAdmin && !isSelfUpdate) {
+      return NextResponse.json({ error: "Forbidden — you can only edit your own profile" }, { status: 403 });
+    }
+
     const body = await req.json();
+    const updateData: Record<string, any> = {};
+
+    // Fields that anyone can update on their own profile
+    if (body.name !== undefined)        updateData.name = body.name;
+    if (body.email !== undefined)       updateData.email = body.email;
+    if (body.phone !== undefined)       updateData.phone = body.phone;
+
+    // Fields that ONLY admins can update (and not on themselves to prevent escalation)
+    if (isAdmin) {
+      if (body.designation !== undefined) updateData.designation = body.designation || null;
+
+      // Prevent self-role-escalation and self-deactivation
+      if (!isSelfUpdate) {
+        if (body.status !== undefined) updateData.status = body.status;
+        if (body.role !== undefined)   updateData.role = body.role;
+      }
+    }
 
     const updatedUser = await db.user.update({
       where: { id },
-      data: {
-        name: body.name,
-        email: body.email,
-        phone: body.phone,
-      },
+      data: updateData,
       select: {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
+        employeeId: true,
+        designation: true,
+        status: true,
       },
     });
 
@@ -71,12 +107,24 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only admin can delete
-    const requester = await db.user.findUnique({
-      where: { id: payload.userId },
-    });
+    // Only admin/superadmin can delete users
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-    if (!requester || requester.role !== "admin") {
+    // Cannot delete yourself
+    if (id === payload.userId) {
+      return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
+    }
+
+    // Fetch target user — verify same company
+    const targetUser = await db.user.findUnique({ where: { id } });
+    if (!targetUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // SECURITY: Company isolation
+    if (targetUser.companyId !== payload.companyId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

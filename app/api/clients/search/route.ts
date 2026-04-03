@@ -22,27 +22,23 @@ export async function GET(req: NextRequest) {
     const limit = 20;
     const skip = (page - 1) * limit;
 
-    // ✅ Proper Prisma typing
+    // Build search filter with role-based isolation
+    const searchCondition = {
+      OR: [
+        { clientName: { contains: query, mode: Prisma.QueryMode.insensitive } },
+        { phone: { contains: query } },
+        { email: { contains: query, mode: Prisma.QueryMode.insensitive } },
+      ],
+    };
+
     const where: Prisma.ClientWhereInput = {
       companyId: payload.companyId,
-      OR: [
-        {
-          clientName: {
-            contains: query,
-            mode: Prisma.QueryMode.insensitive,
-          },
-        },
-        {
-          phone: {
-            contains: query,
-          },
-        },
-        {
-          email: {
-            contains: query,
-            mode: Prisma.QueryMode.insensitive,
-          },
-        },
+      AND: [
+        searchCondition,
+        // Role-based isolation: non-admin users only see their own clients
+        ...(!['admin', 'superadmin'].includes(payload.role)
+          ? [{ OR: [{ createdBy: payload.userId }, { assignedTo: payload.userId }] }]
+          : []),
       ],
     };
 

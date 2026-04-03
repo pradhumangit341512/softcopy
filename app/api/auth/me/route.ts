@@ -32,6 +32,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // If user was deactivated, reject the session
+    if (user.status !== "active") {
+      return NextResponse.json({ error: "Account is inactive" }, { status: 403 });
+    }
+
     const { password, ...safeUser } = user;
     return NextResponse.json({ user: safeUser }, { status: 200 });
   } catch (error) {

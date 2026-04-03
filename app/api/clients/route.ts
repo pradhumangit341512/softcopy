@@ -14,13 +14,13 @@ export async function GET(req: NextRequest) {
   try {
     const token = await getTokenCookie();
     if (!token) {
-      return NextResponse.redirect(new URL("/login", req.url));
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const payload = (await verifyToken(token)) as AuthPayload | null;
 
     if (!payload) {
-      return NextResponse.redirect(new URL("/login", req.url));
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     if (!isValidObjectId(payload.companyId)) {
@@ -36,20 +36,48 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search");
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
+    const assignedTo = searchParams.get("assignedTo");
+    const view = searchParams.get("view"); // "my" for assigned-to-me leads
     const page = Number(searchParams.get("page") || 1);
     const take = 10;
     const skip = (page - 1) * take;
 
     const where: any = { companyId: payload.companyId };
+    const andConditions: any[] = [];
+
+    // Role-based data isolation:
+    // - admin/superadmin see ALL company leads
+    // - everyone else sees only leads they created OR assigned to them
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      andConditions.push({
+        OR: [
+          { createdBy: payload.userId },
+          { assignedTo: payload.userId },
+        ],
+      });
+    }
 
     if (status) where.status = status;
 
+    // Additional assignment filter (for explicit filtering)
+    if (assignedTo) {
+      where.assignedTo = assignedTo;
+    } else if (view === "my") {
+      where.assignedTo = payload.userId;
+    }
+
     if (search) {
-      where.OR = [
-        { clientName: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search } },
-        { email: { contains: search, mode: "insensitive" } },
-      ];
+      andConditions.push({
+        OR: [
+          { clientName: { contains: search, mode: "insensitive" } },
+          { phone: { contains: search } },
+          { email: { contains: search, mode: "insensitive" } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     if (dateFrom || dateTo) {
@@ -106,6 +134,41 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
+    // Duplicate detection: check if a client with the same phone already exists
+    if (body.phone) {
+      const existingByPhone = await db.client.findFirst({
+        where: { companyId: payload.companyId, phone: body.phone },
+        select: { id: true, clientName: true, phone: true },
+      });
+      if (existingByPhone) {
+        return NextResponse.json(
+          {
+            error: `A client with phone ${body.phone} already exists (${existingByPhone.clientName}). Please check for duplicates.`,
+            duplicate: true,
+            existingClient: existingByPhone,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    if (body.email) {
+      const existingByEmail = await db.client.findFirst({
+        where: { companyId: payload.companyId, email: body.email },
+        select: { id: true, clientName: true, email: true },
+      });
+      if (existingByEmail) {
+        return NextResponse.json(
+          {
+            error: `A client with email ${body.email} already exists (${existingByEmail.clientName}). Please check for duplicates.`,
+            duplicate: true,
+            existingClient: existingByEmail,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Whitelist allowed fields to prevent mass assignment
     const client = await db.client.create({
       data: {
@@ -124,8 +187,21 @@ export async function POST(req: NextRequest) {
         notes:             body.notes || null,
         companyId:         payload.companyId,
         createdBy:         payload.userId,
+        assignedTo:        body.assignedTo || null,
+        assignedToName:    body.assignedToName || null,
         visitingDate:      body.visitingDate ? new Date(body.visitingDate) : null,
         followUpDate:      body.followUpDate ? new Date(body.followUpDate) : null,
+      },
+    });
+
+    // Log activity: client created
+    await db.activityLog.create({
+      data: {
+        clientId: client.id,
+        companyId: payload.companyId,
+        userId: payload.userId,
+        action: "created",
+        description: `Client "${client.clientName}" was added`,
       },
     });
 

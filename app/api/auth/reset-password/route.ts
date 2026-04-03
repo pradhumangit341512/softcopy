@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
+import { hashOTP, verifyOTPHash } from '@/lib/otp';
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, newPassword, confirmPassword } = await req.json();
+    const { email, newPassword, confirmPassword, otp } = await req.json();
 
     // Validate required fields
     if (!email || !newPassword || !confirmPassword) {
       return NextResponse.json(
         { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // OTP is REQUIRED — no unauthenticated password reset
+    if (!otp) {
+      return NextResponse.json(
+        { error: 'OTP is required to reset password. Request one first.' },
         { status: 400 }
       );
     }
@@ -30,11 +39,52 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find user
-    const user = await db.user.findUnique({
-      where: { email },
+    // Verify OTP first — must prove ownership of the email
+    const otpRecord = await db.emailOTP.findFirst({
+      where: { email, purpose: 'reset' },
+      orderBy: { createdAt: 'desc' },
     });
 
+    if (!otpRecord) {
+      return NextResponse.json(
+        { error: 'No OTP found. Please request a password reset OTP first.' },
+        { status: 400 }
+      );
+    }
+
+    if (otpRecord.expiresAt < new Date()) {
+      await db.emailOTP.deleteMany({ where: { email, purpose: 'reset' } });
+      return NextResponse.json(
+        { error: 'OTP expired. Please request a new one.' },
+        { status: 400 }
+      );
+    }
+
+    if (otpRecord.attempts >= 5) {
+      await db.emailOTP.deleteMany({ where: { email, purpose: 'reset' } });
+      return NextResponse.json(
+        { error: 'Too many failed attempts. Please request a new OTP.' },
+        { status: 429 }
+      );
+    }
+
+    const hashedInput = hashOTP(String(otp));
+    if (!verifyOTPHash(hashedInput, otpRecord.otpHash)) {
+      await db.emailOTP.update({
+        where: { id: otpRecord.id },
+        data: { attempts: { increment: 1 } },
+      });
+      return NextResponse.json(
+        { error: 'Invalid OTP. Please try again.' },
+        { status: 400 }
+      );
+    }
+
+    // OTP verified — delete all reset OTPs for this email
+    await db.emailOTP.deleteMany({ where: { email, purpose: 'reset' } });
+
+    // Find user
+    const user = await db.user.findUnique({ where: { email } });
     if (!user) {
       return NextResponse.json(
         { error: 'User not found' },
@@ -42,10 +92,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash new password
+    // Hash and update password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    // Update password
     await db.user.update({
       where: { id: user.id },
       data: { password: hashedPassword },

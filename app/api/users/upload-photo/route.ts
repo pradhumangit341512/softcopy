@@ -16,13 +16,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json({ error: "Only JPEG, PNG, WebP, and GIF images are allowed" }, { status: 400 });
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: "File size must be under 5MB" }, { status: 400 });
+    }
+
     // convert file → buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // create filename
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = path.join(process.cwd(), "public/uploads", fileName);
+    // SECURITY: Sanitize filename to prevent path traversal
+    const safeBaseName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = `${Date.now()}-${safeBaseName}`;
+    const uploadsDir = path.join(process.cwd(), "public/uploads");
+    const filePath = path.resolve(uploadsDir, fileName);
+
+    // SECURITY: Verify resolved path is still within uploads directory
+    if (!filePath.startsWith(uploadsDir)) {
+      return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
+    }
+
+    // Ensure uploads directory exists
+    await fs.mkdir(uploadsDir, { recursive: true });
 
     // save file
     await fs.writeFile(filePath, buffer);

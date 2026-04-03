@@ -20,18 +20,29 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const page       = Number(searchParams.get("page") || "1");
-    const limit      = Number(searchParams.get("limit") || "10");
+    const page       = Math.max(1, Number(searchParams.get("page") || "1"));
+    const limit      = Math.max(1, Math.min(100, Number(searchParams.get("limit") || "10")));
     const paidStatus = searchParams.get("paidStatus") || undefined;
     const search     = searchParams.get("search") || "";
     const skip       = (page - 1) * limit;
 
     const where: any = { companyId: payload.companyId };
+
+    // Role-based isolation: team members see only their commissions
+    // Non-admin users see only their own commissions
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      where.userId = payload.userId;
+    }
+
     if (paidStatus) where.paidStatus = paidStatus;
     if (search) {
-      where.OR = [
-        { client: { clientName: { contains: search, mode: "insensitive" } } },
-        { salesPersonName: { contains: search, mode: "insensitive" } },
+      where.AND = [
+        {
+          OR: [
+            { client: { clientName: { contains: search, mode: "insensitive" } } },
+            { salesPersonName: { contains: search, mode: "insensitive" } },
+          ],
+        },
       ];
     }
 
@@ -48,7 +59,7 @@ export async function GET(req: NextRequest) {
       }),
       db.commission.count({ where }),
       db.commission.findMany({
-        where: { companyId: payload.companyId },
+        where: { companyId: payload.companyId, ...(!["admin", "superadmin"].includes(payload.role) ? { userId: payload.userId } : {}) },
         select: { commissionAmount: true, paidStatus: true },
       }),
     ]);
@@ -91,16 +102,22 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!clientId)    return NextResponse.json({ error: "Client is required" }, { status: 400 });
-    if (!dealAmount)  return NextResponse.json({ error: "Deal amount is required" }, { status: 400 });
+    if (dealAmount === undefined || dealAmount === null || dealAmount === '')
+      return NextResponse.json({ error: "Deal amount is required" }, { status: 400 });
 
     const deal       = Number(dealAmount);
     const pct        = Number(commissionPercentage || 0);
+
+    if (isNaN(deal) || deal < 0) return NextResponse.json({ error: "Invalid deal amount" }, { status: 400 });
+    if (isNaN(pct) || pct < 0 || pct > 100) return NextResponse.json({ error: "Commission percentage must be 0-100" }, { status: 400 });
+
     const commission = (deal * pct) / 100;
 
     const newCommission = await db.commission.create({
       data: {
         clientId,
         companyId:           payload.companyId,
+        userId:              payload.userId,
         salesPersonName:     salesPersonName?.trim() || null,
         dealAmount:          deal,
         commissionPercentage: pct,

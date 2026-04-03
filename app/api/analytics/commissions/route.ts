@@ -29,6 +29,13 @@ export async function GET(req: NextRequest) {
     }
 
     const companyId = payload.companyId;
+    const isTeamMember = !["admin", "superadmin"].includes(payload.role);
+
+    // Team members only see their own commission data
+    const commissionFilter: any = {
+      companyId,
+      ...(isTeamMember ? { userId: payload.userId } : {}),
+    };
 
     // ── DATE RANGE ──
     const now        = new Date();
@@ -39,20 +46,20 @@ export async function GET(req: NextRequest) {
     const byStatus = await db.commission.groupBy({
       by: ["paidStatus"],
       where: {
-        companyId,
+        ...commissionFilter,
         createdAt: { gte: monthStart, lte: monthEnd },
       },
       _sum: { commissionAmount: true },
       _count: true,
     });
 
-    // ── TOP PERFORMERS ──
-    // userId is optional (String?) — group only where userId is set
-    const topPerformersRaw = await db.commission.groupBy({
+    // ── TOP PERFORMERS (admin only) ──
+    // Team members don't need to see other people's rankings
+    const topPerformersRaw = isTeamMember ? [] : await db.commission.groupBy({
       by: ["userId"],
       where: {
         companyId,
-        userId: { not: null },   // skip commissions with no linked user
+        userId: { not: null },
       },
       _sum: { commissionAmount: true },
       _count: true,

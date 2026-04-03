@@ -14,12 +14,12 @@ export async function GET(req: NextRequest) {
   try {
     const token = await getTokenCookie();
     if (!token) {
-      return NextResponse.redirect(new URL("/login", req.url));
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const payload = (await verifyToken(token)) as AuthPayload | null;
     if (!payload) {
-      return NextResponse.redirect(new URL("/login", req.url));
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     if (!isValidObjectId(payload.companyId)) {
@@ -45,16 +45,23 @@ export async function GET(req: NextRequest) {
       where.companyId = payload.companyId;
     }
 
+    // Role-based isolation: team members see only their created properties
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      where.createdBy = payload.userId;
+    }
+
     if (status) where.status = status;
     if (propertyType) where.propertyType = propertyType;
 
     if (search) {
-      where.OR = [
-        { propertyName: { contains: search, mode: "insensitive" } },
-        { ownerName: { contains: search, mode: "insensitive" } },
-        { ownerPhone: { contains: search } },
-        { address: { contains: search, mode: "insensitive" } },
-      ];
+      where.AND = [{
+        OR: [
+          { propertyName: { contains: search, mode: "insensitive" } },
+          { ownerName: { contains: search, mode: "insensitive" } },
+          { ownerPhone: { contains: search } },
+          { address: { contains: search, mode: "insensitive" } },
+        ],
+      }];
     }
 
     if (dateFrom || dateTo) {
@@ -145,10 +152,10 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(property, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Create property error:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to create property" },
+      { error: "Failed to create property" },
       { status: 500 }
     );
   }

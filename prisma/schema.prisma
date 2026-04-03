@@ -34,6 +34,8 @@ model User {
   email        String       @unique
   password     String
   role         String       @default("user")
+  employeeId   String?
+  designation  String?
   companyId    String?      @db.ObjectId
   profilePhoto String?
   status       String       @default("active")
@@ -45,6 +47,7 @@ model User {
   properties   Property[]   @relation("PropertyCreator")
   @@index([companyId])
   @@index([role])
+  @@index([employeeId])
 }
 
 model Client {
@@ -70,6 +73,8 @@ model Client {
   notes             String?
   companyId         String       @db.ObjectId
   createdBy         String       @db.ObjectId
+  assignedTo        String?      @db.ObjectId
+  assignedToName    String?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -77,6 +82,7 @@ model Client {
   commissions       Commission[]
   @@index([companyId])
   @@index([createdBy])
+  @@index([assignedTo])
   @@index([status])
   @@index([visitingDate])
   @@index([followUpDate])
@@ -181,6 +187,23 @@ model Property {
   @@index([createdBy])
   @@index([ownerPhone])
   @@index([status])
+}
+
+model ActivityLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  clientId    String   @db.ObjectId
+  companyId   String   @db.ObjectId
+  userId      String?  @db.ObjectId
+  userName    String?
+  action      String   // status_change, note_added, visit_scheduled, follow_up_set, created, updated, assigned
+  description String
+  oldValue    String?
+  newValue    String?
+  createdAt   DateTime @default(now())
+
+  @@index([clientId])
+  @@index([companyId])
+  @@map("activity_logs")
 }
 
 model MonthlyBudget {

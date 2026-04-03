@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, TrendingUp,
   BarChart3, Settings, X, Building2,
+  Kanban, Trophy, Share2, ClipboardList,
 } from 'lucide-react';
 import clsx from 'clsx';
 import Button from '../common/ Button';
@@ -15,13 +16,21 @@ interface SidebarProps {
   user: any;
 }
 
-const navItems = [
-  { href: '/dashboard',             icon: LayoutDashboard, label: 'Dashboard'   },
-  { href: '/dashboard/clients',     icon: Users,           label: 'Clients'     },
-  { href: '/dashboard/properties',  icon: Building2,       label: 'Properties'  },
-  { href: '/dashboard/commissions', icon: TrendingUp,      label: 'Commissions' },
-  { href: '/dashboard/analytics',   icon: BarChart3,       label: 'Analytics'   },
-  { href: '/dashboard/settings',    icon: Settings,        label: 'Settings'    },
+// Items visible to everyone
+const commonNavItems = [
+  { href: '/dashboard',            icon: LayoutDashboard, label: 'Dashboard'   },
+  { href: '/dashboard/my-work',    icon: ClipboardList,   label: 'My Work'     },
+  { href: '/dashboard/clients',    icon: Users,           label: 'Clients'     },
+  { href: '/dashboard/pipeline',   icon: Kanban,          label: 'Deal Pipeline' },
+  { href: '/dashboard/properties', icon: Building2,       label: 'Properties'  },
+  { href: '/dashboard/commissions',icon: TrendingUp,      label: 'Commissions' },
+];
+
+// Items visible only to admin/superadmin
+const adminNavItems = [
+  { href: '/dashboard/team',             icon: Share2,    label: 'My Team'          },
+  { href: '/dashboard/team-performance', icon: Trophy,    label: 'Team Performance' },
+  { href: '/dashboard/analytics',        icon: BarChart3, label: 'Analytics'        },
 ];
 
 export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
@@ -74,7 +83,7 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
 
         {/* ── Navigation ── */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ href, icon: Icon, label }) => {
+          {[...commonNavItems, ...(['admin', 'superadmin'].includes(user?.role) ? adminNavItems : [])].map(({ href, icon: Icon, label }) => {
             const isActive =
               href === '/dashboard'
                 ? pathname === '/dashboard'
@@ -109,6 +118,33 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
             );
           })}
         </nav>
+
+        {/* ── Settings (pinned to bottom) ── */}
+        <div className="px-3 pb-2">
+          <Link href="/dashboard/settings" onClick={onClose}>
+            <span
+              className={clsx(
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150',
+                'text-sm font-medium cursor-pointer',
+                pathname === '/dashboard/settings'
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-900/40'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              )}
+            >
+              <Settings
+                size={18}
+                className={clsx(
+                  'shrink-0 transition-colors',
+                  pathname === '/dashboard/settings' ? 'text-white' : 'text-gray-500'
+                )}
+              />
+              Settings
+              {pathname === '/dashboard/settings' && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60" />
+              )}
+            </span>
+          </Link>
+        </div>
 
         {/* ── User info ── */}
         <div className="px-4 py-4 border-t border-gray-800">

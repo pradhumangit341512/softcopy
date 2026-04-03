@@ -55,22 +55,30 @@ export async function GET(req: NextRequest) {
     const todayEnd   = new Date(todayStart);
     todayEnd.setDate(todayEnd.getDate() + 1);
 
-    const [
-      totalClients,
-      todayVisitsCount,
-      todayVisitList,
-      closedDeals,
-      commissions,
-      leadsByStatus,
-    ] = await Promise.all([
-      db.client.count({ where: { companyId } }),
+    const userId = payload.userId;
+    const userRole = payload.role;
+    const hasValidUserId = userId && isValidObjectId(userId);
+    const isTeamMember = !["admin", "superadmin"].includes(userRole);
+
+    // For team members: only show their own data (created by them OR assigned to them)
+    // For admin/superadmin: show all company data
+    const clientFilter: any = { companyId };
+    if (isTeamMember) {
+      clientFilter.OR = [
+        { createdBy: userId },
+        { assignedTo: userId },
+      ];
+    }
+
+    const baseQueries = [
+      db.client.count({ where: clientFilter }),
 
       db.client.count({
-        where: { companyId, visitingDate: { gte: todayStart, lt: todayEnd } },
+        where: { ...clientFilter, visitingDate: { gte: todayStart, lt: todayEnd } },
       }),
 
       db.client.findMany({
-        where: { companyId, visitingDate: { gte: todayStart, lt: todayEnd } },
+        where: { ...clientFilter, visitingDate: { gte: todayStart, lt: todayEnd } },
         select: {
           id: true, clientName: true, phone: true,
           visitingDate: true, visitingTime: true, preferredLocation: true,
@@ -79,20 +87,57 @@ export async function GET(req: NextRequest) {
       }),
 
       db.client.count({
-        where: { companyId, status: "DealDone", updatedAt: { gte: monthStart, lte: monthEnd } },
+        where: { ...clientFilter, status: "DealDone", updatedAt: { gte: monthStart, lte: monthEnd } },
       }),
 
       db.commission.aggregate({
-        where: { companyId, createdAt: { gte: monthStart, lte: monthEnd } },
+        where: {
+          companyId,
+          createdAt: { gte: monthStart, lte: monthEnd },
+          ...(isTeamMember ? { userId } : {}),
+        },
         _sum: { commissionAmount: true },
       }),
 
       db.client.groupBy({
         by: ["status"],
-        where: { companyId },
+        where: clientFilter,
         _count: true,
       }),
-    ]);
+    ] as const;
+
+    const [
+      totalClients,
+      todayVisitsCount,
+      todayVisitList,
+      closedDeals,
+      commissions,
+      leadsByStatus,
+    ] = await Promise.all(baseQueries);
+
+    // These queries depend on a valid userId — run separately to avoid crashing the whole request
+    let myAssignedLeads = 0;
+    let myPendingFollowUps = 0;
+
+    if (hasValidUserId) {
+      try {
+        [myAssignedLeads, myPendingFollowUps] = await Promise.all([
+          db.client.count({
+            where: { companyId, assignedTo: userId },
+          }),
+          db.client.count({
+            where: {
+              companyId,
+              assignedTo: userId,
+              followUpDate: { lte: todayEnd },
+              status: { notIn: ["DealDone", "Rejected"] },
+            },
+          }),
+        ]);
+      } catch (err) {
+        console.error("Error fetching assigned leads:", err);
+      }
+    }
 
     // Monthly data (last 12 months)
     const monthlyData: any[] = [];
@@ -102,8 +147,8 @@ export async function GET(req: NextRequest) {
       const mStart = startOfMonth(date);
       const mEnd   = endOfMonth(date);
       const [leads, deals] = await Promise.all([
-        db.client.count({ where: { companyId, createdAt: { gte: mStart, lte: mEnd } } }),
-        db.client.count({ where: { companyId, status: "DealDone", updatedAt: { gte: mStart, lte: mEnd } } }),
+        db.client.count({ where: { ...clientFilter, createdAt: { gte: mStart, lte: mEnd } } }),
+        db.client.count({ where: { ...clientFilter, status: "DealDone", updatedAt: { gte: mStart, lte: mEnd } } }),
       ]);
       monthlyData.push({
         month: date.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
@@ -112,12 +157,32 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Also fetch total commission (all time) for the user's scope
+    let allTimeCommission = 0;
+    try {
+      const allTimeResult = await db.commission.aggregate({
+        where: {
+          companyId,
+          ...(isTeamMember ? { userId } : {}),
+        },
+        _sum: { commissionAmount: true, dealAmount: true },
+        _count: true,
+      });
+      allTimeCommission = allTimeResult._sum.commissionAmount ?? 0;
+    } catch {
+      // If no commissions exist, this is fine
+    }
+
     return NextResponse.json({
       summary: {
         totalClients,
         todayVisits: todayVisitsCount,
+        todayVisitsCount,
         closedDeals,
         totalCommission: commissions._sum.commissionAmount ?? 0,
+        allTimeCommission,
+        myAssignedLeads,
+        myPendingFollowUps,
       },
       todayVisits: todayVisitList,
       leadsByStatus,

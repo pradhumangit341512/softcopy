@@ -44,6 +44,7 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
             <th className="px-3 sm:px-4 py-3 text-left">Address</th>
             <th className="px-3 sm:px-4 py-3 text-left">Visit Date</th>
             <th className="px-3 sm:px-4 py-3 text-left">Follow Up</th>
+            <th className="px-3 sm:px-4 py-3 text-left">Assigned To</th>
             <th className="px-3 sm:px-4 py-3 text-left">Source</th>
             <th className="px-3 sm:px-4 py-3 text-left">Notes</th>
           </tr>
@@ -53,7 +54,7 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
         <tbody className="divide-y divide-gray-100 bg-white">
           {clients.length === 0 ? (
             <tr>
-              <td colSpan={15} className="text-center py-12 text-gray-400 text-sm">
+              <td colSpan={16} className="text-center py-12 text-gray-400 text-sm">
                 No clients found
               </td>
             </tr>
@@ -182,6 +183,17 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
                 {/* FOLLOW UP DATE */}
                 <td className="px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap">
                   {formatDate(client.followUpDate)}
+                </td>
+
+                {/* ASSIGNED TO */}
+                <td className="px-3 sm:px-4 py-3">
+                  {(client as any).assignedToName ? (
+                    <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                      {(client as any).assignedToName}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 text-xs">Unassigned</span>
+                  )}
                 </td>
 
                 {/* SOURCE */}

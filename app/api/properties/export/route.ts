@@ -30,18 +30,27 @@ export async function GET(req: NextRequest) {
     const where: any = {};
     if (isValidObjectId(payload.companyId)) {
       where.companyId = payload.companyId;
+    } else {
+      return NextResponse.json({ error: "Invalid session" }, { status: 400 });
+    }
+
+    // Role-based isolation: team members only export their own properties
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      where.createdBy = payload.userId;
     }
 
     if (status) where.status = status;
     if (propertyType) where.propertyType = propertyType;
 
     if (search) {
-      where.OR = [
-        { propertyName: { contains: search, mode: "insensitive" } },
-        { ownerName: { contains: search, mode: "insensitive" } },
-        { ownerPhone: { contains: search } },
-        { address: { contains: search, mode: "insensitive" } },
-      ];
+      where.AND = [{
+        OR: [
+          { propertyName: { contains: search, mode: "insensitive" } },
+          { ownerName: { contains: search, mode: "insensitive" } },
+          { ownerPhone: { contains: search } },
+          { address: { contains: search, mode: "insensitive" } },
+        ],
+      }];
     }
 
     const properties = await db.property.findMany({

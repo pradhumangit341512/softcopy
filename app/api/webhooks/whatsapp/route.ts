@@ -21,6 +21,13 @@ async function sendWhatsAppMessage(phone: string, message: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    // SECURITY: Require CRON_SECRET to prevent unauthorized trigger
+    const authHeader = req.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const now = new Date();
 
     // Get clients with visits tomorrow

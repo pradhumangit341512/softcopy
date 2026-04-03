@@ -47,6 +47,11 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    // Team member can only view their own properties
+    if (!["admin", "superadmin"].includes(payload.role) && property.createdBy !== payload.userId) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
     return NextResponse.json(property);
   } catch (error) {
     console.error("Get property error:", error);
@@ -92,6 +97,11 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    // Role check: team members can only edit their own properties
+    if (!["admin", "superadmin"].includes(payload.role) && existing.createdBy !== payload.userId) {
+      return NextResponse.json({ error: "You can only edit your own properties" }, { status: 403 });
+    }
+
     const body = await req.json();
 
     const askingRent =
@@ -127,7 +137,7 @@ export async function PUT(
   } catch (error: any) {
     console.error("Update property error:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to update property" },
+      { error: "Failed to update property" },
       { status: 500 }
     );
   }
@@ -166,6 +176,11 @@ export async function DELETE(
       existing.companyId !== payload.companyId
     ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    // Role check: only admin/superadmin can delete properties
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      return NextResponse.json({ error: "Only admins can delete properties" }, { status: 403 });
     }
 
     await db.property.delete({ where: { id } });

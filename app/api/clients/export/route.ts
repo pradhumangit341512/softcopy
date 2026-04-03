@@ -36,7 +36,12 @@ export async function GET(req: NextRequest) {
     const dateTo   = searchParams.get("dateTo") || "";
 
     /* ================= BUILD WHERE CLAUSE ================= */
-    let where: any = { companyId };
+    const where: any = { companyId };
+
+    // Role-based isolation: team members only export their own clients
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      where.AND = [{ OR: [{ createdBy: payload.userId }, { assignedTo: payload.userId }] }];
+    }
 
     if (type === "today") {
       const today = new Date();

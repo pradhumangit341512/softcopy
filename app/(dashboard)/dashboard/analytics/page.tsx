@@ -32,6 +32,7 @@ interface AnalyticsData {
     todayVisits: number;
     closedDeals: number;
     totalCommission: number;
+    allTimeCommission?: number;
   };
   leadsByStatus: Array<{
     status: string;
@@ -203,7 +204,7 @@ export default function AnalyticsPage() {
     },
     {
       title: 'Total Commission',
-      value: `₹${(data.summary.totalCommission || 0).toLocaleString('en-IN')}`,
+      value: `₹${(data.summary.allTimeCommission || data.summary.totalCommission || 0).toLocaleString('en-IN')}`,
       icon: BadgeDollarSign,
       color: '#f59e0b',
       sub: '+18%',

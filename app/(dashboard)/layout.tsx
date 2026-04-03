@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/dashboard/Sidebar';
 import TopBar from '@/components/dashboard/TopBar';
 import { useAuth } from '@/hooks/useAuth';
+import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import Loader from '@/components/common/Loader';
 
 export default function DashboardLayout({
@@ -15,6 +16,9 @@ export default function DashboardLayout({
   const { user, isLoading, logout } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Auto-logout after 24 hours of inactivity
+  useInactivityLogout();
 
   useEffect(() => {
     if (!isLoading && !user) {

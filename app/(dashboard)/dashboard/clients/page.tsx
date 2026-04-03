@@ -35,6 +35,7 @@ export default function ClientsPage() {
   const statusFromUrl  = searchParams.get('status')   || '';
   const dateFromUrl    = searchParams.get('dateFrom')  || '';
   const dateToUrl      = searchParams.get('dateTo')    || '';
+  const viewFromUrl    = searchParams.get('view')      || '';  // "my" for assigned-to-me
   const pageFromUrl    = parseInt(searchParams.get('page') || '1', 10);
 
   // Local state for filter UI — synced from URL
@@ -85,6 +86,7 @@ export default function ClientsPage() {
         ...(statusFromUrl && { status:   statusFromUrl }),
         ...(dateFromUrl   && { dateFrom: dateFromUrl }),
         ...(dateToUrl     && { dateTo:   dateToUrl }),
+        ...(viewFromUrl   && { view:     viewFromUrl }),
         page: String(pageFromUrl),
       });
       const response = await fetch(`/api/clients?${params}`, { credentials: 'include' });
@@ -98,7 +100,7 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, searchFromUrl, statusFromUrl, dateFromUrl, dateToUrl, pageFromUrl]);
+  }, [user?.id, searchFromUrl, statusFromUrl, dateFromUrl, dateToUrl, viewFromUrl, pageFromUrl]);
 
   useEffect(() => {
     if (authLoading || !user?.id) return;
@@ -157,6 +159,40 @@ export default function ClientsPage() {
               <span className="ml-1.5 text-gray-400">— {totalCount} total</span>
             )}
           </p>
+
+          {/* All Leads / My Leads toggle */}
+          <div className="flex items-center gap-1 mt-2 bg-gray-100 rounded-lg p-0.5 w-fit">
+            <button
+              onClick={() => {
+                const params = new URLSearchParams(searchParams.toString());
+                params.delete('view');
+                params.set('page', '1');
+                router.push(`/dashboard/clients?${params.toString()}`);
+              }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                !viewFromUrl
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              All Leads
+            </button>
+            <button
+              onClick={() => {
+                const params = new URLSearchParams(searchParams.toString());
+                params.set('view', 'my');
+                params.set('page', '1');
+                router.push(`/dashboard/clients?${params.toString()}`);
+              }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                viewFromUrl === 'my'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              My Leads
+            </button>
+          </div>
         </div>
 
         {/* Action buttons */}

@@ -23,6 +23,11 @@ export async function PUT(
     if (!existing)
       return NextResponse.json({ error: "Commission not found" }, { status: 404 });
 
+    // Role check: team members can only modify their own commissions
+    if (!["admin", "superadmin"].includes(payload.role) && existing.userId !== payload.userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const updateData: any = {};
 
     if (body.salesPersonName !== undefined) {
@@ -84,6 +89,11 @@ export async function DELETE(
     });
     if (!existing)
       return NextResponse.json({ error: "Commission not found" }, { status: 404 });
+
+    // Role check: only admin/superadmin can delete commissions
+    if (!["admin", "superadmin"].includes(payload.role)) {
+      return NextResponse.json({ error: "Only admins can delete commissions" }, { status: 403 });
+    }
 
     await db.commission.delete({ where: { id } });
     return NextResponse.json({ message: "Deleted successfully" });
