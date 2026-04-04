@@ -125,20 +125,25 @@ export default function PipelinePage() {
     return <Loader fullScreen size="lg" message="Loading pipeline..." />;
   }
 
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role || '');
+
   return (
     <div className="py-4 sm:py-6 lg:py-8 space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            Deal Pipeline
+            {isAdmin ? 'Deal Pipeline' : 'My Deal Pipeline'}
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-1">
-            Drag and drop clients between stages to update their status
+            {isAdmin
+              ? 'Drag and drop clients between stages to update their status'
+              : 'Your leads — drag and drop to update status'}
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-gray-400">
-          <span className="font-semibold text-gray-700">{clients.length}</span> total leads
+          <span className="font-semibold text-gray-700">{clients.length}</span>
+          {isAdmin ? ' total leads' : ' your leads'}
         </div>
       </div>
 

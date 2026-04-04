@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import Loader from '@/components/common/Loader';
 import {
@@ -49,10 +50,21 @@ function formatCurrency(amount: number) {
 
 export default function TeamPerformancePage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [data, setData] = useState<{ performance: UserMetrics[]; teamTotals: TeamTotals } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role || '');
+
+  // Redirect non-admin users
   useEffect(() => {
+    if (user && !isAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [user, isAdmin, router]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
     const fetchPerformance = async () => {
       try {
         const res = await fetch('/api/team-performance', {
@@ -71,6 +83,7 @@ export default function TeamPerformancePage() {
     fetchPerformance();
   }, []);
 
+  if (!isAdmin) return <Loader fullScreen size="lg" message="Redirecting..." />;
   if (loading) return <Loader fullScreen size="lg" message="Loading team performance..." />;
 
   if (!data) {

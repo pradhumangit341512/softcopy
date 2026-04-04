@@ -144,10 +144,12 @@ export default function PropertiesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            Properties
+            {['admin', 'superadmin'].includes(user?.role || '') ? 'Properties' : 'My Properties'}
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-            Manage all property listings with owner details
+            {['admin', 'superadmin'].includes(user?.role || '')
+              ? 'Manage all property listings with owner details'
+              : 'Your property listings'}
             {!loading && totalCount > 0 && (
               <span className="ml-1.5 text-gray-400">— {totalCount} total</span>
             )}
@@ -307,7 +309,7 @@ export default function PropertiesPage() {
                 <PropertyTable
                   properties={properties}
                   onEdit={handleEdit}
-                  onDelete={handleDelete}
+                  onDelete={['admin', 'superadmin'].includes(user?.role || '') ? handleDelete : undefined}
                 />
               </div>
             </div>

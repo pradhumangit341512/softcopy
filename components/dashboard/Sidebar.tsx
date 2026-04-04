@@ -18,12 +18,12 @@ interface SidebarProps {
 
 // Items visible to everyone
 const commonNavItems = [
-  { href: '/dashboard',            icon: LayoutDashboard, label: 'Dashboard'   },
-  { href: '/dashboard/my-work',    icon: ClipboardList,   label: 'My Work'     },
-  { href: '/dashboard/clients',    icon: Users,           label: 'Clients'     },
+  { href: '/dashboard',            icon: LayoutDashboard, label: 'Dashboard'     },
+  { href: '/dashboard/my-work',    icon: ClipboardList,   label: 'My Work'       },
+  { href: '/dashboard/clients',    icon: Users,           label: 'My Clients'    },
   { href: '/dashboard/pipeline',   icon: Kanban,          label: 'Deal Pipeline' },
-  { href: '/dashboard/properties', icon: Building2,       label: 'Properties'  },
-  { href: '/dashboard/commissions',icon: TrendingUp,      label: 'Commissions' },
+  { href: '/dashboard/properties', icon: Building2,       label: 'My Properties' },
+  { href: '/dashboard/commissions',icon: TrendingUp,      label: 'Commissions'   },
 ];
 
 // Items visible only to admin/superadmin

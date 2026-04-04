@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   LineChart,
   Line,
@@ -126,12 +127,22 @@ const renderCustomLabel = ({
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role || '');
+
+  // Redirect non-admin users — analytics is admin-only
   useEffect(() => {
-    if (user) fetchAnalytics();
-  }, [user]);
+    if (user && !isAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [user, isAdmin, router]);
+
+  useEffect(() => {
+    if (user && isAdmin) fetchAnalytics();
+  }, [user, isAdmin]);
 
   const fetchAnalytics = async () => {
     try {
@@ -153,6 +164,7 @@ export default function AnalyticsPage() {
     }
   };
 
+  if (!isAdmin) return <Loader fullScreen size="lg" message="Redirecting..." />;
   if (loading) return <Loader fullScreen size="lg" message="Loading analytics..." />;
 
   if (!data) {

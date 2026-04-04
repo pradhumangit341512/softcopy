@@ -151,48 +151,52 @@ export default function ClientsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            Clients
+            {['admin', 'superadmin'].includes(user?.role || '') ? 'Clients' : 'My Clients'}
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-            Manage all your property leads
+            {['admin', 'superadmin'].includes(user?.role || '')
+              ? 'Manage all your property leads'
+              : 'Your assigned and created leads'}
             {!loading && totalCount > 0 && (
               <span className="ml-1.5 text-gray-400">— {totalCount} total</span>
             )}
           </p>
 
-          {/* All Leads / My Leads toggle */}
-          <div className="flex items-center gap-1 mt-2 bg-gray-100 rounded-lg p-0.5 w-fit">
-            <button
-              onClick={() => {
-                const params = new URLSearchParams(searchParams.toString());
-                params.delete('view');
-                params.set('page', '1');
-                router.push(`/dashboard/clients?${params.toString()}`);
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                !viewFromUrl
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              All Leads
-            </button>
-            <button
-              onClick={() => {
-                const params = new URLSearchParams(searchParams.toString());
-                params.set('view', 'my');
-                params.set('page', '1');
-                router.push(`/dashboard/clients?${params.toString()}`);
-              }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                viewFromUrl === 'my'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              My Leads
-            </button>
-          </div>
+          {/* All Leads / My Leads toggle — only for admins who can see all */}
+          {['admin', 'superadmin'].includes(user?.role || '') && (
+            <div className="flex items-center gap-1 mt-2 bg-gray-100 rounded-lg p-0.5 w-fit">
+              <button
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.delete('view');
+                  params.set('page', '1');
+                  router.push(`/dashboard/clients?${params.toString()}`);
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  !viewFromUrl
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                All Leads
+              </button>
+              <button
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.set('view', 'my');
+                  params.set('page', '1');
+                  router.push(`/dashboard/clients?${params.toString()}`);
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  viewFromUrl === 'my'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                My Leads
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Action buttons */}
@@ -360,7 +364,7 @@ export default function ClientsPage() {
                 <ClientTable
                   clients={clients}
                   onEdit={handleEdit}
-                  onDelete={handleDelete}
+                  onDelete={['admin', 'superadmin'].includes(user?.role || '') ? handleDelete : undefined}
                 />
               </div>
             </div>

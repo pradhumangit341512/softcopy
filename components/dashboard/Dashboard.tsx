@@ -32,11 +32,18 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export default function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>('');
 
   useEffect(() => { fetchAnalytics(); }, []);
 
   const fetchAnalytics = async () => {
     try {
+      // Fetch user info to get role
+      const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        setUserRole(meData.user?.role || '');
+      }
       const response = await fetch('/api/analytics', { credentials: 'include' });
       if (response.ok) setData(await response.json());
     } catch (error) {
@@ -67,6 +74,7 @@ export default function Dashboard() {
 
   const todayVisits: TodayVisit[] = data.todayVisits || [];
   const totalClients = data.summary.totalClients || 1;
+  const isAdmin = ['admin', 'superadmin'].includes(userRole);
 
   return (
     <div className="space-y-5">
@@ -74,23 +82,23 @@ export default function Dashboard() {
       {/* ── STATS ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatsCard
-          title="Total Clients"
+          title={isAdmin ? "Total Clients" : "My Clients"}
           value={data.summary.totalClients}
           icon="👥"
         />
         <StatsCard
-          title="Today's Visits"
+          title={isAdmin ? "Today's Visits" : "My Visits Today"}
           value={data.summary.todayVisitsCount}
           icon="📅"
           highlight={data.summary.todayVisitsCount > 0}
         />
         <StatsCard
-          title="Closed Deals"
+          title={isAdmin ? "Closed Deals" : "My Deals"}
           value={data.summary.closedDeals}
           icon="✅"
         />
         <StatsCard
-          title="Commission"
+          title={isAdmin ? "Total Commission" : "My Commission"}
           value={`₹${(data.summary.allTimeCommission || data.summary.totalCommission || 0).toLocaleString('en-IN')}`}
           icon="💰"
         />
@@ -229,8 +237,12 @@ export default function Dashboard() {
         {/* Monthly Performance */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
           <div className="mb-4">
-            <h3 className="text-base font-semibold text-gray-800">Monthly Performance</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Leads vs Deals over time</p>
+            <h3 className="text-base font-semibold text-gray-800">
+              {isAdmin ? 'Monthly Performance' : 'My Monthly Performance'}
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {isAdmin ? 'Leads vs Deals over time' : 'Your leads vs deals over time'}
+            </p>
           </div>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data.monthlyData} barCategoryGap="30%"
@@ -251,8 +263,12 @@ export default function Dashboard() {
         {/* Lead Status */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
           <div className="mb-4">
-            <h3 className="text-base font-semibold text-gray-800">Lead Status</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Distribution across pipeline</p>
+            <h3 className="text-base font-semibold text-gray-800">
+              {isAdmin ? 'Lead Status' : 'My Lead Status'}
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {isAdmin ? 'Distribution across pipeline' : 'Your leads across pipeline'}
+            </p>
           </div>
           <div className="space-y-3">
             {data.leadsByStatus.map((status: any, index: number) => {
