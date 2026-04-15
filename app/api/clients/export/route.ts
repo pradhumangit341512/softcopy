@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     const dateTo   = searchParams.get("dateTo") || "";
 
     /* ================= BUILD WHERE CLAUSE ================= */
-    let where: Record<string, unknown> = { companyId };
+    const where: Record<string, unknown> = { companyId };
 
     // Role-based filtering: team members only export their own data
     if (payload.role === 'user') {

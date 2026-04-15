@@ -40,7 +40,7 @@ export function NotificationDropdown({ visits, onClose }: Props) {
             <Calendar size={14} className="text-blue-500" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-gray-900">Today's Visits</h4>
+            <h4 className="text-sm font-bold text-gray-900">Today&apos;s Visits</h4>
             {sortedVisits.length > 0 && (
               <p className="text-xs text-gray-400">{sortedVisits.length} scheduled</p>
             )}

@@ -120,7 +120,7 @@ export function Dashboard() {
               <CalendarCheck size={14} className="text-blue-500" />
             </div>
             <h3 className="text-sm font-semibold text-gray-800">
-              Today's Visiting Clients
+              Today&apos;s Visiting Clients
               <span className="ml-2 text-xs font-medium text-gray-400 bg-gray-100
                 px-2 py-0.5 rounded-full">
                 {todayVisits.length}

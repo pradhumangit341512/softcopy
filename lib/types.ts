@@ -278,10 +278,9 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface CreateClientRequest extends ClientFormValues {}
+export type CreateClientRequest = ClientFormValues;
 
-export interface UpdateClientRequest
-  extends Partial<CreateClientRequest> {}
+export type UpdateClientRequest = Partial<CreateClientRequest>;
 
 // ==================== API RESPONSES ====================
 

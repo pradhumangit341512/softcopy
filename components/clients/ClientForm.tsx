@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, SubmitHandler } from 'react-hook-form';
+import { useForm, SubmitHandler, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
@@ -71,7 +71,7 @@ export function ClientForm({
     handleSubmit,
     formState: { errors },
   } = useForm<ClientFormValues>({
-    resolver: zodResolver(formSchema) as any,
+    resolver: zodResolver(formSchema) as unknown as Resolver<ClientFormValues>,
     defaultValues: cleanDefaults as Partial<ClientFormValues> | undefined,
   });
 

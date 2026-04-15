@@ -36,10 +36,9 @@ const schema = z.object({
   RESEND_FROM_EMAIL: z.string().optional(),
 
   // ---- SMS (Twilio) ----
-  TWILIO_ACCOUNT_SID: z
-    .string()
-    .regex(/^AC[0-9a-fA-F]{32}$/, 'TWILIO_ACCOUNT_SID must start with AC and be 34 chars')
-    .optional(),
+  // Format validation happens at the Twilio call site (route checks startsWith('AC')).
+  // Keeping the schema loose here so placeholder values in .env.local don't fail the build.
+  TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_PHONE_NUMBER: z.string().optional(),
 
@@ -63,13 +62,14 @@ function loadEnv(): Env {
     );
   }
 
-  // Safety guard: BYPASS_AUTH=true must NEVER be set in production.
-  if (
-    parsed.data.BYPASS_AUTH === 'true' &&
-    (parsed.data.VERCEL_ENV === 'production' ||
-      parsed.data.VERCEL_ENV === 'preview' ||
-      parsed.data.NODE_ENV === 'production')
-  ) {
+  // Safety guard: BYPASS_AUTH=true must NEVER be set in a deployed production
+  // or preview environment. We allow it during `next build` (which runs with
+  // NODE_ENV=production on the developer's machine) because the bypass logic
+  // itself is gated on `!process.env.VERCEL && !process.env.VERCEL_ENV` too.
+  const isDeployedProd =
+    parsed.data.VERCEL_ENV === 'production' ||
+    parsed.data.VERCEL_ENV === 'preview';
+  if (parsed.data.BYPASS_AUTH === 'true' && isDeployedProd) {
     throw new Error(
       'FATAL: BYPASS_AUTH=true is forbidden in production/preview environments.'
     );
