@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth } from "@/lib/auth";
+import { isTeamMember } from "@/lib/authorize";
+import { updateCommissionSchema, parseBody } from "@/lib/validations";
+import { recordAudit } from "@/lib/audit";
 
-type AuthPayload = { userId: string; companyId: string; role: string; email: string };
+export const runtime = "nodejs";
 
 // ── PUT: Update commission ──
 export async function PUT(
@@ -10,58 +13,64 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const payload = (await verifyAuth(req)) as AuthPayload | null;
+    const payload = await verifyAuth(req);
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
-    const body = await req.json();
 
+    // Load with relation for team-member ownership check.
     const existing = await db.commission.findFirst({
-      where: { id, companyId: payload.companyId },
+      where: { id, companyId: payload.companyId, deletedAt: null },
+      include: { client: { select: { createdBy: true } } },
     });
-    if (!existing)
+    if (!existing) {
       return NextResponse.json({ error: "Commission not found" }, { status: 404 });
-
-    // Role check: team members can only modify their own commissions
-    if (!["admin", "superadmin"].includes(payload.role) && existing.userId !== payload.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (
+      isTeamMember(payload.role) &&
+      existing.client?.createdBy !== payload.userId
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden — not your commission" },
+        { status: 403 }
+      );
     }
 
-    const updateData: any = {};
+    const parsed = await parseBody(req, updateCommissionSchema);
+    if (!parsed.ok) return parsed.response;
+    const data = parsed.data;
 
-    if (body.salesPersonName !== undefined) {
-      updateData.salesPersonName = body.salesPersonName?.trim() || null;
-    }
-    if (body.dealAmount !== undefined) {
-      updateData.dealAmount = Number(body.dealAmount);
-    }
-    if (body.commissionPercentage !== undefined) {
-      updateData.commissionPercentage = Number(body.commissionPercentage);
-    }
-    if (body.dealAmount !== undefined || body.commissionPercentage !== undefined) {
-      const deal = body.dealAmount !== undefined
-        ? Number(body.dealAmount) : existing.dealAmount;
-      const pct  = body.commissionPercentage !== undefined
-        ? Number(body.commissionPercentage) : existing.commissionPercentage;
+    const updateData: Record<string, unknown> = {};
+    if (data.salesPersonName !== undefined) updateData.salesPersonName = data.salesPersonName;
+    if (data.paymentReference !== undefined) updateData.paymentReference = data.paymentReference;
+    if (data.dealAmount !== undefined) updateData.dealAmount = data.dealAmount;
+    if (data.commissionPercentage !== undefined) updateData.commissionPercentage = data.commissionPercentage;
+    if (data.dealAmount !== undefined || data.commissionPercentage !== undefined) {
+      const deal = data.dealAmount ?? existing.dealAmount;
+      const pct = data.commissionPercentage ?? existing.commissionPercentage;
       updateData.commissionAmount = (deal * pct) / 100;
     }
-    if (body.paidStatus !== undefined) {
-      updateData.paidStatus = body.paidStatus;
-      if (body.paidStatus === "Paid") {
-        updateData.paymentDate = new Date();
-      }
-    }
-    if (body.paymentReference !== undefined) {
-      updateData.paymentReference = body.paymentReference || null;
+    if (data.paidStatus !== undefined) {
+      updateData.paidStatus = data.paidStatus;
+      if (data.paidStatus === "Paid") updateData.paymentDate = new Date();
     }
 
-    const updated = await db.commission.update({
-      where: { id },
+    // Atomic guard: only updates if the row is still in the same company
+    // and not soft-deleted — kills the TOCTOU window.
+    const result = await db.commission.updateMany({
+      where: { id, companyId: payload.companyId, deletedAt: null },
       data: updateData,
+    });
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Commission not found" }, { status: 404 });
+    }
+
+    const updated = await db.commission.findUnique({
+      where: { id },
       include: {
         client: { select: { clientName: true } },
-        user:   { select: { name: true } },
+        user: { select: { name: true } },
       },
     });
 
@@ -72,31 +81,56 @@ export async function PUT(
   }
 }
 
-// ── DELETE: Remove commission ──
+// ── DELETE: Soft remove commission ──
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const payload = (await verifyAuth(req)) as AuthPayload | null;
+    const payload = await verifyAuth(req);
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
 
     const existing = await db.commission.findFirst({
-      where: { id, companyId: payload.companyId },
+      where: { id, companyId: payload.companyId, deletedAt: null },
+      include: { client: { select: { createdBy: true } } },
     });
-    if (!existing)
+    if (!existing) {
       return NextResponse.json({ error: "Commission not found" }, { status: 404 });
-
-    // Role check: only admin/superadmin can delete commissions
-    if (!["admin", "superadmin"].includes(payload.role)) {
-      return NextResponse.json({ error: "Only admins can delete commissions" }, { status: 403 });
+    }
+    if (
+      isTeamMember(payload.role) &&
+      existing.client?.createdBy !== payload.userId
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden — not your commission" },
+        { status: 403 }
+      );
     }
 
-    await db.commission.delete({ where: { id } });
-    return NextResponse.json({ message: "Deleted successfully" });
+    const result = await db.commission.updateMany({
+      where: { id, companyId: payload.companyId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Commission not found" }, { status: 404 });
+    }
+
+    await recordAudit({
+      companyId: payload.companyId,
+      userId: payload.userId,
+      action: "commission.delete",
+      resource: "Commission",
+      resourceId: id,
+      req,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Commission deleted successfully",
+    });
   } catch (error) {
     console.error("Delete commission error:", error);
     return NextResponse.json({ error: "Failed to delete commission" }, { status: 500 });

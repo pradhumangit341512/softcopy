@@ -5,18 +5,20 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
-import Loader from '@/components/common/Loader';
-import Alert from '@/components/common/Alert';
+import { Loader } from '@/components/common/Loader';
+import { Alert } from '@/components/common/Alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/common/Toast';
-import Pagination from '@/components/common/Pagination';
+import { Pagination } from '@/components/common/Pagination';
 import {
   IndianRupee, Clock, CheckCircle2, TrendingUp,
   ChevronRight, Plus, FileSpreadsheet,
   FileText, Pencil, X, Target,
   Search, Wallet,
 } from 'lucide-react';
-import Button from '@/components/common/ Button';
+import { Button } from '@/components/common/Button';
+import type { LucideIcon } from 'lucide-react';
+import type { CustomTooltipProps } from '@/lib/utils';
 
 // ─────────────────────────────────────────
 // Types
@@ -76,7 +78,7 @@ const StatCard = ({
 }: {
   label: string; value: string;
   colorKey: keyof typeof STAT_COLORS;
-  icon: any; sub?: string;
+  icon: LucideIcon; sub?: string;
 }) => {
   const c = STAT_COLORS[colorKey];
   return (
@@ -106,7 +108,7 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload?.length) {
     return (
       <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3">
@@ -167,8 +169,9 @@ export default function CommissionsPage() {
       setCommissions(data.commissions || []);
       setTotals(data.totals || { totalCommission: 0, pendingCommission: 0 });
       setTotalPages(data.pagination?.pages || 1);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch commissions';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -207,8 +210,9 @@ export default function CommissionsPage() {
       const d = await res.json();
       setBudget(d.budget); setEditingBudget(false);
       addToast({ type: 'success', message: 'Budget target saved' });
-    } catch (err: any) {
-      addToast({ type: 'error', message: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save budget';
+      addToast({ type: 'error', message: msg });
     } finally {
       setSavingBudget(false);
     }
@@ -235,8 +239,9 @@ export default function CommissionsPage() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
       addToast({ type: 'success', message: 'Commission added successfully' });
       closeModal(); fetchCommissions();
-    } catch (err: any) {
-      addToast({ type: 'error', message: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add commission';
+      addToast({ type: 'error', message: msg });
     } finally {
       setSubmitting(false);
     }
@@ -271,8 +276,9 @@ export default function CommissionsPage() {
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
       addToast({ type: 'success', message: 'Commission updated' });
       closeModal(); fetchCommissions();
-    } catch (err: any) {
-      addToast({ type: 'error', message: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update commission';
+      addToast({ type: 'error', message: msg });
     } finally {
       setSubmitting(false);
     }
@@ -291,8 +297,9 @@ export default function CommissionsPage() {
       if (!res.ok) throw new Error('Failed');
       addToast({ type: 'success', message: 'Commission marked as paid' });
       closeModal(); fetchCommissions();
-    } catch (err: any) {
-      addToast({ type: 'error', message: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to mark as paid';
+      addToast({ type: 'error', message: msg });
     } finally {
       setSubmitting(false);
     }

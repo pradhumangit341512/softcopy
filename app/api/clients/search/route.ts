@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
         searchCondition,
         // Role-based isolation: non-admin users only see their own clients
         ...(!['admin', 'superadmin'].includes(payload.role)
-          ? [{ OR: [{ createdBy: payload.userId }, { assignedTo: payload.userId }] }]
+          ? [{ createdBy: payload.userId }]
           : []),
       ],
     };

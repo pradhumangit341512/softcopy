@@ -378,16 +378,6 @@ export interface TimeRange {
   to: Date;
 }
 
-export interface DateRange {
-  startDate: Date;
-  endDate: Date;
-}
-
-export interface Range<T> {
-  min: T;
-  max: T;
-}
-
 // ==================== CONSTANTS ====================
 
 export const CLIENT_STATUS_OPTIONS = [
@@ -514,23 +504,23 @@ export const SUBSCRIPTION_PLANS: Record<
 
 // ==================== TYPE GUARDS ====================
 
-export const isUser = (obj: any): obj is User => {
-  return obj && typeof obj === 'object' && 'email' in obj && 'name' in obj;
+export const isUser = (obj: unknown): obj is User => {
+  return obj != null && typeof obj === 'object' && 'email' in obj && 'name' in obj;
 };
 
-export const isClient = (obj: any): obj is Client => {
-  return obj && typeof obj === 'object' && 'clientName' in obj && 'phone' in obj;
+export const isClient = (obj: unknown): obj is Client => {
+  return obj != null && typeof obj === 'object' && 'clientName' in obj && 'phone' in obj;
 };
 
-export const isCommission = (obj: any): obj is Commission => {
+export const isCommission = (obj: unknown): obj is Commission => {
   return (
-    obj &&
+    obj != null &&
     typeof obj === 'object' &&
     'dealAmount' in obj &&
     'commissionAmount' in obj
   );
 };
 
-export const isApiResponse = (obj: any): obj is ApiResponse<any> => {
-  return obj && typeof obj === 'object' && 'success' in obj && 'message' in obj;
+export const isApiResponse = (obj: unknown): obj is ApiResponse<unknown> => {
+  return obj != null && typeof obj === 'object' && 'success' in obj && 'message' in obj;
 };

@@ -9,7 +9,8 @@ interface Props {
   onClose: () => void;
 }
 
-export default function NotificationDropdown({ visits, onClose }: Props) {
+/** Dropdown panel showing today's scheduled client visits */
+export function NotificationDropdown({ visits, onClose }: Props) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click

@@ -40,6 +40,7 @@ export interface ClientResponse {
   updatedAt: string;
 }
 
+/** Hook for CRUD operations on clients with toast notifications */
 export function useClients() {
   const [clients, setClients] = useState<ClientResponse[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,7 +48,7 @@ export function useClients() {
   const { addToast } = useToast();
 
   // ================= FETCH CLIENTS =================
-  const fetchClients = useCallback(async (filters?: any) => {
+  const fetchClients = useCallback(async (filters?: { search?: string; status?: string; page?: number }) => {
     try {
       setLoading(true);
       setError(null);
@@ -68,8 +69,8 @@ export function useClients() {
 
       const data = await response.json();
       setClients(data.clients || data);
-    } catch (err: any) {
-      const errorMsg = err.message || 'Failed to fetch clients';
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch clients';
       setError(errorMsg);
       addToast({ type: 'error', message: errorMsg });
     } finally {
@@ -92,8 +93,9 @@ export function useClients() {
       }
 
       return await response.json();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Client not found';
+      setError(errorMsg);
       return null;
     } finally {
       setLoading(false);
@@ -121,9 +123,10 @@ export function useClients() {
       addToast({ type: 'success', message: 'Client added successfully!' });
 
       return true;
-    } catch (err: any) {
-      setError(err.message);
-      addToast({ type: 'error', message: err.message });
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to add client';
+      setError(errorMsg);
+      addToast({ type: 'error', message: errorMsg });
       return false;
     } finally {
       setLoading(false);
@@ -151,9 +154,10 @@ export function useClients() {
       addToast({ type: 'success', message: 'Client updated successfully!' });
 
       return true;
-    } catch (err: any) {
-      setError(err.message);
-      addToast({ type: 'error', message: err.message });
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update client';
+      setError(errorMsg);
+      addToast({ type: 'error', message: errorMsg });
       return false;
     } finally {
       setLoading(false);
@@ -179,9 +183,10 @@ export function useClients() {
       addToast({ type: 'success', message: 'Client deleted successfully!' });
 
       return true;
-    } catch (err: any) {
-      setError(err.message);
-      addToast({ type: 'error', message: err.message });
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to delete client';
+      setError(errorMsg);
+      addToast({ type: 'error', message: errorMsg });
       return false;
     } finally {
       setLoading(false);

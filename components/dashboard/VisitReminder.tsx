@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react';
 import { X, AlertCircle, Calendar, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Button from '../common/ Button';
+import { Button } from '../common/Button';
 
 interface VisitReminderProps {
   visitCount: number;
 }
 
-export default function VisitReminder({ visitCount }: VisitReminderProps) {
+/** Dismissible banner and popup reminder for scheduled client visits */
+export function VisitReminder({ visitCount }: VisitReminderProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [showPopup, setShowPopup]  = useState(false);
   const router = useRouter();

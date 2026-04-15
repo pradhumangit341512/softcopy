@@ -3,11 +3,11 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Alert from '@/components/common/Alert';
+import { Alert } from '@/components/common/Alert';
 import { Lock, Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
 import { useToast } from '@/components/common/Toast';
-import Button from '@/components/common/ Button';
-import Input from '@/components/common/ Input';
+import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
 
 /* ============================= */
 /* MAIN WRAPPER (Suspense Fix)  */
@@ -77,8 +77,8 @@ function ResetPasswordContent() {
       });
 
       setTimeout(() => router.push('/login'), 2000);
-    } catch (err: any) {
-      const msg = err?.message || 'Reset failed';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Reset failed';
       setError(msg);
       addToast({ type: 'error', message: msg });
     } finally {
@@ -138,7 +138,7 @@ function ResetPasswordContent() {
           <Input
             type={showNewPassword ? 'text' : 'password'}
             value={newPassword}
-            onChange={(e: any) => setNewPassword(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPassword(e.target.value)}
             label="New Password"
             required
           />
@@ -156,7 +156,7 @@ function ResetPasswordContent() {
           <Input
             type={showConfirmPassword ? 'text' : 'password'}
             value={confirmPassword}
-            onChange={(e: any) => setConfirmPassword(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
             label="Confirm Password"
             required
           />

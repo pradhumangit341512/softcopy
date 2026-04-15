@@ -1,402 +1,381 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/components/common/Toast';
-import Loader from '@/components/common/Loader';
-import Badge from '@/components/common/Badge';
 import {
-  ClipboardList, Phone, MapPin, Calendar, Clock, Bell,
-  ChevronRight, UserCheck, CheckCircle2, XCircle, Sparkles,
-  ThumbsUp, IndianRupee, ArrowRight,
+  Users, Clock, Calendar, TrendingUp, CheckCircle2, Phone, MapPin,
+  AlertCircle, ArrowRight,
 } from 'lucide-react';
-import clsx from 'clsx';
 
-interface AssignedClient {
-  id: string;
-  clientName: string;
-  phone: string;
-  email?: string;
-  status: string;
-  budget?: number;
-  preferredLocation?: string;
-  requirementType: string;
-  inquiryType: string;
-  followUpDate?: string;
-  visitingDate?: string;
-  visitingTime?: string;
-  notes?: string;
-  source?: string;
-  createdAt: string;
-  updatedAt: string;
-  creator?: { name: string };
+import { Loader } from '@/components/common/Loader';
+import { Alert } from '@/components/common/Alert';
+import { Badge } from '@/components/common/Badge';
+import { useAuth } from '@/hooks/useAuth';
+import { formatDate, formatCurrency } from '@/lib/utils';
+
+import type { Client } from '@/lib/types';
+
+/** Stats summary returned by /api/my-work */
+interface MyWorkStats {
+  total: number;
+  new: number;
+  interested: number;
+  dealDone: number;
+  rejected: number;
+  followUpsDue: number;
+  visitsToday: number;
 }
 
-interface TodayVisit {
+/** Today's visit summary shape */
+interface TodayVisitItem {
   id: string;
   clientName: string;
   phone: string;
   visitingDate: string;
-  visitingTime?: string;
-  preferredLocation?: string;
+  visitingTime: string | null;
+  preferredLocation: string | null;
   status: string;
 }
 
-interface WorkData {
-  assignedLeads: AssignedClient[];
-  pendingFollowUps: AssignedClient[];
-  todayVisits: TodayVisit[];
-  stats: {
-    total: number;
-    new: number;
-    interested: number;
-    dealDone: number;
-    rejected: number;
-    followUpsDue: number;
-    visitsToday: number;
-  };
+/** Full response from /api/my-work */
+interface MyWorkResponse {
+  assignedLeads: Client[];
+  pendingFollowUps: Client[];
+  todayVisits: TodayVisitItem[];
+  stats: MyWorkStats;
 }
 
-const STATUS_CONFIG: Record<string, { icon: any; color: string; bg: string; badge: string }> = {
-  New:        { icon: Sparkles,     color: 'text-blue-600',   bg: 'bg-blue-50',   badge: 'primary' },
-  Interested: { icon: ThumbsUp,    color: 'text-amber-600',  bg: 'bg-amber-50',  badge: 'warning' },
-  DealDone:   { icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50',  badge: 'success' },
-  Rejected:   { icon: XCircle,     color: 'text-red-600',    bg: 'bg-red-50',    badge: 'danger' },
-};
-
-function formatDate(date?: string | null): string {
-  if (!date) return '';
-  const d = new Date(date);
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
-}
-
-function formatCurrency(amount: number) {
-  if (amount >= 10000000) return `${(amount / 10000000).toFixed(1)} Cr`;
-  if (amount >= 100000) return `${(amount / 100000).toFixed(1)}L`;
-  if (amount >= 1000) return `${(amount / 1000).toFixed(0)}K`;
-  return amount.toLocaleString('en-IN');
-}
-
-function isOverdue(date?: string | null): boolean {
-  if (!date) return false;
-  return new Date(date) < new Date(new Date().toDateString());
-}
-
+/**
+ * My Work page — personal workspace for the logged-in user.
+ * Shows their assigned leads, pending follow-ups, and today's visits.
+ */
 export default function MyWorkPage() {
-  const { user } = useAuth();
-  const { addToast } = useToast();
   const router = useRouter();
-  const [data, setData] = useState<WorkData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'followups' | 'visits'>('all');
+  const { user, isLoading: authLoading } = useAuth();
 
-  const fetchWork = useCallback(async () => {
+  const [data, setData] = useState<MyWorkResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchMyWork = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/my-work', { credentials: 'include' });
-      if (res.ok) {
-        setData(await res.json());
-      } else {
-        console.error('My work API failed:', await res.text());
-      }
+      if (!res.ok) throw new Error('Failed to fetch work data');
+      const result = await res.json();
+      setData(result);
     } catch (err) {
-      console.error('Failed to fetch work:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchWork(); }, [fetchWork]);
+  useEffect(() => {
+    if (authLoading || !user?.id) return;
+    fetchMyWork();
+  }, [authLoading, user?.id, fetchMyWork]);
 
-  if (loading) return <Loader fullScreen size="lg" message="Loading your work..." />;
-
-  if (!data) {
+  if (authLoading || loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-gray-400 text-sm">Failed to load work data</p>
+      <div className="py-8">
+        <Loader size="lg" message="Loading your work..." />
       </div>
     );
   }
 
-  const { assignedLeads, pendingFollowUps, todayVisits, stats } = data;
+  if (!data) {
+    return (
+      <div className="py-4 sm:py-6 lg:py-8">
+        <Alert type="error" title="Error" message={error || 'Failed to load work data'} />
+      </div>
+    );
+  }
 
-  const displayLeads = activeTab === 'followups'
-    ? pendingFollowUps
-    : activeTab === 'visits'
-    ? assignedLeads.filter((l) => l.visitingDate && new Date(l.visitingDate).toDateString() === new Date().toDateString())
-    : assignedLeads;
+  const { stats, pendingFollowUps, todayVisits, assignedLeads } = data;
+  const firstName = user?.name?.split(' ')[0] || 'there';
 
   return (
     <div className="py-4 sm:py-6 lg:py-8 space-y-5 sm:space-y-6">
-      {/* Header */}
+      {/* HEADER */}
       <div>
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
           My Work
         </h1>
-        <p className="text-gray-500 text-xs sm:text-sm mt-1">
-          All leads and tasks assigned to you, {user?.name?.split(' ')[0] || 'there'}
+        <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
+          Hi {firstName} — here's what needs your attention today
         </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
-          <p className="text-[10px] text-gray-400 font-medium uppercase">Total</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
-        </div>
-        <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100 text-center">
-          <p className="text-[10px] text-blue-500 font-medium uppercase">New</p>
-          <p className="text-2xl font-bold text-blue-700 mt-1">{stats.new}</p>
-        </div>
-        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 text-center">
-          <p className="text-[10px] text-amber-500 font-medium uppercase">Interested</p>
-          <p className="text-2xl font-bold text-amber-700 mt-1">{stats.interested}</p>
-        </div>
-        <div className="bg-green-50 rounded-2xl p-4 border border-green-100 text-center">
-          <p className="text-[10px] text-green-500 font-medium uppercase">Deal Done</p>
-          <p className="text-2xl font-bold text-green-700 mt-1">{stats.dealDone}</p>
-        </div>
-        <div className="bg-red-50 rounded-2xl p-4 border border-red-100 text-center">
-          <p className="text-[10px] text-red-400 font-medium uppercase">Rejected</p>
-          <p className="text-2xl font-bold text-red-600 mt-1">{stats.rejected}</p>
-        </div>
-        <div className={clsx(
-          'rounded-2xl p-4 border text-center',
-          stats.followUpsDue > 0
-            ? 'bg-orange-50 border-orange-200'
-            : 'bg-white border-gray-100'
-        )}>
-          <p className="text-[10px] text-orange-500 font-medium uppercase">Follow-ups</p>
-          <p className={clsx('text-2xl font-bold mt-1', stats.followUpsDue > 0 ? 'text-orange-700' : 'text-gray-400')}>
-            {stats.followUpsDue}
-          </p>
-        </div>
-        <div className={clsx(
-          'rounded-2xl p-4 border text-center',
-          stats.visitsToday > 0
-            ? 'bg-purple-50 border-purple-200'
-            : 'bg-white border-gray-100'
-        )}>
-          <p className="text-[10px] text-purple-500 font-medium uppercase">Visits Today</p>
-          <p className={clsx('text-2xl font-bold mt-1', stats.visitsToday > 0 ? 'text-purple-700' : 'text-gray-400')}>
-            {stats.visitsToday}
-          </p>
-        </div>
+      {error && (
+        <Alert type="error" title="Error" message={error} onClose={() => setError(null)} />
+      )}
+
+      {/* STATS */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard
+          label="My Total Leads"
+          value={stats.total}
+          icon={<Users size={18} />}
+          bg="bg-blue-50"
+          text="text-blue-600"
+        />
+        <StatCard
+          label="Today's Visits"
+          value={stats.visitsToday}
+          icon={<Calendar size={18} />}
+          bg="bg-purple-50"
+          text="text-purple-600"
+          highlight={stats.visitsToday > 0}
+        />
+        <StatCard
+          label="Follow-ups Due"
+          value={stats.followUpsDue}
+          icon={<Clock size={18} />}
+          bg="bg-amber-50"
+          text="text-amber-600"
+          highlight={stats.followUpsDue > 0}
+        />
+        <StatCard
+          label="Deals Closed"
+          value={stats.dealDone}
+          icon={<CheckCircle2 size={18} />}
+          bg="bg-emerald-50"
+          text="text-emerald-600"
+        />
       </div>
 
-      {/* Today's Visits Alert */}
+      {/* TODAY'S VISITS */}
       {todayVisits.length > 0 && (
-        <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 sm:p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-purple-500 flex items-center justify-center">
-              <Calendar size={16} className="text-white" />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center">
+              <Calendar size={14} className="text-purple-500" />
             </div>
-            <h2 className="text-sm font-bold text-purple-800">
+            <h3 className="text-sm font-semibold text-gray-800">
               Today's Visits
-              <span className="ml-2 text-xs font-medium bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">
+              <span className="ml-2 text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
                 {todayVisits.length}
               </span>
-            </h2>
+            </h3>
           </div>
-          <div className="space-y-2">
-            {todayVisits.map((visit) => (
-              <div
+
+          <div className="divide-y divide-gray-100">
+            {todayVisits.map((visit, idx) => (
+              <button
                 key={visit.id}
                 onClick={() => router.push(`/dashboard/clients/${visit.id}`)}
-                className="bg-white rounded-xl p-3 flex items-center justify-between gap-3 cursor-pointer
-                  hover:shadow-md transition-shadow border border-purple-100"
+                className="w-full text-left px-4 sm:px-5 py-3 sm:py-4 hover:bg-gray-50/60 transition-colors"
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{visit.clientName}</p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                    <span className="text-xs text-gray-500 flex items-center gap-0.5">
-                      <Phone size={10} /> {visit.phone}
-                    </span>
-                    {visit.visitingTime && (
-                      <span className="text-xs text-purple-600 font-semibold flex items-center gap-0.5">
-                        <Clock size={10} /> {visit.visitingTime}
+                <div className="flex items-center gap-3">
+                  <span className="w-6 h-6 rounded-full bg-purple-50 text-purple-600
+                    text-xs font-bold flex items-center justify-center shrink-0">
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">
+                      {visit.clientName}
+                    </p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                      {visit.visitingTime && (
+                        <span className="text-xs font-semibold text-purple-600
+                          bg-purple-50 px-2 py-0.5 rounded-full">
+                          {visit.visitingTime}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <Phone size={10} /> {visit.phone}
                       </span>
-                    )}
-                    {visit.preferredLocation && (
-                      <span className="text-xs text-gray-500 flex items-center gap-0.5">
-                        <MapPin size={10} /> {visit.preferredLocation}
-                      </span>
-                    )}
+                      {visit.preferredLocation && (
+                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <MapPin size={10} /> {visit.preferredLocation}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  <ArrowRight size={14} className="text-gray-300 shrink-0" />
                 </div>
-                <ChevronRight size={16} className="text-gray-300 shrink-0" />
-              </div>
+              </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Pending Follow-ups Alert */}
-      {pendingFollowUps.length > 0 && activeTab !== 'followups' && (
-        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center">
-                <Bell size={16} className="text-white" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-orange-800">
-                  {pendingFollowUps.length} Follow-up{pendingFollowUps.length > 1 ? 's' : ''} Due
-                </h2>
-                <p className="text-[11px] text-orange-600">Due today or overdue — needs your attention</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setActiveTab('followups')}
-              className="text-xs font-semibold text-orange-700 bg-orange-100 hover:bg-orange-200 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              View All
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Tabs + Lead List */}
+      {/* PENDING FOLLOW-UPS */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Tab Bar */}
-        <div className="flex border-b border-gray-100">
-          {[
-            { id: 'all' as const, label: 'All Assigned', count: assignedLeads.length, icon: ClipboardList },
-            { id: 'followups' as const, label: 'Follow-ups Due', count: pendingFollowUps.length, icon: Bell },
-            { id: 'visits' as const, label: "Today's Visits", count: todayVisits.length, icon: Calendar },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={clsx(
-                'flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs sm:text-sm font-semibold transition-all border-b-2',
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600 bg-blue-50/40'
-                  : 'border-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-              )}
-            >
-              <tab.icon size={14} />
-              <span className="hidden sm:inline">{tab.label}</span>
-              {tab.count > 0 && (
-                <span className={clsx(
-                  'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                  activeTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-                )}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
+            <AlertCircle size={14} className="text-amber-500" />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-800">
+            Pending Follow-ups
+            <span className="ml-2 text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+              {pendingFollowUps.length}
+            </span>
+          </h3>
         </div>
 
-        {/* Lead Cards */}
-        <div className="divide-y divide-gray-50">
-          {displayLeads.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center">
-                <UserCheck size={24} className="text-gray-300" />
-              </div>
-              <p className="text-gray-400 text-sm font-medium">
-                {activeTab === 'followups'
-                  ? 'No pending follow-ups'
-                  : activeTab === 'visits'
-                  ? 'No visits scheduled today'
-                  : 'No leads assigned to you yet'}
-              </p>
-              {activeTab === 'all' && (
-                <p className="text-xs text-gray-400">Ask your admin to assign leads from the Clients page</p>
-              )}
+        {pendingFollowUps.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <CheckCircle2 size={24} className="text-emerald-300" />
+            <p className="text-sm text-gray-400 font-medium">All caught up!</p>
+            <p className="text-xs text-gray-400">No follow-ups are due.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {pendingFollowUps.slice(0, 10).map((lead) => (
+              <button
+                key={lead.id}
+                onClick={() => router.push(`/dashboard/clients/${lead.id}`)}
+                className="w-full text-left px-4 sm:px-5 py-3 sm:py-4 hover:bg-gray-50/60 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">
+                      {lead.clientName}
+                    </p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <Phone size={10} /> {lead.phone}
+                      </span>
+                      {lead.followUpDate && (
+                        <span className="text-xs font-semibold text-amber-700
+                          bg-amber-50 px-2 py-0.5 rounded-full">
+                          Due {formatDate(lead.followUpDate)}
+                        </span>
+                      )}
+                      <Badge label={lead.status} variant="primary" size="sm" />
+                    </div>
+                  </div>
+                  <ArrowRight size={14} className="text-gray-300 shrink-0" />
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ALL MY LEADS */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
+              <TrendingUp size={14} className="text-blue-500" />
             </div>
-          ) : (
-            displayLeads.map((lead) => {
-              const config = STATUS_CONFIG[lead.status] || STATUS_CONFIG.New;
-              const StatusIcon = config.icon;
-              const overdue = isOverdue(lead.followUpDate);
+            <h3 className="text-sm font-semibold text-gray-800">
+              My Recent Leads
+              <span className="ml-2 text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                {assignedLeads.length}
+              </span>
+            </h3>
+          </div>
+          <Link
+            href="/dashboard/clients"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+          >
+            View all →
+          </Link>
+        </div>
 
-              return (
-                <div
-                  key={lead.id}
-                  onClick={() => router.push(`/dashboard/clients/${lead.id}`)}
-                  className="px-4 sm:px-5 py-4 hover:bg-gray-50/50 cursor-pointer transition-colors group"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    {/* Left: Client Info */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-gray-900">{lead.clientName}</p>
-                        <Badge
-                          label={lead.status}
-                          variant={config.badge as any}
-                        />
-                        {overdue && (
-                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full animate-pulse">
-                            OVERDUE
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
+        {assignedLeads.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <Users size={24} className="text-gray-300" />
+            <p className="text-sm text-gray-400 font-medium">No leads yet</p>
+            <Link
+              href="/dashboard/clients/add"
+              className="text-xs text-blue-600 hover:underline font-semibold"
+            >
+              + Add your first lead
+            </Link>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {assignedLeads.slice(0, 8).map((lead) => (
+              <button
+                key={lead.id}
+                onClick={() => router.push(`/dashboard/clients/${lead.id}`)}
+                className="w-full text-left px-4 sm:px-5 py-3 sm:py-4 hover:bg-gray-50/60 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-gray-900 truncate">
+                        {lead.clientName}
+                      </p>
+                      <Badge
+                        label={lead.status}
+                        variant={
+                          lead.status === 'DealDone'
+                            ? 'success'
+                            : lead.status === 'Rejected'
+                            ? 'danger'
+                            : lead.status === 'Interested'
+                            ? 'warning'
+                            : 'primary'
+                        }
+                        size="sm"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <Phone size={10} /> {lead.phone}
+                      </span>
+                      {lead.budget ? (
+                        <span className="text-xs text-gray-700 font-semibold">
+                          {formatCurrency(lead.budget)}
+                        </span>
+                      ) : null}
+                      {lead.preferredLocation && (
                         <span className="text-xs text-gray-500 flex items-center gap-1">
-                          <Phone size={10} /> {lead.phone}
+                          <MapPin size={10} /> {lead.preferredLocation}
                         </span>
-                        {lead.budget && (
-                          <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                            <IndianRupee size={10} /> {formatCurrency(lead.budget)}
-                          </span>
-                        )}
-                        {lead.preferredLocation && (
-                          <span className="text-xs text-gray-500 flex items-center gap-1">
-                            <MapPin size={10} /> {lead.preferredLocation}
-                          </span>
-                        )}
-                        {lead.followUpDate && (
-                          <span className={clsx(
-                            'text-xs font-medium flex items-center gap-1',
-                            overdue ? 'text-red-600' : 'text-orange-500'
-                          )}>
-                            <Bell size={10} /> Follow-up: {formatDate(lead.followUpDate)}
-                          </span>
-                        )}
-                        {lead.visitingDate && (
-                          <span className="text-xs text-purple-600 font-medium flex items-center gap-1">
-                            <Calendar size={10} /> Visit: {formatDate(lead.visitingDate)}
-                            {lead.visitingTime && ` at ${lead.visitingTime}`}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600">
-                          {lead.requirementType}
-                        </span>
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600">
-                          {lead.inquiryType}
-                        </span>
-                        {lead.source && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600">
-                            {lead.source}
-                          </span>
-                        )}
-                      </div>
-
-                      {lead.notes && (
-                        <p className="text-[11px] text-gray-400 mt-1.5 truncate max-w-md">
-                          {lead.notes}
-                        </p>
                       )}
                     </div>
-
-                    {/* Right: Arrow */}
-                    <ChevronRight size={18} className="text-gray-300 group-hover:text-gray-500 shrink-0 mt-1 transition-colors" />
                   </div>
+                  <ArrowRight size={14} className="text-gray-300 shrink-0" />
                 </div>
-              );
-            })
-          )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Compact stat card used in the top grid */
+function StatCard({
+  label,
+  value,
+  icon,
+  bg,
+  text,
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  bg: string;
+  text: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl p-4 sm:p-5 border shadow-sm flex flex-col gap-3 transition-all
+        ${highlight
+          ? 'bg-white border-gray-100 hover:shadow-md'
+          : 'bg-white border-gray-100 hover:shadow-md'
+        }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs sm:text-sm font-medium text-gray-500">{label}</span>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
+          <span className={text}>{icon}</span>
         </div>
       </div>
+      <p className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">{value}</p>
     </div>
   );
 }

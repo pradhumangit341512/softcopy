@@ -5,35 +5,46 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, TrendingUp,
   BarChart3, Settings, X, Building2,
-  Kanban, Trophy, Share2, ClipboardList,
+  GitBranch, Briefcase, UserCog, Award,
 } from 'lucide-react';
 import clsx from 'clsx';
-import Button from '../common/ Button';
+import type { LucideIcon } from 'lucide-react';
+import { Button } from '../common/Button';
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  user: any;
+  user: { name?: string; email?: string; role?: string } | null;
 }
 
-// Items visible to everyone
-const commonNavItems = [
-  { href: '/dashboard',            icon: LayoutDashboard, label: 'Dashboard'     },
-  { href: '/dashboard/my-work',    icon: ClipboardList,   label: 'My Work'       },
-  { href: '/dashboard/clients',    icon: Users,           label: 'My Clients'    },
-  { href: '/dashboard/pipeline',   icon: Kanban,          label: 'Deal Pipeline' },
-  { href: '/dashboard/properties', icon: Building2,       label: 'My Properties' },
-  { href: '/dashboard/commissions',icon: TrendingUp,      label: 'Commissions'   },
+interface NavItem {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  /** If defined, only these roles see the item */
+  roles?: Array<'admin' | 'superadmin' | 'user'>;
+}
+
+/** Nav items with optional role-based visibility */
+const navItems: NavItem[] = [
+  { href: '/dashboard',                  icon: LayoutDashboard, label: 'Dashboard'        },
+  { href: '/dashboard/my-work',          icon: Briefcase,       label: 'My Work',
+    roles: ['user'] },
+  { href: '/dashboard/clients',          icon: Users,           label: 'Clients'          },
+  { href: '/dashboard/pipeline',         icon: GitBranch,       label: 'Deal Pipeline'    },
+  { href: '/dashboard/properties',       icon: Building2,       label: 'Properties'       },
+  { href: '/dashboard/commissions',      icon: TrendingUp,      label: 'Commissions'      },
+  { href: '/dashboard/analytics',        icon: BarChart3,       label: 'Analytics',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/team',             icon: UserCog,         label: 'Team',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/team-performance', icon: Award,           label: 'Team Performance',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'         },
 ];
 
-// Items visible only to admin/superadmin
-const adminNavItems = [
-  { href: '/dashboard/team',             icon: Share2,    label: 'My Team'          },
-  { href: '/dashboard/team-performance', icon: Trophy,    label: 'Team Performance' },
-  { href: '/dashboard/analytics',        icon: BarChart3, label: 'Analytics'        },
-];
-
-export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
+/** Main navigation sidebar with links, user info, and mobile responsive behavior */
+export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
   const pathname = usePathname();
 
   // initials from name
@@ -83,7 +94,15 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
 
         {/* ── Navigation ── */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {[...commonNavItems, ...(['admin', 'superadmin'].includes(user?.role) ? adminNavItems : [])].map(({ href, icon: Icon, label }) => {
+          {navItems
+            .filter((item) => {
+              // No roles restriction → visible to everyone
+              if (!item.roles) return true;
+              // Hide until we know the user's role
+              if (!user?.role) return false;
+              return item.roles.includes(user.role as 'admin' | 'superadmin' | 'user');
+            })
+            .map(({ href, icon: Icon, label }) => {
             const isActive =
               href === '/dashboard'
                 ? pathname === '/dashboard'
@@ -118,33 +137,6 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
             );
           })}
         </nav>
-
-        {/* ── Settings (pinned to bottom) ── */}
-        <div className="px-3 pb-2">
-          <Link href="/dashboard/settings" onClick={onClose}>
-            <span
-              className={clsx(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150',
-                'text-sm font-medium cursor-pointer',
-                pathname === '/dashboard/settings'
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-900/40'
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-              )}
-            >
-              <Settings
-                size={18}
-                className={clsx(
-                  'shrink-0 transition-colors',
-                  pathname === '/dashboard/settings' ? 'text-white' : 'text-gray-500'
-                )}
-              />
-              Settings
-              {pathname === '/dashboard/settings' && (
-                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60" />
-              )}
-            </span>
-          </Link>
-        </div>
 
         {/* ── User info ── */}
         <div className="px-4 py-4 border-t border-gray-800">

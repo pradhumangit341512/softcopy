@@ -9,7 +9,8 @@ interface LoaderProps {
   message?: string;
 }
 
-export default function Loader({
+/** Premium animated loading indicator with optional full-screen overlay */
+export function Loader({
   size = 'md',
   fullScreen = false,
   message = 'Loading...',

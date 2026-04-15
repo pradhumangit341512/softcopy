@@ -5,13 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/common/Toast';
-import Alert from '@/components/common/Alert';
+import { Alert } from '@/components/common/Alert';
 import {
   User, Mail, Phone, Building2, Lock,
   Eye, EyeOff, ArrowRight, CheckCircle, ShieldCheck,
 } from 'lucide-react';
-import Input from '@/components/common/ Input';
-import Button from '@/components/common/ Button';
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
 
 type Step = 'personal' | 'company' | 'otp';
 

@@ -9,6 +9,7 @@ const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'
 // ─────────────────────────────────────────
 // useAuth — main hook
 // ─────────────────────────────────────────
+/** Primary auth hook — fetches user on mount, redirects unauthenticated users, and exposes logout */
 export function useAuth() {
   const router   = useRouter();
   const pathname = usePathname();
@@ -63,6 +64,7 @@ export function useAuth() {
 // ─────────────────────────────────────────
 // useRequireAuth — for protected pages
 // ─────────────────────────────────────────
+/** Guard hook for protected pages — redirects to login if not authenticated */
 export function useRequireAuth() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, hasFetched } = useAuthStore();
@@ -79,6 +81,7 @@ export function useRequireAuth() {
 // ─────────────────────────────────────────
 // useCanAccess — role-based access check
 // ─────────────────────────────────────────
+/** Returns true if the current user's role meets or exceeds the required role level */
 export function useCanAccess(requiredRole: 'superadmin' | 'admin' | 'user') {
   const { user } = useAuthStore();
 

@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Sidebar from '@/components/dashboard/Sidebar';
-import TopBar from '@/components/dashboard/TopBar';
+import { Sidebar } from '@/components/dashboard/Sidebar';
+import { TopBar } from '@/components/dashboard/TopBar';
 import { useAuth } from '@/hooks/useAuth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
-import Loader from '@/components/common/Loader';
+import { Loader } from '@/components/common/Loader';
 
 export default function DashboardLayout({
   children,

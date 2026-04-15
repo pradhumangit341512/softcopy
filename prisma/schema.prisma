@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  superadmin
+  admin
+  user
+}
+
 model Company {
   id                 String          @id @default(auto()) @map("_id") @db.ObjectId
   companyName        String
@@ -33,21 +39,23 @@ model User {
   phone        String       @unique
   email        String       @unique
   password     String
-  role         String       @default("user")
-  employeeId   String?
-  designation  String?
+  role         Role         @default(user)
   companyId    String?      @db.ObjectId
   profilePhoto String?
   status       String       @default("active")
+  // Bumping this invalidates all previously-issued tokens for this user.
+  // Set at login-issue-time (as `tv` JWT claim) so revocation is instant.
+  tokenVersion Int          @default(0)
+  deletedAt    DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clients      Client[]
   commissions  Commission[]
   properties   Property[]   @relation("PropertyCreator")
-  @@index([companyId])
   @@index([role])
-  @@index([employeeId])
+  @@index([companyId, role, status])
+  @@index([deletedAt])
 }
 
 model Client {
@@ -73,20 +81,20 @@ model Client {
   notes             String?
   companyId         String       @db.ObjectId
   createdBy         String       @db.ObjectId
-  assignedTo        String?      @db.ObjectId
-  assignedToName    String?
+  deletedAt         DateTime?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   creator           User         @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   commissions       Commission[]
-  @@index([companyId])
-  @@index([createdBy])
-  @@index([assignedTo])
-  @@index([status])
-  @@index([visitingDate])
   @@index([followUpDate])
   @@index([phone])
+  @@index([deletedAt])
+  // Hot paths: dashboard listing, team-scoped filters, date-range reports.
+  // Leftmost-prefix rules cover single-field companyId / status queries too.
+  @@index([companyId, createdBy, status, createdAt])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, visitingDate])
 }
 
 model Commission {
@@ -101,6 +109,7 @@ model Commission {
   paidStatus           String    @default("Pending")
   paymentDate          DateTime?
   paymentReference     String?
+  deletedAt            DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   client               Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -110,6 +119,10 @@ model Commission {
   @@index([userId])
   @@index([clientId])
   @@index([paidStatus])
+  @@index([deletedAt])
+  // Hot paths: company totals, month-scoped payouts, status grouping
+  @@index([companyId, paidStatus, createdAt])
+  @@index([companyId, createdAt])
 }
 
 model OTP {
@@ -135,6 +148,7 @@ model EmailOTP {
   expiresAt DateTime
   createdAt DateTime @default(now())
   @@index([email])
+  @@index([email, purpose])
   @@index([expiresAt])
   @@map("email_otps")
 }
@@ -155,6 +169,7 @@ model Invoice {
   company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   @@index([companyId])
   @@index([paymentStatus])
+  @@index([companyId, paymentStatus, createdAt])
 }
 
 model Property {
@@ -177,33 +192,17 @@ model Property {
 
   companyId      String   @db.ObjectId
   createdBy      String   @db.ObjectId
+  deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   creator        User     @relation("PropertyCreator", fields: [createdBy], references: [id], onDelete: Restrict)
 
-  @@index([companyId])
-  @@index([createdBy])
   @@index([ownerPhone])
-  @@index([status])
-}
-
-model ActivityLog {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  clientId    String   @db.ObjectId
-  companyId   String   @db.ObjectId
-  userId      String?  @db.ObjectId
-  userName    String?
-  action      String   // status_change, note_added, visit_scheduled, follow_up_set, created, updated, assigned
-  description String
-  oldValue    String?
-  newValue    String?
-  createdAt   DateTime @default(now())
-
-  @@index([clientId])
-  @@index([companyId])
-  @@map("activity_logs")
+  @@index([deletedAt])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, createdBy, status, createdAt])
 }
 
 model MonthlyBudget {
@@ -217,4 +216,20 @@ model MonthlyBudget {
   @@unique([companyId, month])
   @@index([companyId])
   @@map("monthly_budgets")
+}
+
+model AuditLog {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId  String   @db.ObjectId
+  userId     String   @db.ObjectId
+  action     String   // e.g. "client.create", "commission.delete"
+  resource   String   // e.g. "Client", "Commission"
+  resourceId String?  @db.ObjectId
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  @@index([companyId, createdAt])
+  @@index([userId, createdAt])
+  @@index([resource, resourceId])
+  @@map("audit_logs")
 }

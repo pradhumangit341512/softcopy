@@ -105,56 +105,52 @@ export async function sendOTPEmail(
 
   const html = buildHTML(otp, heading, description);
 
-  // ── Step 1: Try Gmail FIRST (more reliable delivery) ──
-  let gmailError: any = null;
-
-  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
-    try {
-      await gmailTransporter.sendMail({
-        from:    `"BrokerCRM" <${FROM_GMAIL}>`,
-        to:      toEmail,
-        subject,
-        html,
-      });
-      console.log(`✅ OTP sent via Gmail to ${toEmail}`);
-      return; // success — done
-    } catch (err: any) {
-      gmailError = err;
-      console.warn(`⚠️  Gmail failed (${err?.message}) — trying Resend for ${toEmail}`);
-    }
-  }
-
-  // ── Step 2: Gmail failed or not configured → fallback to Resend ──
+  // ── Step 1: Try Resend (with 5s timeout) ──
   const resend = getResend();
-  if (resend) {
-    try {
-      const resendPromise = resend.emails.send({
-        from:    FROM_RESEND,
-        to:      toEmail,
-        subject,
-        html,
-      });
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Resend timeout')), 5000)
-      );
-      const result = await Promise.race([resendPromise, timeoutPromise]) as any;
-      if (result?.error) {
-        throw new Error(result.error.message || 'Resend API error');
-      }
-      console.log(`✅ OTP sent via Resend to ${toEmail}`);
-      return; // success — done
-    } catch (err: any) {
-      console.warn(`⚠️  Resend also failed (${err?.message}) for ${toEmail}`);
+  let resendError: Error | null = null;
+  if (!resend) {
+    resendError = new Error('RESEND_API_KEY not configured');
+  } else try {
+    const resendPromise = resend.emails.send({
+      from:    FROM_RESEND,
+      to:      toEmail,
+      subject,
+      html,
+    });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Resend timeout')), 5000)
+    );
+    const result = await Promise.race([resendPromise, timeoutPromise]) as { error?: Error };
+    resendError = result?.error || null;
+  } catch (err: unknown) {
+    resendError = err instanceof Error ? err : new Error(String(err));
+  }
+
+  if (!resendError) {
+    console.log(`✅ OTP sent via Resend to ${toEmail}`);
+    return; // success — done
+  }
+
+  // ── Step 2: Resend failed → fallback to Gmail ──
+  console.warn(`⚠️  Resend failed (${resendError?.message || resendError}) — falling back to Gmail for ${toEmail}`);
+
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    // No Gmail configured — log to terminal only in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('\n========================================');
+      console.log(`DEV FALLBACK — OTP for ${toEmail} (purpose: ${purpose})`);
+      console.log('========================================\n');
+      return;
     }
+    throw new Error('Email delivery failed — configure GMAIL_USER and GMAIL_APP_PASSWORD');
   }
 
-  // ── Both failed ──
-  if (process.env.NODE_ENV === 'development') {
-    console.log('\n========================================');
-    console.log(`DEV FALLBACK — OTP for ${toEmail} (purpose: ${purpose})`);
-    console.log('========================================\n');
-    return;
-  }
+  await gmailTransporter.sendMail({
+    from:    `"BrokerCRM" <${FROM_GMAIL}>`,
+    to:      toEmail,
+    subject,
+    html,
+  });
 
-  throw new Error(`Email delivery failed for ${toEmail} — Gmail: ${gmailError?.message || 'not configured'}, Resend: ${resend ? 'failed' : 'not configured'}`);
+  console.log(`✅ OTP sent via Gmail to ${toEmail}`);
 }

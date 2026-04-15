@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
-import Button from './ Button';
+import { Button } from './Button';
 
 interface PaginationProps {
   currentPage: number;
@@ -9,7 +9,8 @@ interface PaginationProps {
   isLoading?: boolean;
 }
 
-export default function Pagination({
+/** Pagination controls with page numbers and prev/next navigation */
+export function Pagination({
   currentPage,
   totalPages,
   onPageChange,

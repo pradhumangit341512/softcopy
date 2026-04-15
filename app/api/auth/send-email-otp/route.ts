@@ -1,81 +1,78 @@
 // app/api/auth/send-email-otp/route.ts
-// Unified OTP sender for login and signup
+// Unified OTP sender for login, signup, and reset-password.
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { sendOTPEmail } from '@/lib/email';
-import {
-  generateOTP, hashOTP,
-  OTP_EXPIRY_MS, RESEND_COOLDOWN,
-} from '@/lib/otp';
+import { generateOTP, hashOTP, OTP_EXPIRY_MS, RESEND_COOLDOWN } from '@/lib/otp';
+import { otpLimiter, getClientIp, rateLimited } from '@/lib/rate-limit';
+import { z } from 'zod';
+import { parseBody, emailSchema } from '@/lib/validations';
+
+export const runtime = 'nodejs';
+
+const ALLOWED_PURPOSES = ['login', 'signup', 'reset-password'] as const;
+
+const sendOtpSchema = z.object({
+  email: emailSchema,
+  purpose: z.enum(ALLOWED_PURPOSES),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, purpose } = await req.json();
+    const ip = getClientIp(req);
+    const ipLimit = await otpLimiter.check(10, `email-otp:ip:${ip}`);
+    if (!ipLimit.success) {
+      return rateLimited('Too many requests. Please try again later.', ipLimit.retryAfter);
+    }
 
-    // ── Validate input ──
-    if (!email || !purpose) {
+    const parsed = await parseBody(req, sendOtpSchema);
+    if (!parsed.ok) return parsed.response;
+    const { email, purpose } = parsed.data;
+
+    // Per-email cap — avoids spamming someone's inbox + acts as OTP bruteforce guard.
+    const emailLimit = await otpLimiter.check(3, `email-otp:email:${email}:${purpose}`);
+    if (!emailLimit.success) {
+      return rateLimited('Please wait before requesting another code.', emailLimit.retryAfter);
+    }
+
+    // Enumeration defense: for login + reset-password, always return generic success
+    // regardless of whether the email exists. Only actually send the email if the user exists.
+    const userExists = !!(await db.user.findUnique({ where: { email }, select: { id: true } }));
+    if ((purpose === 'login' || purpose === 'reset-password') && !userExists) {
       return NextResponse.json(
-        { error: 'Email and purpose are required' },
-        { status: 400 }
+        { success: true, message: 'If an account exists, a code has been sent.' },
+        { status: 200 }
       );
     }
 
-    if (!['login', 'signup'].includes(purpose)) {
-      return NextResponse.json({ error: 'Invalid purpose' }, { status: 400 });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
-    }
-
-    // ── For login: verify user exists first ──
-    if (purpose === 'login') {
-      const user = await db.user.findUnique({ where: { email } });
-      if (!user) {
-        // Return generic message to avoid email enumeration
-        return NextResponse.json(
-          { success: true, message: 'If this email exists, an OTP has been sent' },
-          { status: 200 }
-        );
-      }
-    }
-
-    // ── Check resend cooldown ──
     const lastOTP = await db.emailOTP.findFirst({
       where: { email, purpose },
       orderBy: { createdAt: 'desc' },
     });
-
-    if (
-      lastOTP &&
-      Date.now() - new Date(lastOTP.createdAt).getTime() < RESEND_COOLDOWN
-    ) {
+    if (lastOTP && Date.now() - new Date(lastOTP.createdAt).getTime() < RESEND_COOLDOWN) {
       return NextResponse.json(
-        { error: 'Please wait before requesting another OTP' },
+        { error: 'Please wait before requesting another code.' },
         { status: 429 }
       );
     }
 
-    // ── Delete old OTPs for this email+purpose ──
     await db.emailOTP.deleteMany({ where: { email, purpose } });
 
-    // ── Generate and save new OTP ──
-    const otp     = generateOTP();
+    const otp = generateOTP();
     const otpHash = hashOTP(otp);
-
     await db.emailOTP.create({
       data: {
         email,
         otpHash,
         purpose,
-        attempts:  0,
+        attempts: 0,
         expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
       },
     });
 
-    // ── Send email ──
-    await sendOTPEmail(email, otp, purpose as 'login' | 'signup');
+    const emailPurpose: 'login' | 'signup' | 'reset' =
+      purpose === 'reset-password' ? 'reset' : purpose;
+    await sendOTPEmail(email, otp, emailPurpose);
 
     return NextResponse.json({
       success: true,

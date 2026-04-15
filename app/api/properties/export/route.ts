@@ -27,15 +27,13 @@ export async function GET(req: NextRequest) {
     const propertyType = searchParams.get("propertyType") || "";
     const search = searchParams.get("search") || "";
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (isValidObjectId(payload.companyId)) {
       where.companyId = payload.companyId;
-    } else {
-      return NextResponse.json({ error: "Invalid session" }, { status: 400 });
     }
 
-    // Role-based isolation: team members only export their own properties
-    if (!["admin", "superadmin"].includes(payload.role)) {
+    // Role-based filtering: team members only export their own properties
+    if (payload.role === 'user') {
       where.createdBy = payload.userId;
     }
 
@@ -43,20 +41,20 @@ export async function GET(req: NextRequest) {
     if (propertyType) where.propertyType = propertyType;
 
     if (search) {
-      where.AND = [{
-        OR: [
-          { propertyName: { contains: search, mode: "insensitive" } },
-          { ownerName: { contains: search, mode: "insensitive" } },
-          { ownerPhone: { contains: search } },
-          { address: { contains: search, mode: "insensitive" } },
-        ],
-      }];
+      where.OR = [
+        { propertyName: { contains: search, mode: "insensitive" } },
+        { ownerName: { contains: search, mode: "insensitive" } },
+        { ownerPhone: { contains: search } },
+        { address: { contains: search, mode: "insensitive" } },
+      ];
     }
 
+    const EXPORT_LIMIT = 50_000;
     const properties = await db.property.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       include: { creator: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
+      take: EXPORT_LIMIT,
     });
 
     const workbook = new ExcelJS.Workbook();

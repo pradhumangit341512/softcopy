@@ -54,7 +54,8 @@ interface StatusData {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
-export default function AnalyticsChart() {
+/** Analytics dashboard with charts for revenue, clients, and status distribution */
+export function AnalyticsChart() {
   const [data, setData] = useState<ChartMonthly[]>([]);
   const [statusData, setStatusData] = useState<StatusData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -212,7 +213,7 @@ export default function AnalyticsChart() {
 
 /* ================= COMPONENTS ================= */
 
-function ChartCard({ title, children }: any) {
+function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg">
       <h3 className="text-lg font-semibold mb-4">{title}</h3>
@@ -221,7 +222,14 @@ function ChartCard({ title, children }: any) {
   );
 }
 
-function Metrics({ stats }: any) {
+interface AnalyticsStats {
+  totalRevenue: number;
+  totalDeals: number;
+  totalClients: number;
+  avgCommission: number;
+}
+
+function Metrics({ stats }: { stats: AnalyticsStats }) {
   return (
     <div className="space-y-4">
       <Metric label="Total Revenue" value={`₹${(stats.totalRevenue / 100000).toFixed(2)}L`} />
@@ -232,7 +240,7 @@ function Metrics({ stats }: any) {
   );
 }
 
-function Metric({ label, value }: any) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between p-3 bg-gray-50 rounded">
       <span>{label}</span>

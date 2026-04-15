@@ -8,7 +8,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   helper?: string;
 }
 
-export default function Input({
+/** Form input component with label, error, icon, and helper text support */
+export function Input({
   label,
   error,
   icon,

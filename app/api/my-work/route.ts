@@ -9,6 +9,14 @@ type AuthPayload = {
   email: string;
 };
 
+/**
+ * GET /api/my-work
+ * Returns the current user's workspace:
+ * - All leads they created
+ * - Pending follow-ups (due today or overdue)
+ * - Today's visits
+ * - Summary stats
+ */
 export async function GET(req: NextRequest) {
   try {
     const token = await getTokenCookie();
@@ -28,7 +36,15 @@ export async function GET(req: NextRequest) {
         assignedLeads: [],
         pendingFollowUps: [],
         todayVisits: [],
-        stats: { total: 0, new: 0, interested: 0, followUpsDue: 0, visitsToday: 0 },
+        stats: {
+          total: 0,
+          new: 0,
+          interested: 0,
+          dealDone: 0,
+          rejected: 0,
+          followUpsDue: 0,
+          visitsToday: 0,
+        },
       });
     }
 
@@ -37,51 +53,44 @@ export async function GET(req: NextRequest) {
     const todayEnd = new Date(todayStart);
     todayEnd.setDate(todayEnd.getDate() + 1);
 
-    // Filter: leads created by OR assigned to this user
+    // Leads created by this user
     const myLeadsFilter = {
       companyId,
-      OR: [
-        { createdBy: userId },
-        { assignedTo: userId },
-      ],
+      createdBy: userId,
     };
 
-    // All leads belonging to this user (created or assigned)
-    const assignedLeads = await db.client.findMany({
-      where: myLeadsFilter,
-      include: { creator: { select: { name: true } } },
-      orderBy: { updatedAt: "desc" },
-    });
+    const [assignedLeads, pendingFollowUps, todayVisits] = await Promise.all([
+      db.client.findMany({
+        where: myLeadsFilter,
+        include: { creator: { select: { name: true } } },
+        orderBy: { updatedAt: "desc" },
+      }),
+      db.client.findMany({
+        where: {
+          ...myLeadsFilter,
+          followUpDate: { lte: todayEnd },
+          status: { notIn: ["DealDone", "Rejected"] },
+        },
+        orderBy: { followUpDate: "asc" },
+      }),
+      db.client.findMany({
+        where: {
+          ...myLeadsFilter,
+          visitingDate: { gte: todayStart, lt: todayEnd },
+        },
+        select: {
+          id: true,
+          clientName: true,
+          phone: true,
+          visitingDate: true,
+          visitingTime: true,
+          preferredLocation: true,
+          status: true,
+        },
+        orderBy: { visitingTime: "asc" },
+      }),
+    ]);
 
-    // Leads with follow-ups due today or overdue
-    const pendingFollowUps = await db.client.findMany({
-      where: {
-        ...myLeadsFilter,
-        followUpDate: { lte: todayEnd },
-        status: { notIn: ["DealDone", "Rejected"] },
-      },
-      orderBy: { followUpDate: "asc" },
-    });
-
-    // Today's visits for this user
-    const todayVisits = await db.client.findMany({
-      where: {
-        ...myLeadsFilter,
-        visitingDate: { gte: todayStart, lt: todayEnd },
-      },
-      select: {
-        id: true,
-        clientName: true,
-        phone: true,
-        visitingDate: true,
-        visitingTime: true,
-        preferredLocation: true,
-        status: true,
-      },
-      orderBy: { visitingTime: "asc" },
-    });
-
-    // Stats
     const stats = {
       total: assignedLeads.length,
       new: assignedLeads.filter((l) => l.status === "New").length,

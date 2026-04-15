@@ -116,7 +116,7 @@ export const useAuthStore = create<AuthState>()(
           } catch (error) {
             const msg = error instanceof Error ? error.message : 'Login failed';
             set({ ...initialState, error: msg });
-            throw error;
+            return { requireOTP: false, message: msg };
           }
         },
 
@@ -156,7 +156,7 @@ export const useAuthStore = create<AuthState>()(
           } catch (error) {
             const msg = error instanceof Error ? error.message : 'Signup failed';
             set({ ...initialState, error: msg });
-            throw error;
+            return { requireOTP: false, message: msg };
           }
         },
 
@@ -188,7 +188,8 @@ export const useAuthStore = create<AuthState>()(
             });
 
             if (!response.ok) {
-              // 401 = not logged in — not an error
+              // 401 = not logged in or token expired — clear stale state
+              useAuthStore.persist.clearStorage();
               set({ ...initialState, hasFetched: true });
               return;
             }
@@ -232,7 +233,6 @@ export const useAuthStore = create<AuthState>()(
           } catch (error) {
             const msg = error instanceof Error ? error.message : 'Update failed';
             set({ error: msg, isLoading: false });
-            throw error;
           }
         },
 
@@ -247,19 +247,21 @@ export const useAuthStore = create<AuthState>()(
         name:    'auth-storage',
         storage: createJSONStorage(() => localStorage),
 
-        // ✅ Only persist these — never persist loading/error/hasFetched
+        // 🔐 Never persist the user object (role, companyId, email) to
+        // localStorage — XSS can exfiltrate it. Only persist a lightweight
+        // "was authenticated" hint so the UI can show the right shell while
+        // /api/auth/me is re-verified on mount.
         partialize: (state) => ({
-          user:            state.user,
           isAuthenticated: state.isAuthenticated,
         }),
 
-        // ✅ Replace don't merge — prevents stale user bleeding into new session
         merge: (persistedState, currentState) => ({
           ...currentState,
           ...(persistedState as Partial<AuthState>),
-          // Always reset these on rehydrate
+          // Always reset — user is re-fetched from the server on rehydrate
+          user:       null,
           isLoading:  false,
-          hasFetched: false,  // ✅ force re-verify on every page load
+          hasFetched: false,
           error:      null,
         }),
       }

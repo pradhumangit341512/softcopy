@@ -14,7 +14,7 @@ import {
   ArrowRight,
   CheckCircle,
 } from 'lucide-react';
-import Button from '@/components/common/ Button';
+import { Button } from '@/components/common/Button';
 
 export default function Home() {
   const router = useRouter();

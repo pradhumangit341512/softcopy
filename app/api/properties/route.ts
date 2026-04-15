@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken, isValidObjectId } from "@/lib/auth";
+import {
+  getTokenCookie,
+  verifyToken,
+  isValidObjectId,
+  type AuthTokenPayload,
+} from "@/lib/auth";
+import { createPropertySchema, parseBody } from "@/lib/validations";
+import { isTeamMember } from "@/lib/authorize";
 
-type AuthPayload = {
-  userId: string;
-  companyId: string;
-  role: string;
-  email: string;
-};
+export const runtime = "nodejs";
 
 // ================= GET PROPERTIES =================
 export async function GET(req: NextRequest) {
@@ -17,7 +19,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = (await verifyToken(token)) as AuthTokenPayload | null;
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -25,7 +27,7 @@ export async function GET(req: NextRequest) {
     if (!isValidObjectId(payload.companyId)) {
       return NextResponse.json({
         properties: [],
-        pagination: { total: 0, page: 1, pages: 1 },
+        pagination: { total: 0, page: 1, limit: 10, pages: 1 },
       });
     }
 
@@ -36,17 +38,16 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search");
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
-    const page = Number(searchParams.get("page") || 1);
-    const take = 10;
-    const skip = (page - 1) * take;
+    const page = Math.max(1, Number(searchParams.get("page") || 1));
+    const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 10)));
+    const skip = (page - 1) * limit;
 
-    const where: any = {};
-    if (isValidObjectId(payload.companyId)) {
-      where.companyId = payload.companyId;
-    }
+    const where: Record<string, unknown> = {
+      companyId: payload.companyId,
+      deletedAt: null,
+    };
 
-    // Role-based isolation: team members see only their created properties
-    if (!["admin", "superadmin"].includes(payload.role)) {
+    if (isTeamMember(payload.role)) {
       where.createdBy = payload.userId;
     }
 
@@ -54,20 +55,19 @@ export async function GET(req: NextRequest) {
     if (propertyType) where.propertyType = propertyType;
 
     if (search) {
-      where.AND = [{
-        OR: [
-          { propertyName: { contains: search, mode: "insensitive" } },
-          { ownerName: { contains: search, mode: "insensitive" } },
-          { ownerPhone: { contains: search } },
-          { address: { contains: search, mode: "insensitive" } },
-        ],
-      }];
+      where.OR = [
+        { propertyName: { contains: search, mode: "insensitive" } },
+        { ownerName: { contains: search, mode: "insensitive" } },
+        { ownerPhone: { contains: search } },
+        { address: { contains: search, mode: "insensitive" } },
+      ];
     }
 
     if (dateFrom || dateTo) {
-      where.createdAt = {};
-      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
-      if (dateTo) where.createdAt.lte = new Date(dateTo);
+      const createdAt: { gte?: Date; lte?: Date } = {};
+      if (dateFrom) createdAt.gte = new Date(dateFrom);
+      if (dateTo) createdAt.lte = new Date(dateTo);
+      where.createdAt = createdAt;
     }
 
     const [properties, total] = await Promise.all([
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
         include: { creator: { select: { name: true } } },
         orderBy: { createdAt: "desc" },
         skip,
-        take,
+        take: limit,
       }),
       db.property.count({ where }),
     ]);
@@ -86,7 +86,8 @@ export async function GET(req: NextRequest) {
       pagination: {
         total,
         page,
-        pages: Math.ceil(total / take),
+        limit,
+        pages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
@@ -106,7 +107,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = (await verifyToken(token)) as AuthTokenPayload | null;
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -118,44 +119,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
-
-    // Validate required fields
-    if (!body.propertyName || !body.address || !body.propertyType || !body.ownerName || !body.ownerPhone) {
-      return NextResponse.json(
-        { error: "Missing required fields: propertyName, address, propertyType, ownerName, ownerPhone" },
-        { status: 400 }
-      );
-    }
-
-    const askingRent = body.askingRent && String(body.askingRent).trim() !== "" ? parseFloat(body.askingRent) : null;
-    const sellingPrice = body.sellingPrice && String(body.sellingPrice).trim() !== "" ? parseFloat(body.sellingPrice) : null;
+    const parsed = await parseBody(req, createPropertySchema);
+    if (!parsed.ok) return parsed.response;
+    const data = parsed.data;
 
     const property = await db.property.create({
       data: {
-        propertyName: body.propertyName.trim(),
-        address: body.address.trim(),
-        propertyType: body.propertyType,
-        bhkType: body.bhkType?.trim() || null,
-        vacateDate: body.vacateDate ? new Date(body.vacateDate) : null,
-        askingRent: askingRent && !isNaN(askingRent) ? askingRent : null,
-        sellingPrice: sellingPrice && !isNaN(sellingPrice) ? sellingPrice : null,
-        area: body.area?.trim() || null,
-        description: body.description?.trim() || null,
-        status: body.status || "Available",
-        ownerName: body.ownerName.trim(),
-        ownerPhone: body.ownerPhone.trim(),
-        ownerEmail: body.ownerEmail?.trim() || null,
+        propertyName: data.propertyName,
+        address: data.address,
+        propertyType: data.propertyType,
+        bhkType: data.bhkType,
+        vacateDate: data.vacateDate,
+        askingRent: data.askingRent ?? null,
+        sellingPrice: data.sellingPrice ?? null,
+        area: data.area,
+        description: data.description,
+        status: data.status,
+        ownerName: data.ownerName,
+        ownerPhone: data.ownerPhone,
+        ownerEmail: data.ownerEmail,
         companyId: payload.companyId,
         createdBy: payload.userId,
       },
     });
 
     return NextResponse.json(property, { status: 201 });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Create property error:", error);
     return NextResponse.json(
-      { error: "Failed to create property" },
+      { error: error instanceof Error ? error.message : "Failed to create property" },
       { status: 500 }
     );
   }

@@ -42,7 +42,8 @@ const currencyFormatter = (value: unknown) => {
 
 /* ================= COMPONENT ================= */
 
-export default function RevenueGraph() {
+/** Revenue analytics dashboard with charts, metrics, and timeframe selector */
+export function RevenueGraph() {
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [sourceData, setSourceData] = useState<SourceData[]>([]);
   const [loading, setLoading] = useState(true);

@@ -4,16 +4,17 @@ import { Menu, Bell, LogOut, User, Search, ChevronDown, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import NotificationDropdown from '../notifications/NotificationDropdown';
+import { NotificationDropdown } from '../notifications/NotificationDropdown';
 import { TodayVisit } from '@/lib/types';
 
 interface TopBarProps {
-  user: any;
+  user: { name?: string; email?: string; role?: string } | null;
   onMenuClick: () => void;
   onLogout: () => void;
 }
 
-export default function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
+/** Top navigation bar with search, notifications, and user menu */
+export function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
   const router       = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();

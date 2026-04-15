@@ -5,13 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Building2, SlidersHorizontal, X, Download } from 'lucide-react';
 
-import Loader from '@/components/common/Loader';
-import PropertyTable from '@/components/properties/PropertyTable';
-import PropertyFilters from '@/components/properties/PropertyFilters';
+import { Loader } from '@/components/common/Loader';
+import { PropertyTable } from '@/components/properties/PropertyTable';
+import { PropertyFilters } from '@/components/properties/PropertyFilters';
 import { useAuth } from '@/hooks/useAuth';
-import Alert from '@/components/common/Alert';
-import Pagination from '@/components/common/Pagination';
-import Button from '@/components/common/ Button';
+import { Alert } from '@/components/common/Alert';
+import { Pagination } from '@/components/common/Pagination';
+import { Button } from '@/components/common/Button';
 
 import type { Property } from '@/lib/types';
 
@@ -82,8 +82,9 @@ export default function PropertiesPage() {
       setProperties(data.properties || []);
       setTotalPages(data.pagination?.pages || 1);
       setTotalCount(data.pagination?.total || 0);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch properties');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch properties';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -105,8 +106,9 @@ export default function PropertiesPage() {
         throw new Error(data.error || 'Delete failed');
       }
       fetchProperties();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete property';
+      setError(msg);
     }
   };
 
@@ -130,8 +132,9 @@ export default function PropertiesPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       a.remove();
-    } catch (err: any) {
-      setError(err.message || 'Export failed');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Export failed';
+      setError(msg);
     } finally {
       setExporting(false);
     }
@@ -144,12 +147,10 @@ export default function PropertiesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            {['admin', 'superadmin'].includes(user?.role || '') ? 'Properties' : 'My Properties'}
+            Properties
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-            {['admin', 'superadmin'].includes(user?.role || '')
-              ? 'Manage all property listings with owner details'
-              : 'Your property listings'}
+            Manage all property listings with owner details
             {!loading && totalCount > 0 && (
               <span className="ml-1.5 text-gray-400">— {totalCount} total</span>
             )}
@@ -309,7 +310,7 @@ export default function PropertiesPage() {
                 <PropertyTable
                   properties={properties}
                   onEdit={handleEdit}
-                  onDelete={['admin', 'superadmin'].includes(user?.role || '') ? handleDelete : undefined}
+                  onDelete={handleDelete}
                 />
               </div>
             </div>

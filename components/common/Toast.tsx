@@ -2,7 +2,7 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import clsx from 'clsx';
-import Button from './ Button';
+import { Button } from './Button';
 
 interface Toast {
   id: string;

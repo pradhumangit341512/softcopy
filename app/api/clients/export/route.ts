@@ -36,11 +36,11 @@ export async function GET(req: NextRequest) {
     const dateTo   = searchParams.get("dateTo") || "";
 
     /* ================= BUILD WHERE CLAUSE ================= */
-    const where: any = { companyId };
+    let where: Record<string, unknown> = { companyId };
 
-    // Role-based isolation: team members only export their own clients
-    if (!["admin", "superadmin"].includes(payload.role)) {
-      where.AND = [{ OR: [{ createdBy: payload.userId }, { assignedTo: payload.userId }] }];
+    // Role-based filtering: team members only export their own data
+    if (payload.role === 'user') {
+      where.createdBy = payload.userId;
     }
 
     if (type === "today") {
@@ -70,10 +70,14 @@ export async function GET(req: NextRequest) {
     }
 
     /* ================= FETCH DATA ================= */
+    // Hard cap to keep serverless memory + request time bounded.
+    // Past this, users should narrow the filter or use the async export (planned).
+    const EXPORT_LIMIT = 50_000;
     const clients = await db.client.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       include: { creator: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
+      take: EXPORT_LIMIT,
     });
 
     /* ================= CREATE EXCEL ================= */

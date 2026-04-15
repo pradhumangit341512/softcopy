@@ -29,7 +29,7 @@ interface UseCommissionsReturn {
   summary: CommissionSummary;
   loading: boolean;
   error: string | null;
-  fetchCommissions: (filters?: any) => Promise<void>;
+  fetchCommissions: (filters?: { paidStatus?: string; userId?: string }) => Promise<void>;
   createCommission: (data: {
     clientId: string;
     userId: string;
@@ -40,6 +40,7 @@ interface UseCommissionsReturn {
   deleteCommission: (id: string) => Promise<boolean>;
 }
 
+/** Hook for managing commissions — fetch, create, mark as paid, and delete */
 export function useCommissions(): UseCommissionsReturn {
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [summary, setSummary] = useState<CommissionSummary>({
@@ -51,7 +52,7 @@ export function useCommissions(): UseCommissionsReturn {
   const [error, setError] = useState<string | null>(null);
   const { addToast } = useToast();
 
-  const fetchCommissions = useCallback(async (filters?: any) => {
+  const fetchCommissions = useCallback(async (filters?: { paidStatus?: string; userId?: string }) => {
     try {
       setLoading(true);
       setError(null);
@@ -60,7 +61,9 @@ export function useCommissions(): UseCommissionsReturn {
       if (filters?.paidStatus) params.append('paidStatus', filters.paidStatus);
       if (filters?.userId) params.append('userId', filters.userId);
 
-      const response = await fetch(`/api/commissions?${params}`);
+      const response = await fetch(`/api/commissions?${params}`, {
+        credentials: 'include',
+      });
       if (!response.ok) throw new Error('Failed to fetch');
 
       const data = await response.json();
@@ -92,6 +95,7 @@ export function useCommissions(): UseCommissionsReturn {
         const response = await fetch('/api/commissions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify(data),
         });
 
@@ -121,6 +125,7 @@ export function useCommissions(): UseCommissionsReturn {
         const response = await fetch(`/api/commissions/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ paidStatus: 'Paid' }),
         });
 
@@ -147,6 +152,7 @@ export function useCommissions(): UseCommissionsReturn {
       try {
         const response = await fetch(`/api/commissions/${id}`, {
           method: 'DELETE',
+          credentials: 'include',
         });
 
         if (!response.ok) throw new Error('Failed to delete');

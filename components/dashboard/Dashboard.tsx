@@ -5,20 +5,30 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import StatsCard from './StatsCard';
-import VisitReminder from './VisitReminder';
+import { StatsCard } from './StatsCard';
+import { VisitReminder } from './VisitReminder';
 import { TodayVisit } from '@/lib/types';
-import Link from 'next/link';
-import { Users, CheckCircle2, TrendingUp, CalendarCheck, Phone, MapPin, Clock, UserCheck, Bell } from 'lucide-react';
+import { CHART_COLORS, CustomTooltipProps, TooltipPayloadEntry } from '@/lib/utils';
+import { Users, CheckCircle2, TrendingUp, CalendarCheck, Phone, MapPin, Clock } from 'lucide-react';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+interface DashboardData {
+  summary: {
+    totalClients: number;
+    todayVisitsCount: number;
+    closedDeals: number;
+    totalCommission: number;
+  };
+  todayVisits: TodayVisit[];
+  leadsByStatus: Array<{ status: string; _count: number }>;
+  monthlyData: Array<{ month: string; leads: number; deals: number }>;
+}
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload?.length) {
     return (
       <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3">
         <p className="text-xs font-semibold text-gray-500 mb-1">{label}</p>
-        {payload.map((p: any, i: number) => (
+        {payload.map((p: TooltipPayloadEntry, i: number) => (
           <p key={i} className="text-sm font-bold" style={{ color: p.color }}>
             {p.name}: {p.value}
           </p>
@@ -29,21 +39,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export default function Dashboard() {
-  const [data, setData] = useState<any>(null);
+/** Main dashboard view with stats, visit reminders, charts, and lead status */
+export function Dashboard() {
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<string>('');
 
   useEffect(() => { fetchAnalytics(); }, []);
 
   const fetchAnalytics = async () => {
     try {
-      // Fetch user info to get role
-      const meRes = await fetch('/api/auth/me', { credentials: 'include' });
-      if (meRes.ok) {
-        const meData = await meRes.json();
-        setUserRole(meData.user?.role || '');
-      }
       const response = await fetch('/api/analytics', { credentials: 'include' });
       if (response.ok) setData(await response.json());
     } catch (error) {
@@ -74,7 +78,6 @@ export default function Dashboard() {
 
   const todayVisits: TodayVisit[] = data.todayVisits || [];
   const totalClients = data.summary.totalClients || 1;
-  const isAdmin = ['admin', 'superadmin'].includes(userRole);
 
   return (
     <div className="space-y-5">
@@ -82,62 +85,27 @@ export default function Dashboard() {
       {/* ── STATS ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatsCard
-          title={isAdmin ? "Total Clients" : "My Clients"}
+          title="Total Clients"
           value={data.summary.totalClients}
           icon="👥"
         />
         <StatsCard
-          title={isAdmin ? "Today's Visits" : "My Visits Today"}
+          title="Today's Visits"
           value={data.summary.todayVisitsCount}
           icon="📅"
           highlight={data.summary.todayVisitsCount > 0}
         />
         <StatsCard
-          title={isAdmin ? "Closed Deals" : "My Deals"}
+          title="Closed Deals"
           value={data.summary.closedDeals}
           icon="✅"
         />
         <StatsCard
-          title={isAdmin ? "Total Commission" : "My Commission"}
-          value={`₹${(data.summary.allTimeCommission || data.summary.totalCommission || 0).toLocaleString('en-IN')}`}
+          title="Commission"
+          value={`₹${(data.summary.totalCommission || 0).toLocaleString('en-IN')}`}
           icon="💰"
         />
       </div>
-
-      {/* ── MY WORK (Assigned Leads) ── */}
-      {(data.summary.myAssignedLeads > 0 || data.summary.myPendingFollowUps > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <Link href="/dashboard/my-work">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl border border-blue-200 p-4 sm:p-5
-              flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer">
-              <div className="w-11 h-11 rounded-xl bg-blue-500 flex items-center justify-center shrink-0">
-                <UserCheck size={20} className="text-white" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-medium text-blue-600">My Assigned Leads</p>
-                <p className="text-2xl font-bold text-blue-900">{data.summary.myAssignedLeads}</p>
-                <p className="text-[11px] text-blue-500 mt-0.5">Tap to view your work</p>
-              </div>
-            </div>
-          </Link>
-
-          {data.summary.myPendingFollowUps > 0 && (
-            <Link href="/dashboard/my-work">
-              <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-2xl border border-orange-200 p-4 sm:p-5
-                flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer">
-                <div className="w-11 h-11 rounded-xl bg-orange-500 flex items-center justify-center shrink-0">
-                  <Bell size={20} className="text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-orange-600">Pending Follow-ups</p>
-                  <p className="text-2xl font-bold text-orange-900">{data.summary.myPendingFollowUps}</p>
-                  <p className="text-[11px] text-orange-500 mt-0.5">Tap to view follow-ups</p>
-                </div>
-              </div>
-            </Link>
-          )}
-        </div>
-      )}
 
       {/* ── VISIT REMINDER ── */}
       {data.summary.todayVisitsCount > 0 && (
@@ -237,12 +205,8 @@ export default function Dashboard() {
         {/* Monthly Performance */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
           <div className="mb-4">
-            <h3 className="text-base font-semibold text-gray-800">
-              {isAdmin ? 'Monthly Performance' : 'My Monthly Performance'}
-            </h3>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {isAdmin ? 'Leads vs Deals over time' : 'Your leads vs deals over time'}
-            </p>
+            <h3 className="text-base font-semibold text-gray-800">Monthly Performance</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Leads vs Deals over time</p>
           </div>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data.monthlyData} barCategoryGap="30%"
@@ -263,17 +227,13 @@ export default function Dashboard() {
         {/* Lead Status */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
           <div className="mb-4">
-            <h3 className="text-base font-semibold text-gray-800">
-              {isAdmin ? 'Lead Status' : 'My Lead Status'}
-            </h3>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {isAdmin ? 'Distribution across pipeline' : 'Your leads across pipeline'}
-            </p>
+            <h3 className="text-base font-semibold text-gray-800">Lead Status</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Distribution across pipeline</p>
           </div>
           <div className="space-y-3">
-            {data.leadsByStatus.map((status: any, index: number) => {
+            {data.leadsByStatus.map((status: { status: string; _count: number }, index: number) => {
               const pct = Math.round((status._count / totalClients) * 100);
-              const color = COLORS[index % COLORS.length];
+              const color = CHART_COLORS[index % CHART_COLORS.length];
               return (
                 <div key={status.status}>
                   <div className="flex items-center justify-between mb-1">

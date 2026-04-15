@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
+import { jwtVerify, type JWTPayload } from 'jose';
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET environment variable is not set');
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  throw new Error(
+    'FATAL: JWT_SECRET must be set and at least 32 characters long.'
+  );
 }
+
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
+const JWT_ALGS = ['HS256'] as const;
 
 const publicPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/'];
 
@@ -21,6 +25,24 @@ const publicApiPaths = [
   '/api/cron/cleanup-otp',
 ];
 
+// Routes that still work even with an expired subscription:
+// - auth/me + auth/logout so the user can see the expired state and log out
+// - subscriptions + create-order so they can actually pay to renew
+const subscriptionExemptApis = [
+  '/api/auth/me',
+  '/api/auth/logout',
+  '/api/subscriptions',
+  '/api/create-order',
+];
+
+type TokenClaims = JWTPayload & {
+  userId?: string;
+  companyId?: string;
+  role?: string;
+  email?: string;
+  subExp?: number;
+};
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -32,12 +54,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const isPublicPage = publicPaths.some((p) =>
-    p === '/' ? pathname === '/' : pathname.startsWith(p)
-  );
+  // Exact-match only — NEVER startsWith. A prefix check here would let
+  // `/api/auth/login/evil` or `/signupx` bypass auth if such routes ever existed.
+  const isPublicPage = publicPaths.includes(pathname);
   if (isPublicPage) return NextResponse.next();
 
-  const isPublicApi = publicApiPaths.some((p) => pathname.startsWith(p));
+  const isPublicApi = publicApiPaths.includes(pathname);
   if (isPublicApi) return NextResponse.next();
 
   const token = request.cookies.get('auth_token')?.value;
@@ -49,15 +71,36 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  let claims: TokenClaims;
   try {
-    await jwtVerify(token, JWT_SECRET);
-    return NextResponse.next();
+    const verified = await jwtVerify(token, JWT_SECRET, { algorithms: [...JWT_ALGS] });
+    claims = verified.payload as TokenClaims;
   } catch {
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    return NextResponse.redirect(new URL('/login', request.url));
+    const response = pathname.startsWith('/api/')
+      ? NextResponse.json({ error: 'Token expired or invalid' }, { status: 401 })
+      : NextResponse.redirect(new URL('/login', request.url));
+    response.cookies.set('auth_token', '', { path: '/', maxAge: 0 });
+    return response;
   }
+
+  // Subscription gate — only if token carries subExp claim.
+  // Legacy tokens without it skip this check and still work; new tokens enforce it.
+  if (typeof claims.subExp === 'number' && claims.subExp < Date.now()) {
+    const exempt = subscriptionExemptApis.includes(pathname);
+    if (!exempt) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'subscription_expired' },
+          { status: 402 }
+        );
+      }
+      return NextResponse.redirect(
+        new URL('/login?error=subscription_expired', request.url)
+      );
+    }
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {

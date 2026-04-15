@@ -1,261 +1,195 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Plus, TrendingUp, Phone, IndianRupee, Calendar } from 'lucide-react';
+
+import { Loader } from '@/components/common/Loader';
+import { Alert } from '@/components/common/Alert';
+import { Badge } from '@/components/common/Badge';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/components/common/Toast';
-import Loader from '@/components/common/Loader';
-import {
-  Sparkles, UserPlus, ThumbsUp, CheckCircle2, XCircle,
-  GripVertical, Phone, MapPin, IndianRupee, ArrowRight,
-} from 'lucide-react';
-import clsx from 'clsx';
+import { formatCurrency, formatDate } from '@/lib/utils';
 
-interface PipelineClient {
-  id: string;
-  clientName: string;
-  phone: string;
-  email?: string;
-  status: string;
-  budget?: number;
-  preferredLocation?: string;
-  requirementType: string;
-  inquiryType: string;
-  followUpDate?: string;
-  createdAt: string;
-}
+import type { Client } from '@/lib/types';
 
-const COLUMNS = [
-  { status: 'New',        label: 'New Leads',   icon: Sparkles,     color: 'blue',   bg: 'bg-blue-50',   border: 'border-blue-200',   badge: 'bg-blue-100 text-blue-700' },
-  { status: 'Interested', label: 'Interested',  icon: ThumbsUp,     color: 'amber',  bg: 'bg-amber-50',  border: 'border-amber-200',  badge: 'bg-amber-100 text-amber-700' },
-  { status: 'DealDone',   label: 'Deal Done',   icon: CheckCircle2, color: 'green',  bg: 'bg-green-50',  border: 'border-green-200',  badge: 'bg-green-100 text-green-700' },
-  { status: 'Rejected',   label: 'Rejected',    icon: XCircle,      color: 'red',    bg: 'bg-red-50',    border: 'border-red-200',    badge: 'bg-red-100 text-red-700' },
+type PipelineStage = 'New' | 'Interested' | 'DealDone' | 'Rejected';
+
+const STAGES: { key: PipelineStage; label: string; color: string; accent: string }[] = [
+  { key: 'New',        label: 'New Leads',   color: 'bg-blue-50 border-blue-200',       accent: 'bg-blue-500'    },
+  { key: 'Interested', label: 'Interested',  color: 'bg-amber-50 border-amber-200',     accent: 'bg-amber-500'   },
+  { key: 'DealDone',   label: 'Deals Done',  color: 'bg-emerald-50 border-emerald-200', accent: 'bg-emerald-500' },
+  { key: 'Rejected',   label: 'Rejected',    color: 'bg-red-50 border-red-200',         accent: 'bg-red-500'     },
 ];
 
-function formatCurrency(amount: number) {
-  if (amount >= 10000000) return `${(amount / 10000000).toFixed(1)} Cr`;
-  if (amount >= 100000) return `${(amount / 100000).toFixed(1)} L`;
-  if (amount >= 1000) return `${(amount / 1000).toFixed(0)}K`;
-  return amount.toLocaleString('en-IN');
-}
-
+/**
+ * Pipeline page — Kanban-style view of the deal pipeline.
+ * Admin sees all company leads; team members see only their own (enforced server-side).
+ */
 export default function PipelinePage() {
-  const { user } = useAuth();
-  const { addToast } = useToast();
   const router = useRouter();
-  const [clients, setClients] = useState<PipelineClient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const { user, isLoading: authLoading } = useAuth();
 
-  const fetchAllClients = useCallback(async () => {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchClients = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    setError(null);
     try {
-      // Fetch all pages of clients
-      let allClients: PipelineClient[] = [];
-      let page = 1;
-      let hasMore = true;
-      while (hasMore) {
-        const res = await fetch(`/api/clients?page=${page}`, { credentials: 'include' });
-        if (!res.ok) break;
-        const data = await res.json();
-        allClients = [...allClients, ...data.clients];
-        hasMore = page < data.pagination.pages;
-        page++;
-      }
-      setClients(allClients);
+      const res = await fetch('/api/clients?page=1', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch pipeline');
+      const data = await res.json();
+      setClients(data.clients || []);
     } catch (err) {
-      console.error('Failed to fetch clients:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch pipeline');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
-  useEffect(() => { fetchAllClients(); }, [fetchAllClients]);
+  useEffect(() => {
+    if (authLoading || !user?.id) return;
+    fetchClients();
+  }, [authLoading, fetchClients, user?.id]);
 
-  const updateClientStatus = async (clientId: string, newStatus: string) => {
-    setUpdatingId(clientId);
-    try {
-      const res = await fetch(`/api/clients/${clientId}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
+  /** Group clients by pipeline stage */
+  const groupByStage = (stage: PipelineStage): Client[] =>
+    clients.filter((c) => c.status === stage);
 
-      if (res.ok) {
-        setClients((prev) =>
-          prev.map((c) => (c.id === clientId ? { ...c, status: newStatus } : c))
-        );
-        addToast({ type: 'success', message: `Moved to ${newStatus}` });
-      } else {
-        addToast({ type: 'error', message: 'Failed to update status' });
-      }
-    } catch {
-      addToast({ type: 'error', message: 'Failed to update status' });
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const handleDragStart = (e: React.DragEvent, clientId: string) => {
-    e.dataTransfer.setData('clientId', clientId);
-    setDraggingId(clientId);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDrop = (e: React.DragEvent, targetStatus: string) => {
-    e.preventDefault();
-    const clientId = e.dataTransfer.getData('clientId');
-    const client = clients.find((c) => c.id === clientId);
-    if (client && client.status !== targetStatus) {
-      updateClientStatus(clientId, targetStatus);
-    }
-    setDraggingId(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggingId(null);
-  };
+  const getStageTotal = (stage: PipelineStage): number =>
+    groupByStage(stage).reduce((sum, c) => sum + (c.budget ?? 0), 0);
 
   if (loading) {
-    return <Loader fullScreen size="lg" message="Loading pipeline..." />;
+    return (
+      <div className="py-8">
+        <Loader size="lg" message="Loading pipeline..." />
+      </div>
+    );
   }
 
-  const isAdmin = ['admin', 'superadmin'].includes(user?.role || '');
-
   return (
-    <div className="py-4 sm:py-6 lg:py-8 space-y-5">
-      {/* Header */}
+    <div className="py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-5">
+      {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            {isAdmin ? 'Deal Pipeline' : 'My Deal Pipeline'}
+            Deal Pipeline
           </h1>
-          <p className="text-gray-500 text-xs sm:text-sm mt-1">
-            {isAdmin
-              ? 'Drag and drop clients between stages to update their status'
-              : 'Your leads — drag and drop to update status'}
+          <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
+            {user?.role === 'user'
+              ? 'Your leads grouped by stage'
+              : 'All company leads grouped by stage'}
+            {clients.length > 0 && (
+              <span className="ml-1.5 text-gray-400">— {clients.length} total</span>
+            )}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <span className="font-semibold text-gray-700">{clients.length}</span>
-          {isAdmin ? ' total leads' : ' your leads'}
-        </div>
+
+        <Link href="/dashboard/clients/add">
+          <button
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5
+              text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
+              rounded-xl shadow-sm transition-colors whitespace-nowrap"
+          >
+            <Plus size={15} />
+            <span className="hidden sm:inline">Add Lead</span>
+            <span className="sm:hidden">Add</span>
+          </button>
+        </Link>
       </div>
 
-      {/* Kanban Board */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 min-h-[60vh]">
-        {COLUMNS.map((col) => {
-          const colClients = clients.filter((c) => c.status === col.status);
-          const Icon = col.icon;
+      {error && (
+        <Alert type="error" title="Error" message={error} onClose={() => setError(null)} />
+      )}
+
+      {/* KANBAN BOARD */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {STAGES.map((stage) => {
+          const stageClients = groupByStage(stage.key);
+          const stageTotal = getStageTotal(stage.key);
 
           return (
             <div
-              key={col.status}
-              className={clsx(
-                'rounded-2xl border-2 border-dashed p-3 transition-colors duration-200',
-                draggingId ? 'border-gray-300 bg-gray-50/50' : `${col.border} ${col.bg}`
-              )}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, col.status)}
+              key={stage.key}
+              className={`rounded-2xl border ${stage.color} flex flex-col min-h-[400px]`}
             >
-              {/* Column Header */}
-              <div className="flex items-center justify-between mb-3 px-1">
-                <div className="flex items-center gap-2">
-                  <div className={clsx('w-7 h-7 rounded-lg flex items-center justify-center', col.badge)}>
-                    <Icon size={14} />
+              {/* Stage header */}
+              <div className="px-4 py-3 border-b border-gray-200/60 bg-white/40 rounded-t-2xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${stage.accent}`} />
+                    <h3 className="text-sm font-bold text-gray-800">
+                      {stage.label}
+                    </h3>
                   </div>
-                  <h3 className="text-sm font-semibold text-gray-800">{col.label}</h3>
+                  <span className="text-xs font-semibold text-gray-600 bg-white px-2 py-0.5 rounded-full">
+                    {stageClients.length}
+                  </span>
                 </div>
-                <span className={clsx('text-xs font-bold px-2 py-0.5 rounded-full', col.badge)}>
-                  {colClients.length}
-                </span>
+                {stageTotal > 0 && (
+                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                    <IndianRupee size={11} />
+                    {formatCurrency(stageTotal).replace('₹', '')} total
+                  </p>
+                )}
               </div>
 
               {/* Cards */}
-              <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
-                {colClients.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400 text-xs">
-                    Drop leads here
+              <div className="flex-1 p-3 space-y-2 overflow-y-auto max-h-[600px]">
+                {stageClients.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-32 text-center">
+                    <TrendingUp size={20} className="text-gray-300 mb-2" />
+                    <p className="text-xs text-gray-400">No leads here yet</p>
                   </div>
                 ) : (
-                  colClients.map((client) => (
-                    <div
+                  stageClients.map((client) => (
+                    <button
                       key={client.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, client.id)}
-                      onDragEnd={handleDragEnd}
                       onClick={() => router.push(`/dashboard/clients/${client.id}`)}
-                      className={clsx(
-                        'bg-white rounded-xl border border-gray-100 p-3 cursor-grab active:cursor-grabbing',
-                        'hover:shadow-md transition-all duration-150',
-                        'group',
-                        draggingId === client.id && 'opacity-50 scale-95',
-                        updatingId === client.id && 'animate-pulse'
-                      )}
+                      className="w-full text-left bg-white rounded-xl p-3 shadow-sm border
+                        border-gray-100 hover:shadow-md hover:border-blue-200 transition-all"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-gray-900 truncate">
-                            {client.clientName}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs text-gray-400 flex items-center gap-0.5">
-                              <Phone size={10} /> {client.phone}
-                            </span>
-                          </div>
-                        </div>
-                        <GripVertical size={14} className="text-gray-300 group-hover:text-gray-500 shrink-0 mt-0.5" />
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h4 className="text-sm font-bold text-gray-900 truncate">
+                          {client.clientName}
+                        </h4>
+                        <Badge
+                          label={client.inquiryType}
+                          variant="gray"
+                          size="sm"
+                        />
                       </div>
 
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600">
-                          {client.requirementType}
-                        </span>
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600">
-                          {client.inquiryType}
-                        </span>
-                        {client.budget && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-green-50 text-green-700 flex items-center gap-0.5">
-                            <IndianRupee size={8} /> {formatCurrency(client.budget)}
-                          </span>
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-600 flex items-center gap-1.5">
+                          <Phone size={11} className="text-gray-400 shrink-0" />
+                          <span className="truncate">{client.phone}</span>
+                        </p>
+
+                        {client.budget ? (
+                          <p className="text-xs text-gray-700 font-semibold flex items-center gap-1.5">
+                            <IndianRupee size={11} className="text-gray-400 shrink-0" />
+                            {formatCurrency(client.budget).replace('₹', '')}
+                          </p>
+                        ) : null}
+
+                        {client.followUpDate && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                            <Calendar size={11} className="text-gray-400 shrink-0" />
+                            {formatDate(client.followUpDate)}
+                          </p>
+                        )}
+
+                        {client.creator?.name && (
+                          <p className="text-xs text-gray-400 pt-1 border-t border-gray-50 mt-2">
+                            by {client.creator.name}
+                          </p>
                         )}
                       </div>
-
-                      {client.preferredLocation && (
-                        <p className="text-[10px] text-gray-400 mt-1.5 flex items-center gap-0.5 truncate">
-                          <MapPin size={9} /> {client.preferredLocation}
-                        </p>
-                      )}
-
-                      {/* Quick move buttons */}
-                      <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {COLUMNS.filter((c) => c.status !== col.status).map((target) => {
-                          const TIcon = target.icon;
-                          return (
-                            <button
-                              key={target.status}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateClientStatus(client.id, target.status);
-                              }}
-                              title={`Move to ${target.label}`}
-                              className={clsx(
-                                'flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md',
-                                'border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-800 transition-colors'
-                              )}
-                            >
-                              <ArrowRight size={8} />
-                              <TIcon size={9} />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>

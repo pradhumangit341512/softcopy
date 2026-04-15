@@ -1,0 +1,81 @@
+import { z } from 'zod';
+
+/**
+ * Environment schema. Imported at module load by `lib/db.ts` so any missing
+ * / malformed env fails the build (or first request) rather than silently
+ * running with empty strings.
+ *
+ * Group 1 (REQUIRED): app will refuse to start without them.
+ * Group 2 (FEATURE): only validated if the related feature is enabled.
+ */
+const schema = z.object({
+  // ---- Runtime ----
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+
+  // ---- REQUIRED ----
+  DATABASE_URL: z.string().url('DATABASE_URL must be a valid URL'),
+  JWT_SECRET: z
+    .string()
+    .min(32, 'JWT_SECRET must be at least 32 characters'),
+
+  // ---- RECOMMENDED ----
+  OTP_PEPPER: z
+    .string()
+    .min(16, 'OTP_PEPPER must be at least 16 characters')
+    .optional(),
+
+  // ---- Optional feature flags ----
+  BYPASS_AUTH: z.enum(['true', 'false']).optional(),
+
+  // ---- Vercel markers (set by the platform — never by you) ----
+  VERCEL: z.string().optional(),
+  VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
+
+  // ---- Email (Resend) ----
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().optional(),
+
+  // ---- SMS (Twilio) ----
+  TWILIO_ACCOUNT_SID: z
+    .string()
+    .regex(/^AC[0-9a-fA-F]{32}$/, 'TWILIO_ACCOUNT_SID must start with AC and be 34 chars')
+    .optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_PHONE_NUMBER: z.string().optional(),
+
+  // ---- Payments (Razorpay) ----
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+});
+
+type Env = z.infer<typeof schema>;
+
+function loadEnv(): Env {
+  const parsed = schema.safeParse(process.env);
+  if (!parsed.success) {
+    const formatted = parsed.error.issues
+      .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
+      .join('\n');
+    // Throw loudly and early — never let the app boot into an insecure state.
+    throw new Error(
+      `FATAL: Invalid environment variables:\n${formatted}\n\nSee lib/env.ts for the schema.`
+    );
+  }
+
+  // Safety guard: BYPASS_AUTH=true must NEVER be set in production.
+  if (
+    parsed.data.BYPASS_AUTH === 'true' &&
+    (parsed.data.VERCEL_ENV === 'production' ||
+      parsed.data.VERCEL_ENV === 'preview' ||
+      parsed.data.NODE_ENV === 'production')
+  ) {
+    throw new Error(
+      'FATAL: BYPASS_AUTH=true is forbidden in production/preview environments.'
+    );
+  }
+
+  return parsed.data;
+}
+
+export const env: Env = loadEnv();

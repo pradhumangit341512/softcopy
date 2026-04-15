@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import Card, { CardBody, CardHeader } from '@/components/common/Card';
-import ClientForm from '@/components/clients/ClientForm';
-import ActivityTimeline from '@/components/clients/ActivityTimeline';
+import { Card, CardBody, CardHeader } from '@/components/common/Card';
+import { ClientForm } from '@/components/clients/ClientForm';
 import { useClients } from '@/hooks/useClients';
 import { useToast } from '@/components/common/Toast';
-import Loader from '@/components/common/Loader';
-import Button from '@/components/common/ Button';
+import { Loader } from '@/components/common/Loader';
+import { Button } from '@/components/common/Button';
 import { Client } from '@/lib/types';
+import type { ClientFormData } from '@/hooks/useClients';
 
 export default function EditClientPage() {
   const params = useParams();
@@ -40,8 +40,9 @@ export default function EditClientPage() {
         }
         const data = await res.json();
         setClient(data.client || data);
-      } catch (err: any) {
-        setFetchError(err.message);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to fetch client';
+        setFetchError(msg);
       } finally {
         setLoading(false);
       }
@@ -50,8 +51,13 @@ export default function EditClientPage() {
     fetchClient();
   }, [clientId]);
 
-  const handleSubmit = async (data: any) => {
-    const success = await updateClient(clientId, data);
+  const handleSubmit = async (data: Partial<Client>) => {
+    const formData: Partial<ClientFormData> = {
+      ...data,
+      visitingDate: data.visitingDate instanceof Date ? data.visitingDate.toISOString() : data.visitingDate as string | undefined,
+      followUpDate: data.followUpDate instanceof Date ? data.followUpDate.toISOString() : data.followUpDate as string | undefined,
+    };
+    const success = await updateClient(clientId, formData);
     if (success) {
       addToast({
         type: 'success',
@@ -115,35 +121,21 @@ export default function EditClientPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        {/* Form Card */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader title="Client Information" />
-            <CardBody>
-              {saving ? (
-                <Loader size="md" message="Saving..." />
-              ) : (
-                <ClientForm
-                  onSubmit={handleSubmit}
-                  initialData={client}
-                  isLoading={saving}
-                />
-              )}
-            </CardBody>
-          </Card>
-        </div>
-
-        {/* Activity Timeline */}
-        <div className="lg:col-span-1">
-          <Card>
-            <CardHeader title="Activity Timeline" />
-            <CardBody>
-              <ActivityTimeline clientId={clientId} />
-            </CardBody>
-          </Card>
-        </div>
-      </div>
+      {/* Form Card */}
+      <Card>
+        <CardHeader title="Client Information" />
+        <CardBody>
+          {saving ? (
+            <Loader size="md" message="Saving..." />
+          ) : (
+            <ClientForm
+              onSubmit={handleSubmit}
+              initialData={client}
+              isLoading={saving}
+            />
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 }

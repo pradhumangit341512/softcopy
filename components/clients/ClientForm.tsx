@@ -3,7 +3,6 @@
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useEffect, useState } from 'react';
 
 import { clientSchema } from '@/schemas/client.schema';
 import {
@@ -13,8 +12,8 @@ import {
   Client,
 } from '@/lib/types';
 
-import Input from '@/components/common/ Input';
-import Button from '@/components/common/ Button';
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
 
 // Extend schema to allow string dates (HTML date inputs always return strings)
 // Use .passthrough() instead of .strict() so extra fields from initialData
@@ -32,35 +31,12 @@ interface ClientFormProps {
   isLoading?: boolean;
 }
 
-interface TeamMember {
-  id: string;
-  name: string;
-  role: string;
-  status: string;
-}
-
-export default function ClientForm({
+/** Client creation/edit form with Zod validation and date handling */
+export function ClientForm({
   onSubmit,
   initialData,
   isLoading = false,
 }: ClientFormProps) {
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [assignedTo, setAssignedTo] = useState<string>((initialData as any)?.assignedTo || '');
-
-  useEffect(() => {
-    const fetchTeam = async () => {
-      try {
-        const res = await fetch('/api/users', { credentials: 'include' });
-        if (res.ok) {
-          const data = await res.json();
-          setTeamMembers(data.filter((u: TeamMember) => u.status === 'active'));
-        }
-      } catch {
-        // Non-admin users may get 403 — silently ignore
-      }
-    };
-    fetchTeam();
-  }, []);
 
   // Pick only the fields the form uses — prevents extra API fields
   // (id, companyId, createdAt, etc.) from leaking into form state
@@ -69,7 +45,7 @@ export default function ClientForm({
         clientName:        initialData.clientName ?? '',
         phone:             initialData.phone ?? '',
         email:             initialData.email ?? '',
-        companyName:       (initialData as any).companyName ?? '',
+        companyName:       initialData.companyName ?? '',
         requirementType:   initialData.requirementType ?? '',
         inquiryType:       initialData.inquiryType ?? '',
         budget:            initialData.budget,
@@ -78,15 +54,15 @@ export default function ClientForm({
         visitingDate:      initialData.visitingDate
           ? new Date(initialData.visitingDate).toISOString().split('T')[0]
           : '',
-        visitingTime:      (initialData as any).visitingTime ?? '',
+        visitingTime:      (initialData as Record<string, unknown>).visitingTime as string ?? '',
         followUpDate:      initialData.followUpDate
           ? new Date(initialData.followUpDate).toISOString().split('T')[0]
           : '',
         status:            initialData.status ?? 'New',
         source:            initialData.source ?? '',
         notes:             initialData.notes ?? '',
-        propertyVisited:   (initialData as any).propertyVisited ?? false,
-        visitStatus:       (initialData as any).visitStatus ?? 'NotVisited',
+        propertyVisited:   initialData.propertyVisited ?? false,
+        visitStatus:       initialData.visitStatus ?? 'NotVisited',
       }
     : undefined;
 
@@ -96,18 +72,15 @@ export default function ClientForm({
     formState: { errors },
   } = useForm<ClientFormValues>({
     resolver: zodResolver(formSchema) as any,
-    defaultValues: cleanDefaults as any,
+    defaultValues: cleanDefaults as Partial<ClientFormValues> | undefined,
   });
 
   // ✅ Convert strings → Date objects before sending to API
   const submitHandler: SubmitHandler<ClientFormValues> = async (data) => {
-    const selectedMember = teamMembers.find((m) => m.id === assignedTo);
-    const payload: any = {
+    const payload: Partial<Client> = {
       ...data,
       visitingDate: data.visitingDate ? new Date(data.visitingDate) : undefined,
       followUpDate: data.followUpDate ? new Date(data.followUpDate) : undefined,
-      assignedTo: assignedTo || undefined,
-      assignedToName: selectedMember?.name || undefined,
     };
     await onSubmit(payload);
   };
@@ -120,7 +93,7 @@ export default function ClientForm({
 
   return (
     <form
-      onSubmit={handleSubmit(submitHandler)}
+      onSubmit={handleSubmit(submitHandler as SubmitHandler<Record<string, unknown>>)}
       className="w-full max-w-2xl mx-auto space-y-5 px-4 sm:px-6"
       noValidate
     >
@@ -267,56 +240,13 @@ export default function ClientForm({
         </div>
       </div>
 
-      {/* ── Source ── */}
+      {/* ── Source & Notes ── */}
       <Input
         label="Source"
         placeholder="e.g. Website, Referral"
         {...register('source')}
         error={errors.source?.message}
       />
-
-      {/* ── Assign to Team Member (Admin Only) ── */}
-      {teamMembers.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              className="text-blue-600">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <line x1="19" y1="8" x2="19" y2="14"/>
-              <line x1="22" y1="11" x2="16" y2="11"/>
-            </svg>
-            <label className="text-sm font-semibold text-blue-800">
-              Assign to Team Member
-            </label>
-            <span className="text-[10px] font-medium text-blue-500 bg-blue-100 px-2 py-0.5 rounded-full">
-              Optional
-            </span>
-          </div>
-          <p className="text-xs text-blue-600">
-            Select a team member to assign this lead. It will appear in their "My Work" page automatically.
-          </p>
-          <select
-            value={assignedTo}
-            onChange={(e) => setAssignedTo(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm text-gray-900 border border-blue-200 rounded-lg bg-white
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-          >
-            <option value="">-- Not Assigned (Only you can see) --</option>
-            {teamMembers.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name} {member.role === 'admin' ? '(Admin)' : '(Team Member)'}
-              </option>
-            ))}
-          </select>
-          {assignedTo && (
-            <p className="text-xs text-green-600 font-medium">
-              This lead will show in {teamMembers.find(m => m.id === assignedTo)?.name}'s "My Work" page after saving.
-            </p>
-          )}
-        </div>
-      )}
 
       <Input
         label="Notes"

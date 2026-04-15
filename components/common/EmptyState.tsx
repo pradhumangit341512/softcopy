@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import Button from './ Button';
+import { Button } from './Button';
 
 interface EmptyStateProps {
   icon: ReactNode;
@@ -12,7 +12,8 @@ interface EmptyStateProps {
   image?: string;
 }
 
-export default function EmptyState({
+/** Empty state placeholder with icon, title, description, and optional action */
+export function EmptyState({
   icon,
   title,
   description,

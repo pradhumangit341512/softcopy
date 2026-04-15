@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/common/Toast';
-import Alert from '@/components/common/Alert';
+import { Alert } from '@/components/common/Alert';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from 'lucide-react';
-import Input from '@/components/common/ Input';
-import Button from '@/components/common/ Button';
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
 
 type Step = 'credentials' | 'otp';
 
@@ -72,18 +72,13 @@ export default function LoginPage() {
       if (!res.ok) {
         setLocalError(data.error || 'Login failed');
         // Still transition to OTP step if server says OTP is required (even on rate-limit)
-        if (data.requireOTP && step !== 'otp') {
-          setStep('otp');
-          startCountdown();
-        }
+        if (data.requireOTP && step !== 'otp') setStep('otp');
         return;
       }
 
-      if (data.requireOTP) {
-        setStep('otp');
-        startCountdown();
-        addToast({ type: 'success', message: data.message || 'OTP sent to your email!' });
-      }
+      setStep('otp');
+      startCountdown();
+      addToast({ type: 'success', message: 'OTP sent to your email!' });
     } catch {
       setLocalError('Something went wrong. Please try again.');
     } finally {

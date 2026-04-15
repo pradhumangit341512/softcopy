@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   LineChart,
   Line,
@@ -17,7 +16,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useAuth } from '@/hooks/useAuth';
-import Loader from '@/components/common/Loader';
+import { Loader } from '@/components/common/Loader';
 import {
   Users,
   CalendarCheck,
@@ -26,6 +25,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { CustomTooltipProps, TooltipPayloadEntry } from '@/lib/utils';
 
 interface AnalyticsData {
   summary: {
@@ -33,7 +34,6 @@ interface AnalyticsData {
     todayVisits: number;
     closedDeals: number;
     totalCommission: number;
-    allTimeCommission?: number;
   };
   leadsByStatus: Array<{
     status: string;
@@ -58,7 +58,7 @@ const StatCard = ({
 }: {
   title: string;
   value: string | number;
-  icon: any;
+  icon: LucideIcon;
   color: string;
   sub?: string;
   trend?: 'up' | 'down';
@@ -92,12 +92,12 @@ const StatCard = ({
 );
 
 // Custom tooltip for charts
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3">
         <p className="text-xs font-semibold text-gray-500 mb-1">{label}</p>
-        {payload.map((p: any, i: number) => (
+        {payload.map((p: TooltipPayloadEntry, i: number) => (
           <p key={i} className="text-sm font-bold" style={{ color: p.color }}>
             {p.name}: {p.value}
           </p>
@@ -110,9 +110,17 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 // Custom pie label
 const renderCustomLabel = ({
-  cx, cy, midAngle, innerRadius, outerRadius, percent, name,
-}: any) => {
-  if (percent < 0.05) return null;
+  cx, cy, midAngle, innerRadius, outerRadius, percent,
+}: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  percent?: number;
+  name?: string;
+}) => {
+  if (!cx || !cy || !midAngle || !innerRadius || !outerRadius || !percent || percent < 0.05) return null;
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -127,22 +135,12 @@ const renderCustomLabel = ({
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
-  const router = useRouter();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = ['admin', 'superadmin'].includes(user?.role || '');
-
-  // Redirect non-admin users — analytics is admin-only
   useEffect(() => {
-    if (user && !isAdmin) {
-      router.replace('/dashboard');
-    }
-  }, [user, isAdmin, router]);
-
-  useEffect(() => {
-    if (user && isAdmin) fetchAnalytics();
-  }, [user, isAdmin]);
+    if (user) fetchAnalytics();
+  }, [user]);
 
   const fetchAnalytics = async () => {
     try {
@@ -164,7 +162,6 @@ export default function AnalyticsPage() {
     }
   };
 
-  if (!isAdmin) return <Loader fullScreen size="lg" message="Redirecting..." />;
   if (loading) return <Loader fullScreen size="lg" message="Loading analytics..." />;
 
   if (!data) {
@@ -216,7 +213,7 @@ export default function AnalyticsPage() {
     },
     {
       title: 'Total Commission',
-      value: `₹${(data.summary.allTimeCommission || data.summary.totalCommission || 0).toLocaleString('en-IN')}`,
+      value: `₹${(data.summary.totalCommission || 0).toLocaleString('en-IN')}`,
       icon: BadgeDollarSign,
       color: '#f59e0b',
       sub: '+18%',

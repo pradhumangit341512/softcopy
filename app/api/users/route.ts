@@ -1,160 +1,131 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken, hashPassword } from "@/lib/auth";
-import { z } from "zod";
+import {
+  getTokenCookie,
+  verifyToken,
+  hashPassword,
+  type AuthTokenPayload,
+} from "@/lib/auth";
+import { requireAdmin } from "@/lib/authorize";
+import { createUserSchema, parseBody } from "@/lib/validations";
+import { recordAudit } from "@/lib/audit";
 
-type AuthPayload = {
-  userId: string;
-  companyId: string;
-  role: string;
-  email: string;
-};
+export const runtime = "nodejs";
 
-const createUserSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/),
-  password: z.string().min(6),
-  role: z.enum(["admin", "user"]),
-  designation: z.string().optional(),
-});
-
-function generateEmployeeId(companyPrefix: string, count: number): string {
-  const num = String(count + 1).padStart(3, "0");
-  const prefix = companyPrefix.substring(0, 3).toUpperCase();
-  return `${prefix}-${num}`;
+async function authFromCookie(): Promise<AuthTokenPayload | null> {
+  const token = await getTokenCookie();
+  if (!token) return null;
+  return verifyToken(token);
 }
 
 // ================= GET USERS =================
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const payload = await authFromCookie();
+    if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // FIX: await verifyToken
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
 
-    if (!payload) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const where = { companyId: payload.companyId, deletedAt: null };
+    const take = 1000; // company size guardrail — widen once pagination is wired up
+    const [users, total] = await Promise.all([
+      db.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+        take,
+      }),
+      db.user.count({ where }),
+    ]);
 
-    // Only admin can view team
-    const user = await db.user.findUnique({
-      where: { id: payload.userId },
+    return NextResponse.json({
+      users,
+      pagination: { total, page: 1, limit: take, pages: 1 },
     });
-
-    if (!user || !["admin", "superadmin"].includes(user.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const users = await db.user.findMany({
-      where: { companyId: payload.companyId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        employeeId: true,
-        designation: true,
-        profilePhoto: true,
-        status: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
-    return NextResponse.json(users);
   } catch (error) {
     console.error("Fetch users error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch users" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
   }
 }
 
 // ================= CREATE USER =================
 export async function POST(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const payload = await authFromCookie();
+    if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
 
-    if (!payload) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const parsed = await parseBody(req, createUserSchema);
+    if (!parsed.ok) return parsed.response;
+    const data = parsed.data;
 
-    // Only admin can create users
-    const requester = await db.user.findUnique({
-      where: { id: payload.userId },
-    });
-
-    if (!requester || !["admin", "superadmin"].includes(requester.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const validated = createUserSchema.parse(body);
-
-    // Check duplicate
     const existing = await db.user.findFirst({
-      where: {
-        OR: [{ email: validated.email }, { phone: validated.phone }],
-      },
+      where: { OR: [{ email: data.email }, { phone: data.phone }] },
+      select: { email: true, phone: true },
     });
-
     if (existing) {
+      const field = existing.email === data.email ? "email" : "phone";
       return NextResponse.json(
-        { error: "User already exists" },
-        { status: 400 }
+        { error: `User with this ${field} already exists` },
+        { status: 409 }
       );
     }
 
-    const hashedPassword = await hashPassword(validated.password);
+    const hashedPassword = await hashPassword(data.password);
 
-    // Auto-generate employee ID
-    const company = await db.company.findUnique({
-      where: { id: payload.companyId },
-      select: { companyName: true },
-    });
-    const userCount = await db.user.count({ where: { companyId: payload.companyId } });
-    const employeeId = generateEmployeeId(company?.companyName || "EMP", userCount);
+    try {
+      const newUser = await db.user.create({
+        data: {
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          password: hashedPassword,
+          role: data.role,
+          companyId: payload.companyId,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
 
-    const newUser = await db.user.create({
-      data: {
-        name: validated.name,
-        email: validated.email,
-        phone: validated.phone,
-        password: hashedPassword,
-        role: validated.role,
-        designation: validated.designation || null,
-        employeeId,
+      await recordAudit({
         companyId: payload.companyId,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        employeeId: true,
-        designation: true,
-        status: true,
-      },
-    });
+        userId: payload.userId,
+        action: "user.create",
+        resource: "User",
+        resourceId: newUser.id,
+        metadata: { role: data.role },
+        req,
+      });
 
-    return NextResponse.json(newUser, { status: 201 });
+      return NextResponse.json(newUser, { status: 201 });
+    } catch (err: unknown) {
+      const prismaErr = err as { code?: string; meta?: { target?: string[] } };
+      if (prismaErr?.code === "P2002") {
+        const field = prismaErr.meta?.target?.[0] || "field";
+        return NextResponse.json(
+          { error: `User with this ${field} already exists` },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
   } catch (error) {
     console.error("Create user error:", error);
-    return NextResponse.json(
-      { error: "Failed to create user" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
   }
 }

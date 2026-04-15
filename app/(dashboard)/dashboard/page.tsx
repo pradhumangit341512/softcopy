@@ -1,22 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/hooks/useAuth';
-import Dashboard from '@/components/dashboard/Dashboard';
-import Loader from '@/components/common/Loader';
+import { Loader } from '@/components/common/Loader';
+
+const Dashboard = dynamic(() => import('@/components/dashboard/Dashboard').then(mod => ({ default: mod.Dashboard })), {
+  loading: () => <Loader size="md" message="Loading dashboard..." />,
+});
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (loading) {
-    return <Loader size="md" message="Loading dashboard..." />;
-  }
 
   // ── Greeting based on time of day ──
   const hour = new Date().getHours();

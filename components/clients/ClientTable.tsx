@@ -1,9 +1,9 @@
 'use client';
 
 import { Edit2, Trash2 } from 'lucide-react';
-import Badge from '@/components/common/Badge';
-import { formatCurrency } from '@/lib/utils';
-import Button from '@/components/common/ Button';
+import { Badge } from '@/components/common/Badge';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { Button } from '@/components/common/Button';
 
 import type { Client } from '@/lib/types';
 
@@ -13,40 +13,25 @@ interface ClientTableProps {
   onDelete?: (id: string) => Promise<void>;
 }
 
-const formatDate = (date?: Date | string | null): string => {
-  if (!date) return '—';
-  const d = new Date(date);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
-
-export default function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
+/** Table component for displaying a list of clients with inline actions */
+export function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-      <table className="w-full text-sm min-w-[1200px]">
+      <table className="w-full text-sm min-w-[900px]">
 
         {/* ── HEADER ── */}
-        <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-semibold tracking-wider">
+        <thead className="bg-gray-100 text-gray-600 uppercase text-xs tracking-wider">
           <tr>
-            <th className="px-3 sm:px-4 py-3 text-center w-20">Actions</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Client Name</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Phone</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Email</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Requirement</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Inquiry</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Status</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Visited</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Budget</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Location</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Address</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Visit Date</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Follow Up</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Assigned To</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Source</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Notes</th>
+            <th className="px-4 py-3 text-center w-20">Actions</th>
+            <th className="px-4 py-3 text-left">Client</th>
+            <th className="px-4 py-3 text-left">Contact</th>
+            <th className="px-4 py-3 text-left">Requirement</th>
+            <th className="px-4 py-3 text-left">Budget</th>
+            <th className="px-4 py-3 text-left">Location</th>
+            <th className="px-4 py-3 text-left">Visit Date</th>
+            <th className="px-4 py-3 text-left">Follow Up</th>
+            <th className="px-4 py-3 text-left">Visited</th>
+            <th className="px-4 py-3 text-left">Status</th>
           </tr>
         </thead>
 
@@ -54,7 +39,7 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
         <tbody className="divide-y divide-gray-100 bg-white">
           {clients.length === 0 ? (
             <tr>
-              <td colSpan={16} className="text-center py-12 text-gray-400 text-sm">
+              <td colSpan={10} className="text-center py-12 text-gray-400 text-sm">
                 No clients found
               </td>
             </tr>
@@ -66,7 +51,7 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
               >
 
                 {/* ACTIONS */}
-                <td className="px-3 sm:px-4 py-3 text-center">
+                <td className="px-4 py-3 text-center">
                   <div className="flex items-center justify-center gap-1.5">
                     <Button
                       size="sm"
@@ -91,49 +76,62 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
                   </div>
                 </td>
 
-                {/* CLIENT NAME */}
-                <td className="px-3 sm:px-4 py-3">
+                {/* CLIENT */}
+                <td className="px-4 py-3">
                   <p className="font-semibold text-gray-900 leading-tight">
                     {client.clientName}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {client.creator?.name ? `by ${client.creator.name}` : '—'}
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {client.creator?.name ? `by ${client.creator.name}` : 'Unassigned'}
                   </p>
                 </td>
 
-                {/* PHONE */}
-                <td className="px-3 sm:px-4 py-3 text-gray-900 whitespace-nowrap">
-                  {client.phone}
+                {/* CONTACT */}
+                <td className="px-4 py-3">
+                  <p className="text-gray-900">{client.phone}</p>
+                  {client.email && (
+                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[160px]">
+                      {client.email}
+                    </p>
+                  )}
                 </td>
 
-                {/* EMAIL */}
-                <td className="px-3 sm:px-4 py-3">
-                  <span className="text-gray-700 truncate block max-w-[180px]">
-                    {client.email || '—'}
-                  </span>
+                {/* REQUIREMENT */}
+                <td className="px-4 py-3">
+                  <p className="text-gray-900">{client.requirementType}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{client.inquiryType}</p>
                 </td>
 
-                {/* REQUIREMENT TYPE */}
-                <td className="px-3 sm:px-4 py-3">
-                  <Badge label={client.requirementType} variant="primary" />
+                {/* BUDGET */}
+                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                  {client.budget ? formatCurrency(client.budget) : '—'}
                 </td>
 
-                {/* INQUIRY TYPE */}
-                <td className="px-3 sm:px-4 py-3">
+                {/* LOCATION */}
+                <td className="px-4 py-3 text-gray-700 max-w-[120px] truncate">
+                  {client.preferredLocation || '—'}
+                </td>
+
+                {/* VISIT DATE */}
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  {formatDate(client.visitingDate)}
+                </td>
+
+                {/* FOLLOW UP */}
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  {formatDate(client.followUpDate)}
+                </td>
+
+                {/* VISITED */}
+                <td className="px-4 py-3">
                   <Badge
-                    label={client.inquiryType}
-                    variant={
-                      client.inquiryType === 'Buy'
-                        ? 'success'
-                        : client.inquiryType === 'Rent'
-                        ? 'warning'
-                        : 'gray'
-                    }
+                    label={client.propertyVisited ? 'Visited' : 'Not Visited'}
+                    variant={client.propertyVisited ? 'success' : 'warning'}
                   />
                 </td>
 
                 {/* STATUS */}
-                <td className="px-3 sm:px-4 py-3">
+                <td className="px-4 py-3">
                   <Badge
                     label={client.status}
                     variant={
@@ -141,71 +139,9 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
                         ? 'success'
                         : client.status === 'Rejected'
                         ? 'danger'
-                        : client.status === 'Interested'
-                        ? 'warning'
                         : 'primary'
                     }
                   />
-                </td>
-
-                {/* PROPERTY VISITED */}
-                <td className="px-3 sm:px-4 py-3">
-                  <Badge
-                    label={client.propertyVisited ? 'Yes' : 'No'}
-                    variant={client.propertyVisited ? 'success' : 'gray'}
-                  />
-                </td>
-
-                {/* BUDGET */}
-                <td className="px-3 sm:px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
-                  {client.budget ? formatCurrency(client.budget) : '—'}
-                </td>
-
-                {/* PREFERRED LOCATION */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700">
-                  <span className="truncate block max-w-[140px]">
-                    {client.preferredLocation || '—'}
-                  </span>
-                </td>
-
-                {/* ADDRESS */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700">
-                  <span className="truncate block max-w-[160px]">
-                    {client.address || '—'}
-                  </span>
-                </td>
-
-                {/* VISITING DATE */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap">
-                  {formatDate(client.visitingDate)}
-                </td>
-
-                {/* FOLLOW UP DATE */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap">
-                  {formatDate(client.followUpDate)}
-                </td>
-
-                {/* ASSIGNED TO */}
-                <td className="px-3 sm:px-4 py-3">
-                  {(client as any).assignedToName ? (
-                    <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                      {(client as any).assignedToName}
-                    </span>
-                  ) : (
-                    <span className="text-gray-400 text-xs">Unassigned</span>
-                  )}
-                </td>
-
-                {/* SOURCE */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700">
-                  {client.source || '—'}
-                </td>
-
-                {/* NOTES */}
-                <td className="px-3 sm:px-4 py-3 text-gray-600">
-                  <span className="truncate block max-w-[180px]" title={client.notes || ''}>
-                    {client.notes || '—'}
-                  </span>
                 </td>
 
               </tr>

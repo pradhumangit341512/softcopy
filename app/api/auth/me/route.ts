@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
 import { db } from "@/lib/db";
+import { verifyToken } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
-    // ✅ "auth_token" — matches login & signup cookie name
     const token = req.cookies.get("auth_token")?.value;
-
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let decoded: any;
-    try {
-      if (!process.env.JWT_SECRET) {
-        return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
-      }
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
+    const decoded = await verifyToken(token);
+    if (!decoded) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
@@ -32,11 +25,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // If user was deactivated, reject the session
     if (user.status !== "active") {
       return NextResponse.json({ error: "Account is inactive" }, { status: 403 });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...safeUser } = user;
     return NextResponse.json({ user: safeUser }, { status: 200 });
   } catch (error) {

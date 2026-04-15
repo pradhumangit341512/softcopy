@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-import Alert from '@/components/common/Alert';
+import { Alert } from '@/components/common/Alert';
 import { Mail, ArrowRight, Phone } from 'lucide-react';
 import { useToast } from '@/components/common/Toast';
-import Button from '@/components/common/ Button';
-import Input from '@/components/common/ Input';
+import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
 
 export default function ForgotPasswordPage() {
   const { addToast } = useToast();

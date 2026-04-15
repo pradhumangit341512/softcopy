@@ -5,15 +5,15 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Download, Users, SlidersHorizontal, X } from 'lucide-react';
 
-import Loader from '@/components/common/Loader';
-import ClientTable from '@/components/clients/ClientTable';
+import { Loader } from '@/components/common/Loader';
+import { ClientTable } from '@/components/clients/ClientTable';
 import { useAuth } from '@/hooks/useAuth';
-import Alert from '@/components/common/Alert';
-import Pagination from '@/components/common/Pagination';
+import { Alert } from '@/components/common/Alert';
+import { Pagination } from '@/components/common/Pagination';
 
 import type { Client } from '@/lib/types';
-import ClientFilters from '@/components/clients/ ClientFilters';
-import Button from '@/components/common/ Button';
+import { ClientFilters } from '@/components/clients/ClientFilters';
+import { Button } from '@/components/common/Button';
 
 export default function ClientsPage() {
   const router       = useRouter();
@@ -35,7 +35,6 @@ export default function ClientsPage() {
   const statusFromUrl  = searchParams.get('status')   || '';
   const dateFromUrl    = searchParams.get('dateFrom')  || '';
   const dateToUrl      = searchParams.get('dateTo')    || '';
-  const viewFromUrl    = searchParams.get('view')      || '';  // "my" for assigned-to-me
   const pageFromUrl    = parseInt(searchParams.get('page') || '1', 10);
 
   // Local state for filter UI — synced from URL
@@ -86,7 +85,6 @@ export default function ClientsPage() {
         ...(statusFromUrl && { status:   statusFromUrl }),
         ...(dateFromUrl   && { dateFrom: dateFromUrl }),
         ...(dateToUrl     && { dateTo:   dateToUrl }),
-        ...(viewFromUrl   && { view:     viewFromUrl }),
         page: String(pageFromUrl),
       });
       const response = await fetch(`/api/clients?${params}`, { credentials: 'include' });
@@ -95,12 +93,13 @@ export default function ClientsPage() {
       setClients(data.clients || []);
       setTotalPages(data.pagination?.pages || 1);
       setTotalCount(data.pagination?.total || 0);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch clients');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch clients';
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [user?.id, searchFromUrl, statusFromUrl, dateFromUrl, dateToUrl, viewFromUrl, pageFromUrl]);
+  }, [user?.id, searchFromUrl, statusFromUrl, dateFromUrl, dateToUrl, pageFromUrl]);
 
   useEffect(() => {
     if (authLoading || !user?.id) return;
@@ -141,7 +140,10 @@ export default function ClientsPage() {
       const res = await fetch(`/api/clients/${id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Delete failed');
       fetchClients();
-    } catch (err: any) { setError(err.message); }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete client';
+      setError(msg);
+    }
   };
 
   return (
@@ -151,52 +153,14 @@ export default function ClientsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            {['admin', 'superadmin'].includes(user?.role || '') ? 'Clients' : 'My Clients'}
+            Clients
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-            {['admin', 'superadmin'].includes(user?.role || '')
-              ? 'Manage all your property leads'
-              : 'Your assigned and created leads'}
+            Manage all your property leads
             {!loading && totalCount > 0 && (
               <span className="ml-1.5 text-gray-400">— {totalCount} total</span>
             )}
           </p>
-
-          {/* All Leads / My Leads toggle — only for admins who can see all */}
-          {['admin', 'superadmin'].includes(user?.role || '') && (
-            <div className="flex items-center gap-1 mt-2 bg-gray-100 rounded-lg p-0.5 w-fit">
-              <button
-                onClick={() => {
-                  const params = new URLSearchParams(searchParams.toString());
-                  params.delete('view');
-                  params.set('page', '1');
-                  router.push(`/dashboard/clients?${params.toString()}`);
-                }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                  !viewFromUrl
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                All Leads
-              </button>
-              <button
-                onClick={() => {
-                  const params = new URLSearchParams(searchParams.toString());
-                  params.set('view', 'my');
-                  params.set('page', '1');
-                  router.push(`/dashboard/clients?${params.toString()}`);
-                }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                  viewFromUrl === 'my'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                My Leads
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Action buttons */}
@@ -364,7 +328,7 @@ export default function ClientsPage() {
                 <ClientTable
                   clients={clients}
                   onEdit={handleEdit}
-                  onDelete={['admin', 'superadmin'].includes(user?.role || '') ? handleDelete : undefined}
+                  onDelete={handleDelete}
                 />
               </div>
             </div>

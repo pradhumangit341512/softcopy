@@ -17,7 +17,8 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   placeholder?: string;
 }
 
-export default function Select({
+/** Form select dropdown component with label, error, and icon support */
+export function Select({
   label,
   options,
   error,

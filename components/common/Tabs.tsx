@@ -17,7 +17,8 @@ interface TabsProps {
   variant?: 'default' | 'pills' | 'underline';
 }
 
-export default function Tabs({
+/** Tabbed content component with default, pills, and underline variants */
+export function Tabs({
   tabs,
   defaultTab,
   onChange,

@@ -1,34 +1,11 @@
 'use client';
 
-import { Edit2, Trash2, Share2 } from 'lucide-react';
-import Badge from '@/components/common/Badge';
-import { formatCurrency } from '@/lib/utils';
-import Button from '@/components/common/ Button';
+import { Edit2, Trash2 } from 'lucide-react';
+import { Badge } from '@/components/common/Badge';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { Button } from '@/components/common/Button';
 
 import type { Property } from '@/lib/types';
-
-function generateWhatsAppMessage(property: Property): string {
-  const lines = [
-    `*${property.propertyName}*`,
-    ``,
-    `Type: ${property.propertyType}${property.bhkType ? ` - ${property.bhkType}` : ''}`,
-    `Address: ${property.address}`,
-    property.area ? `Area: ${property.area}` : '',
-    property.sellingPrice ? `Price: ${formatCurrency(property.sellingPrice)}` : '',
-    property.askingRent ? `Rent: ${formatCurrency(property.askingRent)}/month` : '',
-    `Status: ${property.status}`,
-    property.description ? `\n${property.description}` : '',
-    ``,
-    `Contact for more details.`,
-  ].filter(Boolean).join('\n');
-  return lines;
-}
-
-function shareOnWhatsApp(property: Property) {
-  const message = generateWhatsAppMessage(property);
-  const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-  window.open(url, '_blank');
-}
 
 interface PropertyTableProps {
   properties: Property[];
@@ -36,17 +13,8 @@ interface PropertyTableProps {
   onDelete?: (id: string) => Promise<void>;
 }
 
-const formatDate = (date?: Date | string | null): string => {
-  if (!date) return '—';
-  const d = new Date(date);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
-
-export default function PropertyTable({ properties, onEdit, onDelete }: PropertyTableProps) {
+/** Table component for displaying a list of properties with inline actions */
+export function PropertyTable({ properties, onEdit, onDelete }: PropertyTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
       <table className="w-full text-sm min-w-[900px]">
@@ -94,16 +62,6 @@ export default function PropertyTable({ properties, onEdit, onDelete }: Property
                     >
                       <Edit2 size={14} />
                     </Button>
-
-                    <button
-                      onClick={() => shareOnWhatsApp(property)}
-                      title="Share on WhatsApp"
-                      className="w-7 h-7 rounded-lg border border-green-100 bg-green-50
-                        flex items-center justify-center text-green-500
-                        hover:bg-green-100 hover:text-green-700 transition-colors"
-                    >
-                      <Share2 size={14} />
-                    </button>
 
                     {onDelete && (
                       <button

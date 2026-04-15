@@ -4,18 +4,18 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import Card, { CardBody, CardHeader } from '@/components/common/Card';
-import PropertyForm from '@/components/properties/PropertyForm';
+import { Card, CardBody, CardHeader } from '@/components/common/Card';
+import { PropertyForm, type PropertyFormValues } from '@/components/properties/PropertyForm';
 import { useToast } from '@/components/common/Toast';
-import Loader from '@/components/common/Loader';
-import Button from '@/components/common/ Button';
+import { Loader } from '@/components/common/Loader';
+import { Button } from '@/components/common/Button';
 
 export default function AddPropertyPage() {
   const router = useRouter();
   const { addToast } = useToast();
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (data: any) => {
+  const handleSubmit = async (data: PropertyFormValues) => {
     setLoading(true);
     try {
       const res = await fetch('/api/properties', {
@@ -36,10 +36,11 @@ export default function AddPropertyPage() {
       });
       router.push('/dashboard/properties');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add property';
       addToast({
         type: 'error',
-        message: err.message || 'Failed to add property',
+        message: msg,
       });
       return false;
     } finally {

@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { Camera, User, Lock, Settings, LogOut, Eye, EyeOff, Shield, Phone, Mail, Pencil, X, Check } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/common/Toast';
-import Input from '@/components/common/ Input';
+import { Input } from '@/components/common/Input';
 
 type TabId = 'profile' | 'security' | 'account';
 
-const TABS: { id: TabId; label: string; icon: any }[] = [
+const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'profile',  label: 'Profile',  icon: User   },
   { id: 'security', label: 'Security', icon: Lock   },
   { id: 'account',  label: 'Account',  icon: Settings },
@@ -29,7 +30,7 @@ const RoleBadge = ({ role }: { role: string }) => {
 };
 
 // ── Info row ──
-const InfoRow = ({ icon: Icon, label, value }: { icon: any; label: string; value: string }) => (
+const InfoRow = ({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) => (
   <div className="flex items-center gap-4 py-3.5 border-b border-gray-50 last:border-0">
     <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center flex-shrink-0">
       <Icon size={16} className="text-gray-400" />

@@ -1,327 +1,355 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
-import Loader from '@/components/common/Loader';
 import {
-  Trophy, Users, TrendingUp, BadgeDollarSign,
-  Medal, Crown, Award, Target,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts';
+import {
+  Users, TrendingUp, CheckCircle2, Clock, IndianRupee, Award,
 } from 'lucide-react';
-import clsx from 'clsx';
 
-interface UserMetrics {
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    profilePhoto?: string;
-  };
-  metrics: {
-    totalClients: number;
-    monthlyClients: number;
-    dealsClosedAllTime: number;
-    dealsClosedMonth: number;
-    totalCommission: number;
-    monthlyCommission: number;
-    totalProperties: number;
+import { Loader } from '@/components/common/Loader';
+import { Alert } from '@/components/common/Alert';
+import { Badge } from '@/components/common/Badge';
+import { useAuth } from '@/hooks/useAuth';
+import { formatCurrency, CHART_COLORS, CustomTooltipProps, TooltipPayloadEntry } from '@/lib/utils';
+
+/** Team member with performance stats from /api/team-performance */
+interface TeamMemberPerformance {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  profilePhoto?: string | null;
+  joinedAt: string;
+  stats: {
+    totalLeads: number;
+    dealsClosed: number;
     conversionRate: number;
+    commissionEarned: number;
+    commissionCount: number;
+    pendingFollowUps: number;
   };
 }
 
-interface TeamTotals {
-  totalClients: number;
-  monthlyClients: number;
-  dealsClosedMonth: number;
-  monthlyCommission: number;
-  totalMembers: number;
-}
+/** Custom tooltip for Recharts that formats currency nicely */
+const ChartTooltip = ({ active, payload, label }: CustomTooltipProps) => {
+  if (active && payload?.length) {
+    return (
+      <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3">
+        <p className="text-xs font-semibold text-gray-500 mb-1">{label}</p>
+        {payload.map((p: TooltipPayloadEntry, i: number) => (
+          <p key={i} className="text-sm font-bold" style={{ color: p.color }}>
+            {p.name}: {p.value}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
 
-const RANK_ICONS = [Crown, Medal, Award];
-const RANK_COLORS = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
-
-function formatCurrency(amount: number) {
-  if (amount >= 10000000) return `${(amount / 10000000).toFixed(1)} Cr`;
-  if (amount >= 100000) return `${(amount / 100000).toFixed(1)}L`;
-  if (amount >= 1000) return `${(amount / 1000).toFixed(0)}K`;
-  return `${amount.toLocaleString('en-IN')}`;
-}
-
+/**
+ * Team Performance page — admin/superadmin only.
+ * Shows per-member stats: leads, deals, conversion, commission.
+ */
 export default function TeamPerformancePage() {
-  const { user } = useAuth();
   const router = useRouter();
-  const [data, setData] = useState<{ performance: UserMetrics[]; teamTotals: TeamTotals } | null>(null);
+  const { user, isLoading: authLoading } = useAuth();
+
+  const [members, setMembers] = useState<TeamMemberPerformance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const isAdmin = ['admin', 'superadmin'].includes(user?.role || '');
-
-  // Redirect non-admin users
-  useEffect(() => {
-    if (user && !isAdmin) {
-      router.replace('/dashboard');
-    }
-  }, [user, isAdmin, router]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    const fetchPerformance = async () => {
-      try {
-        const res = await fetch('/api/team-performance', {
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (res.ok) {
-          setData(await res.json());
-        }
-      } catch (err) {
-        console.error('Failed to fetch team performance:', err);
-      } finally {
-        setLoading(false);
+  const fetchPerformance = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/team-performance', { credentials: 'include' });
+      if (res.status === 403) {
+        setError('Only admins can access team performance');
+        return;
       }
-    };
-    fetchPerformance();
+      if (!res.ok) throw new Error('Failed to fetch team performance');
+      const data = await res.json();
+      setMembers(data.members || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (!isAdmin) return <Loader fullScreen size="lg" message="Redirecting..." />;
-  if (loading) return <Loader fullScreen size="lg" message="Loading team performance..." />;
+  useEffect(() => {
+    if (authLoading || !user) return;
 
-  if (!data) {
+    // Redirect non-admins
+    if (user.role !== 'admin' && user.role !== 'superadmin') {
+      router.replace('/dashboard');
+      return;
+    }
+
+    fetchPerformance();
+  }, [authLoading, user, router, fetchPerformance]);
+
+  if (authLoading || loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-gray-400 text-sm">Failed to load team performance</p>
+      <div className="py-8">
+        <Loader size="lg" message="Loading performance data..." />
       </div>
     );
   }
 
-  const { performance, teamTotals } = data;
-  const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  if (user?.role !== 'admin' && user?.role !== 'superadmin') {
+    return null;
+  }
+
+  // Chart data — top 10 members by leads
+  const chartData = [...members]
+    .sort((a, b) => b.stats.totalLeads - a.stats.totalLeads)
+    .slice(0, 10)
+    .map((m) => ({
+      name: m.name.split(' ')[0], // first name only, easier to read
+      Leads: m.stats.totalLeads,
+      Deals: m.stats.dealsClosed,
+    }));
+
+  // Totals across the team
+  const teamTotals = members.reduce(
+    (acc, m) => ({
+      totalLeads: acc.totalLeads + m.stats.totalLeads,
+      dealsClosed: acc.dealsClosed + m.stats.dealsClosed,
+      commissionEarned: acc.commissionEarned + m.stats.commissionEarned,
+      pendingFollowUps: acc.pendingFollowUps + m.stats.pendingFollowUps,
+    }),
+    { totalLeads: 0, dealsClosed: 0, commissionEarned: 0, pendingFollowUps: 0 }
+  );
+
+  const topPerformer = [...members]
+    .sort((a, b) => b.stats.dealsClosed - a.stats.dealsClosed)[0];
 
   return (
     <div className="py-4 sm:py-6 lg:py-8 space-y-5 sm:space-y-6">
-      {/* Header */}
+      {/* HEADER */}
       <div>
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
           Team Performance
         </h1>
-        <p className="text-gray-500 mt-1 text-xs sm:text-sm">
-          {currentMonth} — Leaderboard and individual metrics
+        <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
+          Track how each team member is performing
         </p>
       </div>
 
-      {/* Team Summary Cards */}
+      {error && (
+        <Alert type="error" title="Error" message={error} onClose={() => setError(null)} />
+      )}
+
+      {/* SUMMARY CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-gray-500">Team Members</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center">
-              <Users size={16} className="text-blue-500" />
-            </div>
-          </div>
-          <span className="text-2xl font-bold text-gray-900">{teamTotals.totalMembers}</span>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-gray-500">New Leads (Month)</span>
-            <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center">
-              <Target size={16} className="text-purple-500" />
-            </div>
-          </div>
-          <span className="text-2xl font-bold text-gray-900">{teamTotals.monthlyClients}</span>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-gray-500">Deals Closed (Month)</span>
-            <div className="w-8 h-8 rounded-xl bg-green-50 flex items-center justify-center">
-              <TrendingUp size={16} className="text-green-500" />
-            </div>
-          </div>
-          <span className="text-2xl font-bold text-gray-900">{teamTotals.dealsClosedMonth}</span>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-gray-500">Commission (Month)</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center">
-              <BadgeDollarSign size={16} className="text-amber-500" />
-            </div>
-          </div>
-          <span className="text-2xl font-bold text-gray-900">
-            {teamTotals.monthlyCommission > 0 ? `₹${formatCurrency(teamTotals.monthlyCommission)}` : '₹0'}
-          </span>
-        </div>
+        <SummaryCard
+          label="Team Members"
+          value={String(members.length)}
+          icon={<Users size={18} />}
+          bg="bg-blue-50"
+          text="text-blue-600"
+        />
+        <SummaryCard
+          label="Total Leads"
+          value={String(teamTotals.totalLeads)}
+          icon={<TrendingUp size={18} />}
+          bg="bg-amber-50"
+          text="text-amber-600"
+        />
+        <SummaryCard
+          label="Deals Closed"
+          value={String(teamTotals.dealsClosed)}
+          icon={<CheckCircle2 size={18} />}
+          bg="bg-emerald-50"
+          text="text-emerald-600"
+        />
+        <SummaryCard
+          label="Total Commission"
+          value={formatCurrency(teamTotals.commissionEarned)}
+          icon={<IndianRupee size={18} />}
+          bg="bg-purple-50"
+          text="text-purple-600"
+        />
       </div>
 
-      {/* Leaderboard */}
+      {/* TOP PERFORMER BANNER */}
+      {topPerformer && topPerformer.stats.dealsClosed > 0 && (
+        <div className="bg-linear-to-r from-amber-50 to-yellow-50 border border-amber-200
+          rounded-2xl p-4 sm:p-5 flex items-center gap-4">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-100
+            flex items-center justify-center shrink-0">
+            <Award size={24} className="text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">
+              Top Performer
+            </p>
+            <p className="text-base sm:text-lg font-bold text-gray-900 mt-0.5">
+              {topPerformer.name}
+            </p>
+            <p className="text-xs sm:text-sm text-gray-600 mt-0.5">
+              {topPerformer.stats.dealsClosed} deals closed • {formatCurrency(topPerformer.stats.commissionEarned)} earned
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* CHART */}
+      {chartData.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-gray-800">Leads vs Deals by Member</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Top 10 members</p>
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }}
+                axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }}
+                axisLine={false} tickLine={false} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f8fafc' }} />
+              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }} />
+              <Bar dataKey="Leads" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Deals" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* MEMBER LIST */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center">
-            <Trophy size={16} className="text-yellow-500" />
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
+            <Users size={14} className="text-blue-500" />
           </div>
-          <h2 className="text-base font-semibold text-gray-800">Leaderboard</h2>
+          <h3 className="text-sm font-semibold text-gray-700">Member Details</h3>
         </div>
 
-        {/* Desktop Table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center w-16">Rank</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-left">Agent</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Total Leads</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">This Month</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Deals (Month)</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Deals (All)</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Conversion</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Commission (Month)</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center">Properties</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {performance.map((item, index) => {
-                const RankIcon = index < 3 ? RANK_ICONS[index] : null;
-                const rankColor = index < 3 ? RANK_COLORS[index] : '';
-                const isCurrentUser = item.user.id === user?.id;
-                const initials = item.user.name
-                  .split(' ')
-                  .map((n: string) => n[0])
-                  .slice(0, 2)
-                  .join('')
-                  .toUpperCase();
+        {members.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <Users size={22} className="text-gray-300" />
+            <p className="text-gray-500 text-sm font-medium">No team members yet</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-semibold">
+                <tr>
+                  <th className="px-4 py-3 text-left">Member</th>
+                  <th className="px-4 py-3 text-left">Role</th>
+                  <th className="px-4 py-3 text-right">Leads</th>
+                  <th className="px-4 py-3 text-right">Deals</th>
+                  <th className="px-4 py-3 text-right">Conversion</th>
+                  <th className="px-4 py-3 text-right">Commission</th>
+                  <th className="px-4 py-3 text-right">Pending</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {members.map((m) => {
+                  const initials = m.name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase();
 
-                return (
-                  <tr
-                    key={item.user.id}
-                    className={clsx(
-                      'hover:bg-gray-50/50 transition-colors',
-                      isCurrentUser && 'bg-blue-50/30'
-                    )}
-                  >
-                    <td className="px-4 py-3.5 text-center">
-                      {RankIcon ? (
-                        <RankIcon size={20} className={rankColor} />
-                      ) : (
-                        <span className="text-sm font-bold text-gray-400">#{index + 1}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                          {initials}
+                  return (
+                    <tr key={m.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-blue-600
+                            flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{m.name}</p>
+                            <p className="text-xs text-gray-500 truncate">{m.email}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {item.user.name}
-                            {isCurrentUser && (
-                              <span className="ml-1.5 text-[10px] font-medium text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full">You</span>
-                            )}
-                          </p>
-                          <p className="text-xs text-gray-400 capitalize">{item.user.role}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-center text-sm font-medium text-gray-700">
-                      {item.metrics.totalClients}
-                    </td>
-                    <td className="px-4 py-3.5 text-center">
-                      <span className="text-sm font-bold text-blue-600">{item.metrics.monthlyClients}</span>
-                    </td>
-                    <td className="px-4 py-3.5 text-center">
-                      <span className="text-sm font-bold text-green-600">{item.metrics.dealsClosedMonth}</span>
-                    </td>
-                    <td className="px-4 py-3.5 text-center text-sm text-gray-600">
-                      {item.metrics.dealsClosedAllTime}
-                    </td>
-                    <td className="px-4 py-3.5 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <div className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-green-500 transition-all"
-                            style={{ width: `${Math.min(item.metrics.conversionRate, 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-semibold text-gray-600">{item.metrics.conversionRate}%</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-center text-sm font-semibold text-amber-600">
-                      {item.metrics.monthlyCommission > 0 ? `₹${formatCurrency(item.metrics.monthlyCommission)}` : '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-center text-sm text-gray-600">
-                      {item.metrics.totalProperties}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Cards */}
-        <div className="md:hidden divide-y divide-gray-100">
-          {performance.map((item, index) => {
-            const RankIcon = index < 3 ? RANK_ICONS[index] : null;
-            const rankColor = index < 3 ? RANK_COLORS[index] : '';
-            const isCurrentUser = item.user.id === user?.id;
-            const initials = item.user.name
-              .split(' ')
-              .map((n: string) => n[0])
-              .slice(0, 2)
-              .join('')
-              .toUpperCase();
-
-            return (
-              <div
-                key={item.user.id}
-                className={clsx('px-4 py-4 space-y-3', isCurrentUser && 'bg-blue-50/30')}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold">
-                        {initials}
-                      </div>
-                      {RankIcon && (
-                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-sm">
-                          <RankIcon size={12} className={rankColor} />
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">
-                        {item.user.name}
-                        {isCurrentUser && (
-                          <span className="ml-1.5 text-[10px] font-medium text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full">You</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          label={m.role}
+                          variant={
+                            m.role === 'admin' || m.role === 'superadmin' ? 'primary' : 'gray'
+                          }
+                          size="sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                        {m.stats.totalLeads}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-emerald-600">
+                        {m.stats.dealsClosed}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`font-semibold ${
+                          m.stats.conversionRate >= 30
+                            ? 'text-emerald-600'
+                            : m.stats.conversionRate >= 15
+                            ? 'text-amber-600'
+                            : 'text-gray-500'
+                        }`}>
+                          {m.stats.conversionRate}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
+                        {formatCurrency(m.stats.commissionEarned)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {m.stats.pendingFollowUps > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold
+                            text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                            <Clock size={10} />
+                            {m.stats.pendingFollowUps}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
                         )}
-                      </p>
-                      <p className="text-xs text-gray-400 capitalize">{item.user.role}</p>
-                    </div>
-                  </div>
-                  {!RankIcon && (
-                    <span className="text-lg font-bold text-gray-300">#{index + 1}</span>
-                  )}
-                </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center p-2 bg-gray-50 rounded-lg">
-                    <p className="text-xs text-gray-400">Leads</p>
-                    <p className="text-sm font-bold text-gray-800">{item.metrics.monthlyClients}</p>
-                  </div>
-                  <div className="text-center p-2 bg-green-50 rounded-lg">
-                    <p className="text-xs text-gray-400">Deals</p>
-                    <p className="text-sm font-bold text-green-600">{item.metrics.dealsClosedMonth}</p>
-                  </div>
-                  <div className="text-center p-2 bg-amber-50 rounded-lg">
-                    <p className="text-xs text-gray-400">Conv.</p>
-                    <p className="text-sm font-bold text-amber-600">{item.metrics.conversionRate}%</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+/** Small summary card used in the header grid */
+function SummaryCard({
+  label,
+  value,
+  icon,
+  bg,
+  text,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  bg: string;
+  text: string;
+}) {
+  return (
+    <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100
+      flex flex-col gap-3 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between">
+        <span className="text-xs sm:text-sm font-medium text-gray-500">{label}</span>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
+          <span className={text}>{icon}</span>
         </div>
       </div>
+      <p className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">{value}</p>
     </div>
   );
 }

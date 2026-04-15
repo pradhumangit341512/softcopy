@@ -1,22 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { startOfMonth, endOfMonth } from "date-fns";
-import jwt from "jsonwebtoken";
-import { isValidObjectId } from "@/lib/auth";
+import { isValidObjectId, verifyToken, type AuthTokenPayload } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-type AuthPayload = { userId: string; companyId: string; role: string; email: string };
+type AuthPayload = AuthTokenPayload;
 
 async function verifyAuthFromCookie(req: NextRequest): Promise<AuthPayload | null> {
-  try {
-    const token = req.cookies.get("auth_token")?.value;
-    if (!token) return null;
-    if (!process.env.JWT_SECRET) return null;
-    return jwt.verify(token, process.env.JWT_SECRET) as AuthPayload;
-  } catch {
-    return null;
-  }
+  const token = req.cookies.get("auth_token")?.value;
+  if (!token) return null;
+  return verifyToken(token);
 }
 
 // Empty analytics response for dev bypass or missing company
@@ -55,22 +49,25 @@ export async function GET(req: NextRequest) {
     const todayEnd   = new Date(todayStart);
     todayEnd.setDate(todayEnd.getDate() + 1);
 
-    const userId = payload.userId;
-    const userRole = payload.role;
-    const hasValidUserId = userId && isValidObjectId(userId);
-    const isTeamMember = !["admin", "superadmin"].includes(userRole);
+    // Role-based filter: team members see only their own data.
+    // Always exclude soft-deleted rows — otherwise tombstoned records
+    // inflate every count/aggregate below.
+    const isTeamMember = payload.role === 'user';
+    const clientFilter = isTeamMember
+      ? { companyId, createdBy: payload.userId, deletedAt: null }
+      : { companyId, deletedAt: null };
+    const commissionFilter = isTeamMember
+      ? { companyId, deletedAt: null, client: { createdBy: payload.userId, deletedAt: null } }
+      : { companyId, deletedAt: null, client: { deletedAt: null } };
 
-    // For team members: only show their own data (created by them OR assigned to them)
-    // For admin/superadmin: show all company data
-    const clientFilter: any = { companyId };
-    if (isTeamMember) {
-      clientFilter.OR = [
-        { createdBy: userId },
-        { assignedTo: userId },
-      ];
-    }
-
-    const baseQueries = [
+    const [
+      totalClients,
+      todayVisitsCount,
+      todayVisitList,
+      closedDeals,
+      commissions,
+      leadsByStatus,
+    ] = await Promise.all([
       db.client.count({ where: clientFilter }),
 
       db.client.count({
@@ -91,11 +88,7 @@ export async function GET(req: NextRequest) {
       }),
 
       db.commission.aggregate({
-        where: {
-          companyId,
-          createdAt: { gte: monthStart, lte: monthEnd },
-          ...(isTeamMember ? { userId } : {}),
-        },
+        where: { ...commissionFilter, createdAt: { gte: monthStart, lte: monthEnd } },
         _sum: { commissionAmount: true },
       }),
 
@@ -104,43 +97,11 @@ export async function GET(req: NextRequest) {
         where: clientFilter,
         _count: true,
       }),
-    ] as const;
-
-    const [
-      totalClients,
-      todayVisitsCount,
-      todayVisitList,
-      closedDeals,
-      commissions,
-      leadsByStatus,
-    ] = await Promise.all(baseQueries);
-
-    // These queries depend on a valid userId — run separately to avoid crashing the whole request
-    let myAssignedLeads = 0;
-    let myPendingFollowUps = 0;
-
-    if (hasValidUserId) {
-      try {
-        [myAssignedLeads, myPendingFollowUps] = await Promise.all([
-          db.client.count({
-            where: { companyId, assignedTo: userId },
-          }),
-          db.client.count({
-            where: {
-              companyId,
-              assignedTo: userId,
-              followUpDate: { lte: todayEnd },
-              status: { notIn: ["DealDone", "Rejected"] },
-            },
-          }),
-        ]);
-      } catch (err) {
-        console.error("Error fetching assigned leads:", err);
-      }
-    }
+    ]);
 
     // Monthly data (last 12 months)
-    const monthlyData: any[] = [];
+    interface MonthlyDataPoint { month: string; leads: number; deals: number; }
+    const monthlyData: MonthlyDataPoint[] = [];
     for (let i = 11; i >= 0; i--) {
       const date   = new Date(now);
       date.setMonth(date.getMonth() - i);
@@ -157,32 +118,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Also fetch total commission (all time) for the user's scope
-    let allTimeCommission = 0;
-    try {
-      const allTimeResult = await db.commission.aggregate({
-        where: {
-          companyId,
-          ...(isTeamMember ? { userId } : {}),
-        },
-        _sum: { commissionAmount: true, dealAmount: true },
-        _count: true,
-      });
-      allTimeCommission = allTimeResult._sum.commissionAmount ?? 0;
-    } catch {
-      // If no commissions exist, this is fine
-    }
-
     return NextResponse.json({
       summary: {
         totalClients,
         todayVisits: todayVisitsCount,
-        todayVisitsCount,
         closedDeals,
         totalCommission: commissions._sum.commissionAmount ?? 0,
-        allTimeCommission,
-        myAssignedLeads,
-        myPendingFollowUps,
       },
       todayVisits: todayVisitList,
       leadsByStatus,

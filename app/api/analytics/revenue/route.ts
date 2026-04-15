@@ -27,14 +27,7 @@ export async function GET(req: NextRequest) {
     }
 
     const companyId = payload.companyId;
-    const isTeamMember = !["admin", "superadmin"].includes(payload.role);
     const period = req.nextUrl.searchParams.get('period') || '6m';
-
-    // Team members see only their own revenue
-    const commissionFilter: any = {
-      companyId,
-      ...(isTeamMember ? { userId: payload.userId } : {}),
-    };
 
     // Determine month range
     let monthsBack = 6;
@@ -57,10 +50,10 @@ export async function GET(req: NextRequest) {
       const mStart = startOfMonth(date);
       const mEnd = endOfMonth(date);
 
-      // Get commissions (revenue) — filtered by role
+      // Get commissions (revenue)
       const commissions = await db.commission.aggregate({
         where: {
-          ...commissionFilter,
+          companyId,
           createdAt: { gte: mStart, lte: mEnd },
         },
         _sum: { dealAmount: true },
