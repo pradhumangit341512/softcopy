@@ -11,42 +11,32 @@ import { NextResponse } from 'next/server';
  */
 export const ErrorCode = {
   // ---- Auth / session ----
-  AUTH_UNAUTHORIZED:      'AUTH_UNAUTHORIZED',
-  AUTH_INVALID_CREDENTIALS: 'AUTH_INVALID_CREDENTIALS',
-  AUTH_TOKEN_EXPIRED:     'AUTH_TOKEN_EXPIRED',
-  AUTH_TOKEN_INVALID:     'AUTH_TOKEN_INVALID',
-  AUTH_ACCOUNT_INACTIVE:  'AUTH_ACCOUNT_INACTIVE',
-  AUTH_FORBIDDEN:         'AUTH_FORBIDDEN',
+  AUTH_UNAUTHORIZED:         'AUTH_UNAUTHORIZED',
+  AUTH_INVALID_CREDENTIALS:  'AUTH_INVALID_CREDENTIALS',
+  AUTH_TOKEN_INVALID:        'AUTH_TOKEN_INVALID',
+  AUTH_ACCOUNT_INACTIVE:     'AUTH_ACCOUNT_INACTIVE',
   AUTH_SUBSCRIPTION_EXPIRED: 'AUTH_SUBSCRIPTION_EXPIRED',
 
   // ---- OTP ----
-  OTP_REQUIRED:           'OTP_REQUIRED',
-  OTP_INVALID:            'OTP_INVALID',
-  OTP_EXPIRED:            'OTP_EXPIRED',
-  OTP_LOCKED:             'OTP_LOCKED',
-  OTP_NOT_FOUND:          'OTP_NOT_FOUND',
-  OTP_SEND_FAILED:        'OTP_SEND_FAILED',
+  OTP_INVALID:     'OTP_INVALID',
+  OTP_EXPIRED:     'OTP_EXPIRED',
+  OTP_LOCKED:      'OTP_LOCKED',
+  OTP_NOT_FOUND:   'OTP_NOT_FOUND',
+  OTP_SEND_FAILED: 'OTP_SEND_FAILED',
 
   // ---- Validation ----
-  VALIDATION_FAILED:      'VALIDATION_FAILED',
+  VALIDATION_FAILED:       'VALIDATION_FAILED',
   VALIDATION_INVALID_JSON: 'VALIDATION_INVALID_JSON',
 
   // ---- Rate limiting ----
-  RATE_LIMITED:           'RATE_LIMITED',
+  RATE_LIMITED: 'RATE_LIMITED',
 
   // ---- Resource / domain ----
-  RESOURCE_NOT_FOUND:     'RESOURCE_NOT_FOUND',
-  RESOURCE_CONFLICT:      'RESOURCE_CONFLICT',
-  RESOURCE_FORBIDDEN:     'RESOURCE_FORBIDDEN',
-
-  // ---- Payment ----
-  PAYMENT_CONFIG_MISSING: 'PAYMENT_CONFIG_MISSING',
-  PAYMENT_INVALID_PLAN:   'PAYMENT_INVALID_PLAN',
+  RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
+  RESOURCE_CONFLICT:  'RESOURCE_CONFLICT',
 
   // ---- Server / infra ----
-  SYSTEM_INTERNAL_ERROR:  'SYSTEM_INTERNAL_ERROR',
-  SYSTEM_CONFIG_MISSING:  'SYSTEM_CONFIG_MISSING',
-  SYSTEM_UPSTREAM_FAILURE: 'SYSTEM_UPSTREAM_FAILURE',
+  SYSTEM_INTERNAL_ERROR: 'SYSTEM_INTERNAL_ERROR',
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -112,13 +102,10 @@ function statusForCode(code: ErrorCodeValue): number {
   switch (code) {
     case ErrorCode.AUTH_UNAUTHORIZED:
     case ErrorCode.AUTH_INVALID_CREDENTIALS:
-    case ErrorCode.AUTH_TOKEN_EXPIRED:
     case ErrorCode.AUTH_TOKEN_INVALID:
       return 401;
 
     case ErrorCode.AUTH_ACCOUNT_INACTIVE:
-    case ErrorCode.AUTH_FORBIDDEN:
-    case ErrorCode.RESOURCE_FORBIDDEN:
       return 403;
 
     case ErrorCode.AUTH_SUBSCRIPTION_EXPIRED:
@@ -135,17 +122,12 @@ function statusForCode(code: ErrorCodeValue): number {
     case ErrorCode.VALIDATION_INVALID_JSON:
     case ErrorCode.OTP_INVALID:
     case ErrorCode.OTP_EXPIRED:
-    case ErrorCode.OTP_REQUIRED:
-    case ErrorCode.PAYMENT_INVALID_PLAN:
       return 400;
 
     case ErrorCode.RATE_LIMITED:
     case ErrorCode.OTP_LOCKED:
       return 429;
 
-    case ErrorCode.PAYMENT_CONFIG_MISSING:
-    case ErrorCode.SYSTEM_CONFIG_MISSING:
-    case ErrorCode.SYSTEM_UPSTREAM_FAILURE:
     case ErrorCode.SYSTEM_INTERNAL_ERROR:
     case ErrorCode.OTP_SEND_FAILED:
     default:

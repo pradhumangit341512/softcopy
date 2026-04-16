@@ -23,7 +23,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { generateToken, getEnumerationShieldHash } from '@/lib/auth';
 import { verifyEmailOtp } from '@/lib/otp';
-import { loginSchema, parseBody } from '@/lib/validations';
+import { loginSchema, otpCodeSchema, parseBody } from '@/lib/validations';
 import { authLimiter, getClientIp, rateLimited } from '@/lib/rate-limit';
 import { ErrorCode, apiError, newRequestId } from '@/lib/errors';
 import { logger } from '@/lib/logger';
@@ -58,9 +58,10 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Parse body — OTP is required here ──
-    const schema = loginSchema.extend({
-      otp: loginSchema.shape.otp.unwrap(), // make otp required
-    });
+    // Build a schema that's loginSchema minus its optional otp, plus a
+    // required otp. Avoids the fragile `.shape.otp.unwrap()` trick that
+    // would break if loginSchema's otp wrapping ever changed.
+    const schema = loginSchema.omit({ otp: true }).extend({ otp: otpCodeSchema });
     const parsed = await parseBody(req, schema);
     if (!parsed.ok) return parsed.response;
     const { email, password, otp } = parsed.data;

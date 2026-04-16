@@ -37,11 +37,16 @@ type Bindings = Record<string, unknown>;
  * but a single mistake shouldn't leak tokens to a log aggregator forever.
  */
 const REDACT_KEYS = new Set([
-  'password', 'newPassword', 'confirmPassword',
-  'otp', 'otpHash', 'token', 'accessToken', 'refreshToken', 'jwt',
+  'password', 'newpassword', 'confirmpassword',
+  'otp', 'otphash', 'token', 'accesstoken', 'refreshtoken', 'jwt',
   'authorization', 'cookie', 'set-cookie',
-  'apiKey', 'secret', 'clientSecret',
+  'apikey', 'secret', 'clientsecret',
   'razorpay_payment_id', 'razorpay_signature',
+  // Session-related
+  'session', 'sessionid', 'sessiontoken', 'csrftoken',
+  'auth_token', 'x-api-key', 'x-auth-token', 'bearer',
+  // Trusted device + verification tokens
+  'tokenhash', 'rawtoken',
 ]);
 
 function redact(value: unknown, depth = 0): unknown {
@@ -74,16 +79,48 @@ function redact(value: unknown, depth = 0): unknown {
 function emit(level: Level, bindings: Bindings, message: string) {
   if (LEVEL_RANK[level] < LEVEL_RANK[CURRENT_LEVEL]) return;
 
+  const safeBindings = redact(bindings) as Bindings;
   const record = {
     level,
     ts: new Date().toISOString(),
     msg: message,
-    ...(redact(bindings) as Bindings),
+    ...safeBindings,
   };
 
+  // ── Forward errors to Sentry (server + edge runtime) ──
+  // Wrapped in try/catch + dynamic require so a missing/broken Sentry never
+  // brings down the request path.
+  if (level === 'error' || level === 'fatal') {
+    try {
+      // Lazy require — avoids loading @sentry/nextjs in client bundle when
+      // logger is imported there. Only runs server-side.
+      if (typeof window === 'undefined' && process.env.SENTRY_DSN) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Sentry = require('@sentry/nextjs');
+        const err = (bindings as { err?: unknown }).err;
+        if (err instanceof Error) {
+          Sentry.captureException(err, { extra: safeBindings, tags: { logger: 'pino' } });
+        } else {
+          Sentry.captureMessage(message, {
+            level: level === 'fatal' ? 'fatal' : 'error',
+            extra: safeBindings,
+          });
+        }
+      }
+    } catch {
+      // Sentry not installed or failed — do not block the log path.
+    }
+  }
+
+  let line: string;
+  try {
+    line = JSON.stringify(record);
+  } catch {
+    // Circular ref → fall back to a safe representation
+    line = JSON.stringify({ level, ts: record.ts, msg: message, _stringify_failed: true });
+  }
+
   if (IS_PROD) {
-    // Single-line JSON — easy to parse in Vercel log drains / Axiom.
-    const line = JSON.stringify(record);
     if (level === 'error' || level === 'fatal') {
       // eslint-disable-next-line no-console
       console.error(line);
@@ -94,7 +131,7 @@ function emit(level: Level, bindings: Bindings, message: string) {
     return;
   }
 
-  // Dev: pretty output with colored level prefix.
+  // Dev: pretty colored output
   const prefix =
     level === 'error' || level === 'fatal' ? '\x1b[31m' :
     level === 'warn'                       ? '\x1b[33m' :

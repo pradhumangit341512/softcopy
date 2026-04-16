@@ -39,8 +39,6 @@ export interface AuthState {
   setUser:       (user: User | null) => void;
   setLoading:    (loading: boolean) => void;
   setError:      (error: string | null) => void;
-  login:         (email: string, password: string) => Promise<{ requireOTP: boolean; message?: string }>;
-  signup:        (data: SignupData) => Promise<{ requireOTP: boolean; message?: string }>;
   logout:        () => Promise<void>;
   fetchUser:     () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
@@ -82,83 +80,11 @@ export const useAuthStore = create<AuthState>()(
 
         // ── Login Step 1: validate creds → returns requireOTP: true
         // ── Login Step 2: handled directly in LoginPage with otp param
-        login: async (email: string, password: string) => {
-          set({ isLoading: true, error: null });
-          try {
-            const response = await fetch('/api/auth/login', {
-              method:      'POST',
-              headers:     { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body:        JSON.stringify({ email, password }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-              throw new Error(data.error || 'Login failed');
-            }
-
-            // OTP required — not an error (only trust this on 2xx responses)
-            if (data.requireOTP) {
-              set({ isLoading: false });
-              return { requireOTP: true, message: data.message };
-            }
-
-            // Direct login success (no OTP) — set user
-            set({
-              user:            data.user,
-              isAuthenticated: true,
-              hasFetched:      true,
-              isLoading:       false,
-              error:           null,
-            });
-            return { requireOTP: false };
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : 'Login failed';
-            set({ ...initialState, error: msg });
-            return { requireOTP: false, message: msg };
-          }
-        },
-
-        // ── Signup Step 1: validate + send OTP → returns requireOTP: true
-        // ── Signup Step 2: handled directly in SignupPage with otp param
-        signup: async (data: SignupData) => {
-          set({ isLoading: true, error: null });
-          try {
-            const response = await fetch('/api/auth/signup', {
-              method:      'POST',
-              headers:     { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body:        JSON.stringify(data),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-              throw new Error(result.error || 'Signup failed');
-            }
-
-            // OTP required — not an error (only trust this on 2xx responses)
-            if (result.requireOTP) {
-              set({ isLoading: false });
-              return { requireOTP: true, message: result.message };
-            }
-
-            // Direct signup success (no OTP) — set user
-            set({
-              user:            result.user,
-              isAuthenticated: true,
-              hasFetched:      true,
-              isLoading:       false,
-              error:           null,
-            });
-            return { requireOTP: false };
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : 'Signup failed';
-            set({ ...initialState, error: msg });
-            return { requireOTP: false, message: msg };
-          }
-        },
+        // login + signup actions removed — UI calls /api/auth/login and
+        // /api/auth/signup directly via api.post(). Keeping a stub wrapper
+        // here would invite drift from the real auth flow (trusted-device,
+        // OTP conditional, etc.). The login/signup pages own their own
+        // submit handlers.
 
         // ── Logout ──
         logout: async () => {

@@ -136,18 +136,22 @@ export async function comparePasswords(
 }
 
 /**
- * Pre-computed bcrypt hash at matching cost, used to prevent user-enumeration
- * timing attacks. We compare against this when the user doesn't exist so the
- * total response time matches the "user exists, wrong password" path.
+ * Pre-computed bcrypt hash, used to prevent user-enumeration timing attacks.
+ * We compare against this when the user doesn't exist so the total response
+ * time matches the "user exists, wrong password" path.
+ *
+ * Computed eagerly at module load (top-level await) so the FIRST request
+ * after a cold-start doesn't pay the ~200ms hash cost — eliminating the
+ * cold-start timing leak.
  */
-let USER_ENUMERATION_SHIELD: string | null = null;
+const USER_ENUMERATION_SHIELD: string = await bcrypt.hash(
+  // The actual content doesn't matter — we just need a valid bcrypt hash
+  // at the same cost factor as real user passwords.
+  'enum-shield-' + Date.now(),
+  BCRYPT_COST
+);
+
 export async function getEnumerationShieldHash(): Promise<string> {
-  if (!USER_ENUMERATION_SHIELD) {
-    USER_ENUMERATION_SHIELD = await bcrypt.hash(
-      'user-enumeration-shield-' + Math.random().toString(36),
-      BCRYPT_COST
-    );
-  }
   return USER_ENUMERATION_SHIELD;
 }
 
@@ -174,10 +178,6 @@ export const IS_DEV_BYPASS =
 
 export function isValidObjectId(id: string | null | undefined): boolean {
   return typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id);
-}
-
-export function validateEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 // ==================== ERROR MESSAGES ====================

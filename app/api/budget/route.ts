@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyAuth, isValidObjectId } from "@/lib/auth";
+import { verifyAuth, isValidObjectId, type AuthTokenPayload } from "@/lib/auth";
+import { monthlyBudgetSchema, parseBody } from "@/lib/validations";
+import { isAdminRole } from "@/lib/authorize";
+import { ErrorCode, apiError, newRequestId } from "@/lib/errors";
 
-type AuthPayload = { userId: string; companyId: string; role: string; email: string };
+type AuthPayload = AuthTokenPayload;
 
 // ── GET: Fetch budget for a given month ──
 export async function GET(req: NextRequest) {
@@ -30,42 +33,33 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ── POST: Create or update budget for a month ──
+// ── POST: Create or update budget for a month (admin-only) ──
 export async function POST(req: NextRequest) {
+  const requestId = newRequestId();
   try {
     const payload = (await verifyAuth(req)) as AuthPayload | null;
-    if (!payload)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!payload) return apiError(ErrorCode.AUTH_UNAUTHORIZED, 'Unauthorized', { requestId });
 
-    // Only admin/superadmin can set budgets
-    if (!["admin", "superadmin"].includes(payload.role)) {
-      return NextResponse.json({ error: "Only admins can set budgets" }, { status: 403 });
+    if (!isAdminRole(payload.role)) {
+      return apiError(ErrorCode.AUTH_ACCOUNT_INACTIVE, 'Only admins can set budgets', { requestId });
     }
-
     if (!isValidObjectId(payload.companyId)) {
-      return NextResponse.json({ error: "Invalid session. Please log out and log in again." }, { status: 400 });
+      return apiError(ErrorCode.VALIDATION_FAILED, 'Invalid session. Please log out and log in again.', { requestId });
     }
 
-    const { month, targetAmount } = await req.json();
-    if (!month || targetAmount === undefined)
-      return NextResponse.json({ error: "month and targetAmount are required" }, { status: 400 });
+    const parsed = await parseBody(req, monthlyBudgetSchema);
+    if (!parsed.ok) return parsed.response;
+    const { month, targetAmount } = parsed.data;
 
-    // Upsert — create if doesn't exist, update if it does
     const budget = await db.monthlyBudget.upsert({
-      where: {
-        companyId_month: { companyId: payload.companyId, month },
-      },
-      update: { targetAmount: Number(targetAmount) },
-      create: {
-        companyId: payload.companyId,
-        month,
-        targetAmount: Number(targetAmount),
-      },
+      where: { companyId_month: { companyId: payload.companyId, month } },
+      update: { targetAmount },
+      create: { companyId: payload.companyId, month, targetAmount },
     });
 
     return NextResponse.json({ budget });
   } catch (error) {
     console.error("Save budget error:", error);
-    return NextResponse.json({ error: "Failed to save budget" }, { status: 500 });
+    return apiError(ErrorCode.SYSTEM_INTERNAL_ERROR, 'Failed to save budget', { requestId });
   }
 }

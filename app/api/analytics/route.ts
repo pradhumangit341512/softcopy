@@ -99,22 +99,46 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // Monthly data (last 12 months)
+    // Monthly data (last 12 months) — single aggregation instead of 24
+    // sequential count queries. Pulls all rows once, buckets in memory.
     interface MonthlyDataPoint { month: string; leads: number; deals: number; }
+    const yearAgo = startOfMonth(new Date(now.getFullYear(), now.getMonth() - 11, 1));
+
+    // 2 round-trips total (vs the previous 24).
+    const [leadRows, dealRows] = await Promise.all([
+      db.client.findMany({
+        where: { ...clientFilter, createdAt: { gte: yearAgo } },
+        select: { createdAt: true },
+      }),
+      db.client.findMany({
+        where: { ...clientFilter, status: "DealDone", updatedAt: { gte: yearAgo } },
+        select: { updatedAt: true },
+      }),
+    ]);
+
+    // Build a YYYY-MM-keyed bucket map, then walk the last 12 months in order.
+    const monthKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+    const leadBuckets = new Map<string, number>();
+    for (const r of leadRows) {
+      const k = monthKey(r.createdAt);
+      leadBuckets.set(k, (leadBuckets.get(k) ?? 0) + 1);
+    }
+    const dealBuckets = new Map<string, number>();
+    for (const r of dealRows) {
+      const k = monthKey(r.updatedAt);
+      dealBuckets.set(k, (dealBuckets.get(k) ?? 0) + 1);
+    }
+
     const monthlyData: MonthlyDataPoint[] = [];
     for (let i = 11; i >= 0; i--) {
-      const date   = new Date(now);
-      date.setMonth(date.getMonth() - i);
-      const mStart = startOfMonth(date);
-      const mEnd   = endOfMonth(date);
-      const [leads, deals] = await Promise.all([
-        db.client.count({ where: { ...clientFilter, createdAt: { gte: mStart, lte: mEnd } } }),
-        db.client.count({ where: { ...clientFilter, status: "DealDone", updatedAt: { gte: mStart, lte: mEnd } } }),
-      ]);
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = monthKey(date);
       monthlyData.push({
         month: date.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        leads,
-        deals,
+        leads: leadBuckets.get(k) ?? 0,
+        deals: dealBuckets.get(k) ?? 0,
       });
     }
 

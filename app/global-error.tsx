@@ -21,16 +21,20 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(
-      JSON.stringify({
-        level: 'fatal',
-        type: 'global_error_boundary',
-        digest: error.digest ?? null,
-        message: error.message,
-        stack: error.stack,
-        ts: new Date().toISOString(),
-      })
-    );
+    try {
+      console.error(
+        JSON.stringify({
+          level: 'fatal',
+          type: 'global_error_boundary',
+          digest: error.digest ?? null,
+          message: error.message,
+          stack: error.stack,
+          ts: new Date().toISOString(),
+        })
+      );
+    } catch {
+      console.error('[global_error_boundary]', error);
+    }
   }, [error]);
 
   return (

@@ -3,14 +3,22 @@ import { db } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
 import { ErrorCode, apiError, newRequestId } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { apiLimiter, getClientIp, rateLimited } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const requestId = newRequestId();
-  const log = logger.child({ route: "/api/auth/me", requestId });
+  const ip = getClientIp(req);
+  const log = logger.child({ route: "/api/auth/me", requestId, ip });
 
   try {
+    // Generous per-IP cap to stop trivially scripted scraping/probing.
+    const limit = await apiLimiter.check(120, `me:ip:${ip}`);
+    if (!limit.success) {
+      return rateLimited('Too many requests', limit.retryAfter);
+    }
+
     const token = req.cookies.get("auth_token")?.value;
     if (!token) {
       return apiError(ErrorCode.AUTH_UNAUTHORIZED, "Not authenticated", { requestId });

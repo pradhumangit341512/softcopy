@@ -97,8 +97,10 @@ export async function authFetch<T = unknown>(
   // Compose headers. Only set Content-Type when sending a JSON body —
   // omitting it for GET lets the browser negotiate.
   const headers = new Headers(customHeaders);
-  const hasBody = rest.body !== undefined && rest.body !== null;
-  if (hasBody && !headers.has('Content-Type')) {
+  // Only auto-set application/json for stringified bodies. FormData / Blob /
+  // URLSearchParams need the browser to set Content-Type with the right
+  // boundary or encoding.
+  if (typeof rest.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 

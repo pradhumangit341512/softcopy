@@ -19,7 +19,7 @@ async function authFromCookie(): Promise<AuthTokenPayload | null> {
 }
 
 // ================= GET USERS =================
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const payload = await authFromCookie();
     if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,8 +27,12 @@ export async function GET(_req: NextRequest) {
     const forbidden = requireAdmin(payload);
     if (forbidden) return forbidden;
 
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, Number(searchParams.get('page') || 1));
+    const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 50)));
+    const skip = (page - 1) * limit;
+
     const where = { companyId: payload.companyId, deletedAt: null };
-    const take = 1000; // company size guardrail — widen once pagination is wired up
     const [users, total] = await Promise.all([
       db.user.findMany({
         where,
@@ -41,14 +45,16 @@ export async function GET(_req: NextRequest) {
           status: true,
           createdAt: true,
         },
-        take,
+        orderBy: { createdAt: 'asc' },
+        skip,
+        take: limit,
       }),
       db.user.count({ where }),
     ]);
 
     return NextResponse.json({
       users,
-      pagination: { total, page: 1, limit: take, pages: 1 },
+      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (error) {
     console.error("Fetch users error:", error);

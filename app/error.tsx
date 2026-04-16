@@ -25,18 +25,25 @@ export default function ErrorBoundary({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Replace with Sentry.captureException(error) once Sentry is wired up.
-    // For now, log a structured record so it surfaces in Vercel logs.
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        type: 'route_error_boundary',
-        digest: error.digest ?? null,
-        message: error.message,
-        stack: error.stack,
-        ts: new Date().toISOString(),
-      })
-    );
+    // Sentry is wired in sentry.client.config.ts — exceptions thrown
+    // during render are auto-captured. We also log a structured record so
+    // it surfaces in Vercel logs even when Sentry is unavailable.
+    try {
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          type: 'route_error_boundary',
+          digest: error.digest ?? null,
+          message: error.message,
+          stack: error.stack,
+          ts: new Date().toISOString(),
+        })
+      );
+    } catch {
+      // JSON.stringify can throw on circular refs — fall back to plain log
+      // so we never lose the original error.
+      console.error('[error_boundary]', error);
+    }
   }, [error]);
 
   return (

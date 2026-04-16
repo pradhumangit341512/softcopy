@@ -50,6 +50,20 @@ const schema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+
+  // ---- Rate limiting (Upstash Redis) ----
+  // Required in production. Optional locally — falls back to in-memory.
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(20).optional(),
+
+  // ---- Error tracking (Sentry) ----
+  // SENTRY_DSN — server-side. NEXT_PUBLIC_SENTRY_DSN — browser-side (must
+  // duplicate the value because Next only inlines NEXT_PUBLIC_* in client bundles).
+  SENTRY_DSN: z.string().url().optional(),
+  NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
+
+  // ---- Cron auth ----
+  CRON_SECRET: z.string().min(16).optional(),
 });
 
 type Env = z.infer<typeof schema>;

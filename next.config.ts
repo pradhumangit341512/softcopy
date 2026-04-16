@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 // ==================== SECURITY HEADERS ====================
 
@@ -21,7 +22,12 @@ const isDev = process.env.NODE_ENV !== "production";
 
 const cspDirectives = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com`,
+  // 'unsafe-eval' is required by Next.js HMR in dev. Razorpay's checkout
+  // SDK runs inside an iframe at checkout.razorpay.com, NOT on our origin,
+  // so it doesn't need eval here. Strip it in prod.
+  isDev
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com`
+    : `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: https: blob:",
   "font-src 'self' data: https://fonts.gstatic.com",
@@ -69,4 +75,21 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Sentry wraps the config to enable build-time source map upload + runtime
+// instrumentation. When SENTRY_DSN is missing, Sentry init in
+// sentry.*.config.ts is a no-op so this is safe locally.
+export default withSentryConfig(nextConfig, {
+  silent: !process.env.CI,            // suppress build-time CLI noise locally
+  tunnelRoute: "/monitoring",         // proxies Sentry events through your domain to dodge ad-blockers
+  authToken: process.env.SENTRY_AUTH_TOKEN, // for source-map upload in CI; safe to skip
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN, // only upload when auth token is configured
+  },
+  // Sentry-specific webpack tuning — replaces the deprecated flat options.
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true, // strip Sentry's own debug logger from prod bundles
+    },
+    reactComponentAnnotation: { enabled: false }, // no automatic component name attribution
+  },
+});

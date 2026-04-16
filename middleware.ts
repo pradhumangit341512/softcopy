@@ -26,8 +26,11 @@ const publicApiPaths = [
   '/api/auth/forgot-password',
   '/api/webhooks/razorpay',
   '/api/cron/cleanup-otp',
+  '/api/cron/cleanup-expired',
   '/api/dev/verify-user',
   '/api/dev/restore-data',
+  '/api/dev/backfill-fields',
+  '/api/dev/run-migrations',
 ];
 
 // Routes that still work even with an expired subscription:
@@ -108,15 +111,27 @@ export async function middleware(request: NextRequest) {
   // Role-based path gate.
   // /admin/* → admin + superadmin only
   // /team/*  → role === 'user' only
-  // Wrong role → redirect to the correct dashboard (never leak a 403 UI).
+  // Wrong role → redirect to the correct dashboard.
   const role = claims.role;
   const isAdminRole = role === 'admin' || role === 'superadmin';
   const isTeamRole = role === 'user';
 
-  if (pathname.startsWith('/admin') && !isAdminRole) {
+  // Defensive: if the token has no recognizable role (legacy token, forgery,
+  // or DB role drifted from JWT enum), DON'T bounce between /admin and /team
+  // — that creates an infinite redirect loop. Treat as invalid token.
+  if (!isAdminRole && !isTeamRole && (pathname.startsWith('/admin') || pathname.startsWith('/team'))) {
+    const response = NextResponse.redirect(
+      new URL('/login?error=invalid_token', request.url)
+    );
+    response.cookies.set('auth_token', '', { path: '/', maxAge: 0 });
+    return response;
+  }
+
+  // Use trailing slash to avoid catching `/admin-foo` or `/teamwork`.
+  if ((pathname === '/admin' || pathname.startsWith('/admin/')) && !isAdminRole) {
     return NextResponse.redirect(new URL('/team/dashboard', request.url));
   }
-  if (pathname.startsWith('/team') && !isTeamRole) {
+  if ((pathname === '/team' || pathname.startsWith('/team/')) && !isTeamRole) {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url));
   }
 

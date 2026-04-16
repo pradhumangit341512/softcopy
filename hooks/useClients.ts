@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useToast } from '@/components/common/Toast';
+import { api, ApiError } from '@/lib/fetch';
 
 export interface ClientFormData {
   clientName: string;
@@ -40,158 +41,122 @@ export interface ClientResponse {
   updatedAt: string;
 }
 
-/** Hook for CRUD operations on clients with toast notifications */
+interface ListResponse {
+  clients: ClientResponse[];
+  pagination?: { total: number; page: number; pages: number };
+}
+
+/**
+ * CRUD hook for clients. All requests go through `authFetch` so:
+ *   - 401 auto-redirects to /login (no per-call handling)
+ *   - 402 (subscription expired) auto-redirects with banner
+ *   - errors come back as typed ApiError with `code`, `fields`, `requestId`
+ *   - 15s timeout prevents hung UI
+ */
 export function useClients() {
   const [clients, setClients] = useState<ClientResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { addToast } = useToast();
 
-  // ================= FETCH CLIENTS =================
-  const fetchClients = useCallback(async (filters?: { search?: string; status?: string; page?: number }) => {
-    try {
-      setLoading(true);
-      setError(null);
+  const messageOf = (err: unknown, fallback: string): string =>
+    err instanceof ApiError ? err.message : fallback;
 
-      const params = new URLSearchParams();
-      if (filters?.search) params.append('search', filters.search);
-      if (filters?.status) params.append('status', filters.status);
-      if (filters?.page) params.append('page', filters.page.toString());
+  const fetchClients = useCallback(
+    async (filters?: { search?: string; status?: string; page?: number }) => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      const response = await fetch(`/api/clients?${params}`, {
-        credentials: 'include', // ✅ IMPORTANT
-      });
+        const params = new URLSearchParams();
+        if (filters?.search) params.append('search', filters.search);
+        if (filters?.status) params.append('status', filters.status);
+        if (filters?.page) params.append('page', String(filters.page));
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to fetch clients');
+        const data = await api.get<ListResponse>(`/api/clients?${params}`);
+        setClients(data.clients ?? []);
+      } catch (err) {
+        const msg = messageOf(err, 'Failed to fetch clients');
+        setError(msg);
+        addToast({ type: 'error', message: msg });
+      } finally {
+        setLoading(false);
       }
+    },
+    [addToast]
+  );
 
-      const data = await response.json();
-      setClients(data.clients || data);
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch clients';
-      setError(errorMsg);
-      addToast({ type: 'error', message: errorMsg });
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
-
-  // ================= GET CLIENT =================
   const getClient = useCallback(async (id: string) => {
     try {
       setLoading(true);
-
-      const response = await fetch(`/api/clients/${id}`, {
-        credentials: 'include', // ✅ IMPORTANT
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Client not found');
-      }
-
-      return await response.json();
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Client not found';
-      setError(errorMsg);
+      return await api.get<ClientResponse>(`/api/clients/${id}`);
+    } catch (err) {
+      setError(messageOf(err, 'Client not found'));
       return null;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // ================= ADD CLIENT =================
-  const addClient = useCallback(async (data: ClientFormData) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch('/api/clients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // ✅ IMPORTANT
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to add client');
+  const addClient = useCallback(
+    async (data: ClientFormData) => {
+      try {
+        setLoading(true);
+        setError(null);
+        await api.post('/api/clients', data);
+        addToast({ type: 'success', message: 'Client added successfully!' });
+        return true;
+      } catch (err) {
+        const msg = messageOf(err, 'Failed to add client');
+        setError(msg);
+        addToast({ type: 'error', message: msg });
+        return false;
+      } finally {
+        setLoading(false);
       }
+    },
+    [addToast]
+  );
 
-      addToast({ type: 'success', message: 'Client added successfully!' });
-
-      return true;
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to add client';
-      setError(errorMsg);
-      addToast({ type: 'error', message: errorMsg });
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
-
-  // ================= UPDATE CLIENT =================
-  const updateClient = useCallback(async (id: string, data: Partial<ClientFormData>) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(`/api/clients/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // ✅ IMPORTANT FIX
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to update client');
+  const updateClient = useCallback(
+    async (id: string, data: Partial<ClientFormData>) => {
+      try {
+        setLoading(true);
+        setError(null);
+        await api.put(`/api/clients/${id}`, data);
+        addToast({ type: 'success', message: 'Client updated successfully!' });
+        return true;
+      } catch (err) {
+        const msg = messageOf(err, 'Failed to update client');
+        setError(msg);
+        addToast({ type: 'error', message: msg });
+        return false;
+      } finally {
+        setLoading(false);
       }
+    },
+    [addToast]
+  );
 
-      addToast({ type: 'success', message: 'Client updated successfully!' });
-
-      return true;
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to update client';
-      setError(errorMsg);
-      addToast({ type: 'error', message: errorMsg });
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
-
-  // ================= DELETE CLIENT =================
-  const deleteClient = useCallback(async (id: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(`/api/clients/${id}`, {
-        method: 'DELETE',
-        credentials: 'include', // ✅ IMPORTANT
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to delete client');
+  const deleteClient = useCallback(
+    async (id: string) => {
+      try {
+        setLoading(true);
+        setError(null);
+        await api.del(`/api/clients/${id}`);
+        addToast({ type: 'success', message: 'Client deleted successfully!' });
+        return true;
+      } catch (err) {
+        const msg = messageOf(err, 'Failed to delete client');
+        setError(msg);
+        addToast({ type: 'error', message: msg });
+        return false;
+      } finally {
+        setLoading(false);
       }
-
-      addToast({ type: 'success', message: 'Client deleted successfully!' });
-
-      return true;
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to delete client';
-      setError(errorMsg);
-      addToast({ type: 'error', message: errorMsg });
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
+    },
+    [addToast]
+  );
 
   return {
     clients,

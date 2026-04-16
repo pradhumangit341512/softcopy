@@ -131,10 +131,14 @@ function LoginForm() {
         // Full login returned.
         setUser(res.user as Parameters<typeof setUser>[0]);
         addToast({ type: 'success', message: 'Welcome back!' });
-        const safePath = typeof res.redirectTo === 'string' && res.redirectTo.startsWith('/') && !res.redirectTo.startsWith('//')
-          ? res.redirectTo
-          : '/dashboard';
-        window.location.href = safePath;
+        // Validate redirectTo is a same-origin absolute path. Defense
+        // against future server bug returning a user-controlled URL.
+        const isSafeRedirect =
+          typeof res.redirectTo === 'string' &&
+          res.redirectTo.startsWith('/') &&
+          !res.redirectTo.startsWith('//') &&
+          !res.redirectTo.startsWith('/\\');
+        window.location.href = isSafeRedirect ? res.redirectTo : '/dashboard';
       }
     } catch (err) {
       applyApiError(err, 'Login failed. Please try again.');

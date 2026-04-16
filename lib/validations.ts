@@ -43,7 +43,7 @@ const optionalString = z
   .nullable()
   .transform((v) => v || null);
 
-const otpCodeSchema = z.string().regex(/^\d{4,6}$/, 'Invalid OTP');
+export const otpCodeSchema = z.string().regex(/^\d{4,6}$/, 'Invalid OTP');
 
 // ==================== AUTH ====================
 
@@ -183,6 +183,14 @@ export const createPropertySchema = z
 
 export const updatePropertySchema = createPropertySchema.partial();
 
+// ==================== BUDGET ====================
+
+export const monthlyBudgetSchema = z.object({
+  // YYYY-MM format — covers 2000-01 through 2099-12
+  month: z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/, 'Month must be YYYY-MM (e.g. 2026-04)'),
+  targetAmount: z.coerce.number().nonnegative('Target must be ≥ 0'),
+});
+
 // ==================== USER ====================
 
 export const createUserSchema = z
@@ -248,13 +256,17 @@ export async function parseBody<T extends z.ZodTypeAny>(
   req: Request,
   schema: T
 ): Promise<{ ok: true; data: z.infer<T> } | { ok: false; response: NextResponse }> {
+  // Lazy-import to avoid a circular import at module load (errors.ts uses
+  // NextResponse, validations.ts is imported by everything).
+  const { ErrorCode, apiError } = await import('./errors');
+
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }),
+      response: apiError(ErrorCode.VALIDATION_INVALID_JSON, 'Invalid JSON body'),
     };
   }
 
@@ -269,16 +281,11 @@ export async function parseBody<T extends z.ZodTypeAny>(
     }
     const first = parsed.error.issues[0];
     const summaryPath = first.path.join('.');
-    const summary = summaryPath
-      ? `${summaryPath}: ${first.message}`
-      : first.message;
+    const summary = summaryPath ? `${summaryPath}: ${first.message}` : first.message;
 
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: summary, fields, root: rootErrors },
-        { status: 400 }
-      ),
+      response: apiError(ErrorCode.VALIDATION_FAILED, summary, { fields, root: rootErrors }),
     };
   }
 

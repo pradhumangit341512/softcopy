@@ -1,104 +1,176 @@
-import { LRUCache } from 'lru-cache';
 import { NextResponse, type NextRequest } from 'next/server';
-
-type Options = {
-  /** Window in minutes */
-  interval: number;
-  /** Max distinct keys tracked in memory */
-  uniqueTokenPerInterval: number;
-};
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+import { LRUCache } from 'lru-cache';
 
 export type RateLimitResult = {
   success: boolean;
   remaining: number;
-  /** Seconds until the oldest hit in the window falls off. Use for Retry-After. */
+  /** Seconds until the window resets — used for Retry-After header. */
   retryAfter: number;
 };
 
+export interface Limiter {
+  check(limit: number, token: string): Promise<RateLimitResult>;
+}
+
+// ==================== UPSTASH REDIS CLIENT ====================
+
+const HAS_UPSTASH =
+  !!process.env.UPSTASH_REDIS_REST_URL &&
+  !!process.env.UPSTASH_REDIS_REST_TOKEN;
+
+const IS_PROD =
+  process.env.VERCEL_ENV === 'production' ||
+  process.env.VERCEL_ENV === 'preview';
+
+if (!HAS_UPSTASH && IS_PROD) {
+  throw new Error(
+    'FATAL: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production.'
+  );
+}
+
+const redis = HAS_UPSTASH
+  ? new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    })
+  : null;
+
+// ==================== SLIDING-WINDOW FACTORY ====================
+
 /**
- * Simple in-memory sliding-window limiter.
- *
- * ⚠️ Per serverless-instance only. On Vercel with scaling, an attacker
- * hitting N instances multiplies the effective budget. Swap to Upstash
- * Redis for fleet-wide limits (same interface, same call sites).
+ * Upstash's Ratelimit locks limit + window at construction. Our call sites
+ * pass different limits per preset (e.g. authLimiter.check(20, ...) vs .check(10, ...)),
+ * so we lazily cache one Ratelimit per (preset, limit) pair.
  */
-export default function Ratelimit(options: Options) {
-  const windowMs = options.interval * 60 * 1000;
-  const tokenCache = new LRUCache<string, number[]>({
-    max: options.uniqueTokenPerInterval,
-    ttl: windowMs,
-  });
+type Preset = {
+  /** Upstash duration string, e.g. '10 m', '15 m', '60 m' */
+  window: `${number} ${'s' | 'm' | 'h'}`;
+  prefix: string;
+};
+
+const instanceCache = new Map<string, Ratelimit>();
+
+function upstashLimiter(preset: Preset, limit: number): Ratelimit {
+  const cacheKey = `${preset.prefix}:${limit}`;
+  let inst = instanceCache.get(cacheKey);
+  if (!inst) {
+    inst = new Ratelimit({
+      redis: redis!,
+      limiter: Ratelimit.slidingWindow(limit, preset.window),
+      prefix: `cms:${preset.prefix}`,
+      analytics: true, // tracked in Upstash dashboard
+    });
+    instanceCache.set(cacheKey, inst);
+  }
+  return inst;
+}
+
+// ==================== DEV FALLBACK (in-memory) ====================
+
+/**
+ * Used ONLY when Upstash env vars are missing in dev. Preserves API so
+ * `npm run dev` works without an Upstash account. Never reached in prod.
+ */
+function memoryLimiter(preset: Preset): Limiter {
+  const windowMinutes = Number(preset.window.split(' ')[0]);
+  const windowMs = windowMinutes * 60 * 1000;
+  const cache = new LRUCache<string, number[]>({ max: 5000, ttl: windowMs });
 
   return {
-    check: async (limit: number, token: string): Promise<RateLimitResult> => {
+    check: async (limit, token) => {
       const now = Date.now();
       const windowStart = now - windowMs;
-      const hits = (tokenCache.get(token) || []).filter((t) => t > windowStart);
+      const hits = (cache.get(token) || []).filter((t) => t > windowStart);
 
       if (hits.length >= limit) {
         const oldest = hits[0]!;
         const retryAfter = Math.max(1, Math.ceil((oldest + windowMs - now) / 1000));
         return { success: false, remaining: 0, retryAfter };
       }
-
-      tokenCache.set(token, [...hits, now]);
-      return {
-        success: true,
-        remaining: limit - hits.length - 1,
-        retryAfter: 0,
-      };
+      cache.set(token, [...hits, now]);
+      return { success: true, remaining: limit - hits.length - 1, retryAfter: 0 };
     },
   };
 }
 
+// ==================== LIMITER FACTORY ====================
+
+function makeLimiter(preset: Preset): Limiter {
+  if (!redis) {
+    if (IS_PROD) {
+      // Should never happen — env.ts already throws. But belt-and-suspenders.
+      throw new Error('Upstash misconfigured in production');
+    }
+    // Dev only — log once, fall back to in-memory.
+    if (!hasWarnedNoUpstash) {
+      hasWarnedNoUpstash = true;
+      // eslint-disable-next-line no-console
+      console.warn('[rate-limit] No Upstash configured — using in-memory fallback (dev only).');
+    }
+    return memoryLimiter(preset);
+  }
+
+  return {
+    check: async (limit, token) => {
+      const r = await upstashLimiter(preset, limit).limit(token);
+      const retryAfter = r.success ? 0 : Math.max(1, Math.ceil((r.reset - Date.now()) / 1000));
+      return { success: r.success, remaining: r.remaining, retryAfter };
+    },
+  };
+}
+
+let hasWarnedNoUpstash = false;
+
 // ==================== PRESETS ====================
 
-/** Auth endpoints: 10 req / 10 min per key */
-export const authLimiter = Ratelimit({ interval: 10, uniqueTokenPerInterval: 5000 });
+/** Auth endpoints — N req / 10 min per key */
+export const authLimiter: Limiter = makeLimiter({ window: '10 m', prefix: 'auth' });
 
-/** OTP send: 3 sends / 15 min per phone or email (SMS-pumping defense) */
-export const otpLimiter = Ratelimit({ interval: 15, uniqueTokenPerInterval: 5000 });
+/** OTP send/verify — N req / 15 min per phone or email */
+export const otpLimiter: Limiter = makeLimiter({ window: '15 m', prefix: 'otp' });
 
-/** Password reset: 3 / hour per email */
-export const resetLimiter = Ratelimit({ interval: 60, uniqueTokenPerInterval: 5000 });
+/** Password reset — N req / hour per email or IP */
+export const resetLimiter: Limiter = makeLimiter({ window: '60 m', prefix: 'reset' });
+
+/** Generic per-user API limiter — for /api/auth/me + heavy endpoints */
+export const apiLimiter: Limiter = makeLimiter({ window: '1 m', prefix: 'api' });
 
 // ==================== HELPERS ====================
 
+import { ErrorCode, apiError } from './errors';
+
 /**
- * Build a ready-to-send 429 response with a correct `Retry-After` header.
- *
- * @param message  User-facing error string.
- * @param retryAfter  Seconds until the caller should retry.
+ * Build a 429 response with Retry-After + X-RateLimit-Remaining headers.
+ * Uses the new apiError builder so the response shape carries `code: RATE_LIMITED`.
  */
 export function rateLimited(message: string, retryAfter: number): NextResponse {
-  return NextResponse.json(
-    { error: message, retryAfter },
-    {
-      status: 429,
-      headers: {
-        'Retry-After': String(Math.max(1, retryAfter)),
-        'X-RateLimit-Remaining': '0',
-      },
-    }
-  );
+  return apiError(ErrorCode.RATE_LIMITED, message, {
+    retryAfter,
+    headers: { 'X-RateLimit-Remaining': '0' },
+  });
 }
 
 /**
- * Extract the real client IP on Vercel.
- *
- * Vercel's edge always sets `x-real-ip` to the trusted client IP, and
- * appends the client IP to the RIGHT side of `x-forwarded-for`. Reading
- * the leftmost entry of a user-supplied x-forwarded-for header lets an
- * attacker spoof their IP by prepending arbitrary values — do not do that.
+ * Best-effort client IP. Order:
+ *   1. CF-Connecting-IP (Cloudflare)
+ *   2. RIGHTMOST entry of x-forwarded-for (Vercel appends true client IP)
+ *   3. x-real-ip
+ *   4. 'unknown' (better to apply a global bucket than skip)
  */
 export function getClientIp(req: NextRequest): string {
-  const real = req.headers.get('x-real-ip');
-  if (real && real.trim()) return real.trim();
+  const cf = req.headers.get('cf-connecting-ip');
+  if (cf?.trim()) return cf.trim();
 
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) {
     const parts = fwd.split(',').map((s) => s.trim()).filter(Boolean);
     if (parts.length > 0) return parts[parts.length - 1]!;
   }
+
+  const real = req.headers.get('x-real-ip');
+  if (real?.trim()) return real.trim();
+
   return 'unknown';
 }

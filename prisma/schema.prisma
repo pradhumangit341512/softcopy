@@ -138,6 +138,8 @@ model Client {
   @@index([companyId, createdBy, status, createdAt])
   @@index([companyId, status, createdAt])
   @@index([companyId, visitingDate])
+  // Soft-delete-aware composite — every list query filters deletedAt: null
+  @@index([companyId, deletedAt, createdAt])
 }
 
 model Commission {
@@ -166,6 +168,7 @@ model Commission {
   // Hot paths: company totals, month-scoped payouts, status grouping
   @@index([companyId, paidStatus, createdAt])
   @@index([companyId, createdAt])
+  @@index([companyId, deletedAt, createdAt])
 }
 
 model OTP {
@@ -246,6 +249,7 @@ model Property {
   @@index([deletedAt])
   @@index([companyId, status, createdAt])
   @@index([companyId, createdBy, status, createdAt])
+  @@index([companyId, deletedAt, createdAt])
 }
 
 model MonthlyBudget {

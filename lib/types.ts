@@ -335,13 +335,8 @@ export interface AnalyticsResponse {
 }
 
 // ==================== AUTH ====================
-
-export interface JWTPayload {
-  userId: string;
-  companyId: string;
-  role: UserRole;
-  email: string;
-}
+// JWT payload type lives in lib/auth.ts as `AuthTokenPayload`.
+// Import from there: `import type { AuthTokenPayload } from '@/lib/auth'`
 
 export interface AuthState {
   user: UserWithoutPassword | null;
