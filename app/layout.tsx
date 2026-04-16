@@ -75,11 +75,9 @@ export default function RootLayout({
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
-        
-        {/* Fonts */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        
+        {/* next/font/google self-hosts the font files and emits its own
+            preconnect/preload hints automatically — manual ones aren't needed. */}
+
         {/* Analytics (optional) */}
         {process.env.NEXT_PUBLIC_GA_ID && (
           <>

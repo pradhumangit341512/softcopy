@@ -1,51 +1,29 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader } from '@/components/common/Loader';
 
-const Dashboard = dynamic(() => import('@/components/dashboard/Dashboard').then(mod => ({ default: mod.Dashboard })), {
-  loading: () => <Loader size="md" message="Loading dashboard..." />,
-});
+/**
+ * /dashboard — legacy URL kept as a role-aware redirect.
+ *
+ * New code should link directly to /admin/dashboard or /team/dashboard.
+ * This page exists so old bookmarks, emails, and hardcoded refs keep working.
+ */
+export default function DashboardRedirect() {
+  const router = useRouter();
+  const { user, isLoading, hasFetched } = useAuth();
 
-export default function DashboardPage() {
-  const { user } = useAuth();
+  useEffect(() => {
+    if (!hasFetched || isLoading) return;
+    if (!user) return; // parent layout handles unauthenticated
+    if (user.role === 'admin' || user.role === 'superadmin') {
+      router.replace('/admin/dashboard');
+    } else {
+      router.replace('/team/dashboard');
+    }
+  }, [user, isLoading, hasFetched, router]);
 
-  // ── Greeting based on time of day ──
-  const hour = new Date().getHours();
-  const greeting =
-    hour < 12 ? 'Good morning' :
-    hour < 17 ? 'Good afternoon' :
-                'Good evening';
-
-  const firstName = user?.name?.split(' ')[0] || 'there';
-
-  return (
-    <div className="py-4 sm:py-6 lg:py-8 space-y-5 sm:space-y-6">
-
-      {/* ── HEADER ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            {greeting}, {firstName}! 👋
-          </h1>
-          <p className="text-gray-500 text-xs sm:text-sm mt-1">
-            Here's what's happening with your business today.
-          </p>
-        </div>
-
-        {/* Today's date pill */}
-        <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-white border border-gray-100
-          rounded-xl shadow-sm w-fit text-xs sm:text-sm text-gray-500 font-medium self-start sm:self-auto">
-          📅 {new Date().toLocaleDateString('en-IN', {
-            weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-          })}
-        </div>
-      </div>
-
-      {/* ── DASHBOARD CONTENT ── */}
-      <Dashboard />
-
-    </div>
-  );
+  return <Loader size="md" message="Loading..." />;
 }

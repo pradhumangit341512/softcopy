@@ -100,7 +100,10 @@ export const createClientSchema = z
     companyName: optionalString,
     requirementType: z.string().trim().min(1, 'Select requirement type'),
     inquiryType: z.string().trim().min(1, 'Select inquiry type'),
-    budget: z.coerce.number().positive().optional().nullable(),
+    budget: z
+      .union([z.coerce.number().positive(), z.literal(''), z.null()])
+      .optional()
+      .transform((v) => (v === '' || v === null || v === undefined ? null : Number(v))),
     preferredLocation: optionalString,
     address: optionalString,
     visitingTime: optionalString,
@@ -109,6 +112,9 @@ export const createClientSchema = z
     notes: optionalString,
     visitingDate: optionalDate,
     followUpDate: optionalDate,
+    // Fields the form also submits at create time (not just edit)
+    propertyVisited: z.boolean().optional().default(false),
+    visitStatus: z.string().optional().default('NotVisited'),
   })
   .strict();
 

@@ -87,7 +87,10 @@ export default function ClientsPage() {
         ...(dateToUrl     && { dateTo:   dateToUrl }),
         page: String(pageFromUrl),
       });
-      const response = await fetch(`/api/clients?${params}`, { credentials: 'include' });
+      const response = await fetch(`/api/clients?${params}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (!response.ok) throw new Error('Failed to fetch clients');
       const data = await response.json();
       setClients(data.clients || []);

@@ -18,6 +18,10 @@ const schema = z.object({
     .string()
     .min(32, 'JWT_SECRET must be at least 32 characters'),
 
+  // Base URL used to build absolute links in emails (verification, reset).
+  // Defaults to http://localhost:3000 in dev. In prod, set to your domain.
+  APP_URL: z.string().url().default('http://localhost:3000'),
+
   // ---- RECOMMENDED ----
   OTP_PEPPER: z
     .string()

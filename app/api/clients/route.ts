@@ -135,6 +135,8 @@ export async function POST(req: NextRequest) {
         status: data.status,
         source: data.source,
         notes: data.notes,
+        propertyVisited: data.propertyVisited,
+        visitStatus: data.visitStatus,
         companyId: payload.companyId,
         createdBy: payload.userId,
         visitingDate: data.visitingDate,

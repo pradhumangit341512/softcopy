@@ -247,22 +247,21 @@ export const useAuthStore = create<AuthState>()(
         name:    'auth-storage',
         storage: createJSONStorage(() => localStorage),
 
-        // 🔐 Never persist the user object (role, companyId, email) to
-        // localStorage — XSS can exfiltrate it. Only persist a lightweight
-        // "was authenticated" hint so the UI can show the right shell while
-        // /api/auth/me is re-verified on mount.
-        partialize: (state) => ({
-          isAuthenticated: state.isAuthenticated,
-        }),
+        // 🔐 Persist NOTHING. The cookie is the only source of truth.
+        // - No user object → XSS can't exfiltrate PII
+        // - No isAuthenticated flag → no "ghost" auth state that lingers after
+        //   the cookie has expired (which causes redirect loops like
+        //   `/` → `/dashboard` → `/login`)
+        // Every page load re-verifies via /api/auth/me.
+        partialize: () => ({}),
 
-        merge: (persistedState, currentState) => ({
+        merge: (_persistedState, currentState) => ({
           ...currentState,
-          ...(persistedState as Partial<AuthState>),
-          // Always reset — user is re-fetched from the server on rehydrate
-          user:       null,
-          isLoading:  false,
-          hasFetched: false,
-          error:      null,
+          user:            null,
+          isAuthenticated: false,
+          isLoading:       false,
+          hasFetched:      false,
+          error:           null,
         }),
       }
     )

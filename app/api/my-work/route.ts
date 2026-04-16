@@ -53,10 +53,11 @@ export async function GET(req: NextRequest) {
     const todayEnd = new Date(todayStart);
     todayEnd.setDate(todayEnd.getDate() + 1);
 
-    // Leads created by this user
+    // Leads created by this user (exclude soft-deleted rows across the page)
     const myLeadsFilter = {
       companyId,
       createdBy: userId,
+      deletedAt: null,
     };
 
     const [assignedLeads, pendingFollowUps, todayVisits] = await Promise.all([

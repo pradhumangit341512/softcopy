@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
 
     const where: Prisma.ClientWhereInput = {
       companyId: payload.companyId,
+      deletedAt: null, // hide soft-deleted clients from search results
       AND: [
         searchCondition,
         // Role-based isolation: non-admin users only see their own clients

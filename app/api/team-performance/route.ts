@@ -61,15 +61,21 @@ export async function GET(req: NextRequest) {
         const [totalLeads, dealsClosed, commissions, pendingFollowUps] =
           await Promise.all([
             db.client.count({
-              where: { companyId, createdBy: user.id },
+              where: { companyId, createdBy: user.id, deletedAt: null },
             }),
             db.client.count({
-              where: { companyId, createdBy: user.id, status: "DealDone" },
+              where: {
+                companyId,
+                createdBy: user.id,
+                status: "DealDone",
+                deletedAt: null,
+              },
             }),
             db.commission.aggregate({
               where: {
                 companyId,
-                client: { createdBy: user.id },
+                deletedAt: null,
+                client: { createdBy: user.id, deletedAt: null },
               },
               _sum: { commissionAmount: true },
               _count: true,
@@ -78,6 +84,7 @@ export async function GET(req: NextRequest) {
               where: {
                 companyId,
                 createdBy: user.id,
+                deletedAt: null,
                 followUpDate: { lte: new Date() },
                 status: { notIn: ["DealDone", "Rejected"] },
               },

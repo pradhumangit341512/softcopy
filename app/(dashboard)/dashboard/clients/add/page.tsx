@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { Card, CardBody, CardHeader } from '@/components/common/Card';
 import { ClientForm } from '@/components/clients/ClientForm';
 import { useClients } from '@/hooks/useClients';
-import { useToast } from '@/components/common/Toast';
 import { Loader } from '@/components/common/Loader';
 import { Button } from '@/components/common/Button';
 import type { Client } from '@/lib/types';
@@ -14,8 +13,7 @@ import type { ClientFormData } from '@/hooks/useClients';
 
 export default function AddClientPage() {
   const router = useRouter();
-  const { addClient, loading, error } = useClients();
-  const { addToast } = useToast();
+  const { addClient, loading } = useClients();
 
   const handleSubmit = async (data: Partial<Client>) => {
     const formData = {
@@ -25,16 +23,10 @@ export default function AddClientPage() {
     };
     const success = await addClient(formData as ClientFormData);
     if (success) {
-      addToast({
-        type: 'success',
-        message: 'Client added successfully!',
-      });
+      // Invalidate the cached /dashboard/clients RSC so the list refetches
+      // the newly created record after navigation.
+      router.refresh();
       router.push('/dashboard/clients');
-    } else {
-      addToast({
-        type: 'error',
-        message: error || 'Failed to add client',
-      });
     }
     return success;
   };

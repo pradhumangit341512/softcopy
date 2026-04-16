@@ -13,20 +13,27 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, hasFetched, logout } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Auto-logout after 24 hours of inactivity
   useInactivityLogout();
 
+  // Redirect only AFTER we've actually tried to fetch the user.
+  // Without `hasFetched`, this effect fires on the very first render when
+  // user=null, isLoading=false — racing past the fetchUser call and
+  // bouncing authenticated users back to /login.
   useEffect(() => {
+    if (!hasFetched) return;
     if (!isLoading && !user) {
       router.replace('/login');
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, hasFetched, router]);
 
-  if (isLoading) {
+  // Keep the loader visible until the first fetch resolves. Returning
+  // `null` during the pre-fetch window flashes a blank screen.
+  if (isLoading || !hasFetched) {
     return <Loader fullScreen size="lg" message="Loading..." />;
   }
 

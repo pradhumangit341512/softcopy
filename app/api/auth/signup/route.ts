@@ -1,250 +1,167 @@
-// app/api/auth/signup/route.ts
+/**
+ * POST /api/auth/signup
+ *
+ * Simplified single-step signup:
+ *   1. Validate body (name, email, phone, password, companyName)
+ *   2. Reject if email/phone already registered (409)
+ *   3. Create Company + User in a transaction, emailVerified=null, status='pending_verification'
+ *   4. Mint a single-use verification token, hash it, store hash
+ *   5. Email the raw token inside a link: APP_URL/verify-email?token=RAW
+ *   6. Return generic success — the user activates by clicking the link
+ *
+ * No OTP during signup. The OTP flow now only runs during login (and only on
+ * untrusted devices). See /api/auth/login.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { generateToken, IS_DEV_BYPASS } from '@/lib/auth';
-import { sendOTPEmail } from '@/lib/email';
-import {
-  generateOTP, hashOTP, verifyEmailOtp,
-  OTP_EXPIRY_MS, RESEND_COOLDOWN,
-} from '@/lib/otp';
+import { db } from '@/lib/db';
+import { env } from '@/lib/env';
+import { sendVerificationEmail } from '@/lib/email';
 import { signupSchema, parseBody } from '@/lib/validations';
 import { authLimiter, getClientIp, rateLimited } from '@/lib/rate-limit';
-import { recordAudit } from '@/lib/audit';
+import { ErrorCode, apiError, newRequestId } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  path: '/',
-  maxAge: 60 * 60 * 24 * 7,
-};
+const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function POST(req: NextRequest) {
+  const requestId = newRequestId();
+  const ip = getClientIp(req);
+  const log = logger.child({ route: '/api/auth/signup', requestId, ip });
+
   try {
-    const ip = getClientIp(req);
+    // ── Rate limit per IP ──
     const ipLimit = await authLimiter.check(10, `signup:ip:${ip}`);
     if (!ipLimit.success) {
       return rateLimited('Too many signup attempts. Please try again later.', ipLimit.retryAfter);
     }
 
+    // ── Validate body (OTP field on the schema is ignored/unused now) ──
     const parsed = await parseBody(req, signupSchema);
     if (!parsed.ok) return parsed.response;
-    const { name, email, phone, password, companyName, otp } = parsed.data;
+    const { name, email, phone, password, companyName } = parsed.data;
 
-    // ════════════════════════════════════
-    // DEV BYPASS — ONLY creates a genuinely new account; never hijacks
-    // an existing email/phone. Role is NOT hardcoded.
-    // ════════════════════════════════════
-    if (IS_DEV_BYPASS) {
-      if (!otp) {
-        return NextResponse.json(
-          { requireOTP: true, message: 'DEV MODE: enter any 6-digit OTP' },
-          { status: 200 }
-        );
-      }
-
-      const existing = await db.user.findFirst({
-        where: { OR: [{ email }, { phone }] },
-      });
-      if (existing) {
-        return NextResponse.json(
-          { error: 'An account with this email or phone already exists.' },
-          { status: 409 }
-        );
-      }
-
-      const hashedPassword = await bcrypt.hash(password, 12);
-      const subscriptionExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-
-      const company = await db.company.create({
-        data: {
-          companyName: companyName || 'Dev Company',
-          subscriptionType: 'Basic',
-          subscriptionExpiry,
-          status: 'active',
-        },
-      });
-
-      const user = await db.user.create({
-        data: {
-          name, email, phone,
-          password: hashedPassword,
-          role: 'admin',
-          companyId: company.id,
-          status: 'active',
-        },
-      });
-
-      const token = await generateToken(
-        user.id, company.id, user.role, user.email,
-        { subscriptionExpiry, tokenVersion: user.tokenVersion }
-      );
-
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password: _pw, ...safeUser } = user;
-      const response = NextResponse.json(
-        { message: 'Account created successfully', user: { ...safeUser, company } },
-        { status: 201 }
-      );
-      response.cookies.set('auth_token', token, COOKIE_OPTS);
-      return response;
-    }
-
-    // ════════════════════════════════════
-    // PRODUCTION FLOW
-    // ════════════════════════════════════
-
-    // STEP 2: OTP provided → verify + create account (idempotent-safe via P2002)
-    if (otp) {
-      // Re-check just before creation; race with concurrent signup handled by
-      // the unique constraint + P2002 catch below.
-      const existing = await db.user.findFirst({
-        where: { OR: [{ email }, { phone }] },
-        select: { email: true, phone: true },
-      });
-      if (existing) {
-        const field = existing.email === email ? 'email' : 'phone number';
-        return NextResponse.json(
-          { error: `This ${field} is already registered. Please log in instead.` },
-          { status: 409 }
-        );
-      }
-
-      const record = await db.emailOTP.findFirst({
-        where: { email, purpose: 'signup' },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (!record) {
-        return NextResponse.json({ error: 'No OTP found. Please request a new one.' }, { status: 400 });
-      }
-
-      const outcome = await verifyEmailOtp(record.id, String(otp));
-      if (outcome === 'expired') {
-        await db.emailOTP.delete({ where: { id: record.id } }).catch(() => {});
-        return NextResponse.json({ error: 'OTP expired. Please try again.' }, { status: 400 });
-      }
-      if (outcome === 'locked') {
-        await db.emailOTP.delete({ where: { id: record.id } }).catch(() => {});
-        return NextResponse.json(
-          { error: 'Too many failed attempts. Please try again.' },
-          { status: 429, headers: { 'Retry-After': '600' } }
-        );
-      }
-      if (outcome === 'mismatch') {
-        return NextResponse.json({ error: 'Invalid OTP.' }, { status: 400 });
-      }
-
-      await db.emailOTP.delete({ where: { id: record.id } });
-
-      const hashedPassword = await bcrypt.hash(password, 12);
-      const subscriptionExpiry = new Date();
-      subscriptionExpiry.setDate(subscriptionExpiry.getDate() + 30);
-
-      // Transactional create — if the user insert fails (race P2002, etc.)
-      // the company insert is rolled back so no orphan Company rows accumulate.
-      try {
-        const { user, company } = await db.$transaction(async (tx) => {
-          const company = await tx.company.create({
-            data: {
-              companyName,
-              subscriptionType: 'Basic',
-              subscriptionExpiry,
-              status: 'active',
-            },
-          });
-          const user = await tx.user.create({
-            data: {
-              name, email, phone,
-              password: hashedPassword,
-              role: 'admin',
-              companyId: company.id,
-              status: 'active',
-            },
-          });
-          return { user, company };
-        });
-
-        const token = await generateToken(
-          user.id, company.id, user.role, user.email,
-          { subscriptionExpiry, tokenVersion: user.tokenVersion }
-        );
-
-        await recordAudit({
-          companyId: company.id,
-          userId: user.id,
-          action: 'auth.signup',
-          resource: 'User',
-          resourceId: user.id,
-          req,
-        });
-
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { password: _pw, ...safeUser } = user;
-        const response = NextResponse.json(
-          { message: 'Account created successfully', user: { ...safeUser, company } },
-          { status: 201 }
-        );
-        response.cookies.set('auth_token', token, COOKIE_OPTS);
-        return response;
-      } catch (createError: unknown) {
-        const prismaError = createError as { code?: string; meta?: { target?: string[] } };
-        if (prismaError?.code === 'P2002') {
-          const field = prismaError.meta?.target?.[0] || 'field';
-          return NextResponse.json(
-            { error: `This ${field} is already registered. Please try logging in instead.` },
-            { status: 409 }
-          );
-        }
-        throw createError;
-      }
-    }
-
-    // ════════════════════════════════════
-    // STEP 1: Send OTP. IMPORTANT: do NOT reveal whether the email/phone is
-    // already taken here — that enables account enumeration. The duplicate
-    // check runs at OTP-verification time (Step 2).
-    // ════════════════════════════════════
-    const lastOTP = await db.emailOTP.findFirst({
-      where: { email, purpose: 'signup' },
-      orderBy: { createdAt: 'desc' },
+    // ── Duplicate check ──
+    const existing = await db.user.findFirst({
+      where: { OR: [{ email }, { phone }] },
+      select: { email: true, phone: true },
     });
-    if (lastOTP && Date.now() - new Date(lastOTP.createdAt).getTime() < RESEND_COOLDOWN) {
-      return NextResponse.json(
-        { requireOTP: true, message: 'OTP already sent. Please check your email.' },
-        { status: 200 }
+    if (existing) {
+      const field = existing.email === email ? 'email' : 'phone number';
+      return apiError(
+        ErrorCode.RESOURCE_CONFLICT,
+        `This ${field} is already registered. Please log in instead.`,
+        { requestId, status: 409 }
       );
     }
 
-    await db.emailOTP.deleteMany({ where: { email, purpose: 'signup' } });
+    // ── Create account (pending-verification) + token atomically ──
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const subscriptionExpiry = new Date();
+    subscriptionExpiry.setDate(subscriptionExpiry.getDate() + 30);
 
-    const newOTP = generateOTP();
-    const otpHash = hashOTP(newOTP);
-    await db.emailOTP.create({
-      data: {
-        email,
-        otpHash,
-        purpose: 'signup',
-        attempts: 0,
-        expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
-      },
-    });
+    const rawToken = crypto.randomBytes(32).toString('base64url');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
 
-    // Only actually send the email if the address is free — but always return
-    // the same generic response so the attacker can't distinguish.
-    const emailExists = await db.user.findUnique({ where: { email }, select: { id: true } });
-    if (!emailExists) {
-      await sendOTPEmail(email, newOTP, 'signup');
+    let userId: string;
+
+    try {
+      const { user } = await db.$transaction(async (tx) => {
+        const company = await tx.company.create({
+          data: {
+            companyName,
+            subscriptionType: 'Basic',
+            subscriptionExpiry,
+            status: 'active',
+          },
+        });
+        const user = await tx.user.create({
+          data: {
+            name,
+            email,
+            phone,
+            password: hashedPassword,
+            role: 'admin',
+            companyId: company.id,
+            status: 'pending_verification',
+            emailVerified: null,
+          },
+        });
+        await tx.verificationToken.create({
+          data: {
+            userId: user.id,
+            tokenHash,
+            purpose: 'email-verification',
+            expiresAt,
+          },
+        });
+        return { user, company };
+      });
+      userId = user.id;
+    } catch (createError: unknown) {
+      const e = createError as { code?: string; meta?: { target?: string[] } };
+      if (e?.code === 'P2002') {
+        const field = e.meta?.target?.[0] || 'field';
+        return apiError(
+          ErrorCode.RESOURCE_CONFLICT,
+          `This ${field} is already registered. Please log in instead.`,
+          { requestId, status: 409 }
+        );
+      }
+      throw createError;
     }
 
-    return NextResponse.json(
-      { requireOTP: true, message: 'If this address is available, a verification code has been sent.' },
-      { status: 200 }
-    );
+    // ── Send verification email — if it fails, roll back the user create
+    // so the user can retry signup rather than being stuck with an unclickable account. ──
+    const verifyLink = `${env.APP_URL}/verify-email?token=${encodeURIComponent(rawToken)}`;
+    try {
+      await sendVerificationEmail(email, verifyLink, name);
+    } catch (sendErr) {
+      log.error({ err: sendErr, userId }, 'Verification email send failed');
+      // Roll back — delete user + company + token. Cascade handles token.
+      await db.user.delete({ where: { id: userId } }).catch(() => {});
+      return apiError(
+        ErrorCode.OTP_SEND_FAILED,
+        'We could not send the verification email right now. Please try again.',
+        { requestId }
+      );
+    }
+
+    log.info({ userId, email: email.slice(0, 3) + '***' }, 'Signup pending verification');
+
+    // Dev-only echo of the link so you can test without opening an inbox.
+    const IS_DEV_LOCAL =
+      process.env.NODE_ENV === 'development' &&
+      !process.env.VERCEL &&
+      !process.env.VERCEL_ENV;
+    if (IS_DEV_LOCAL) {
+      // eslint-disable-next-line no-console
+      console.log(`\n✅ [DEV] verification link for ${email}:\n${verifyLink}\n`);
+    }
+
+    const body: Record<string, unknown> = {
+      success: true,
+      message: "Check your email — we've sent a link to verify your address.",
+    };
+    if (IS_DEV_LOCAL) {
+      body.__dev = { verifyLink };
+    }
+
+    return NextResponse.json(body, {
+      status: 201,
+      headers: { 'X-Request-Id': requestId },
+    });
   } catch (error) {
-    console.error('Signup error:', error);
-    return NextResponse.json({ error: 'Signup failed' }, { status: 500 });
+    log.error({ err: error }, 'Signup failed');
+    return apiError(
+      ErrorCode.SYSTEM_INTERNAL_ERROR,
+      'Signup failed. Please try again.',
+      { requestId }
+    );
   }
 }

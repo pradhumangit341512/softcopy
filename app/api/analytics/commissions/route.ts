@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       by: ["paidStatus"],
       where: {
         companyId,
+        deletedAt: null, // exclude soft-deleted commissions from totals
         createdAt: { gte: monthStart, lte: monthEnd },
       },
       _sum: { commissionAmount: true },
@@ -52,6 +53,7 @@ export async function GET(req: NextRequest) {
       by: ["userId"],
       where: {
         companyId,
+        deletedAt: null, // exclude soft-deleted commissions from rankings
         userId: { not: null },   // skip commissions with no linked user
       },
       _sum: { commissionAmount: true },
@@ -85,6 +87,7 @@ export async function GET(req: NextRequest) {
       by: ["salesPersonName"],
       where: {
         companyId,
+        deletedAt: null,
         userId: null,
         salesPersonName: { not: null },
       },

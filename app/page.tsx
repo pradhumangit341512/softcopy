@@ -18,19 +18,17 @@ import { Button } from '@/components/common/Button';
 
 export default function Home() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, hasFetched, fetchUser } = useAuthStore();
 
-  // If already logged in, redirect to dashboard
+  // Verify auth server-side on mount — do NOT trust any persisted flag.
+  // Only redirect to /dashboard after the server confirms a valid session.
   useEffect(() => {
-    if (isAuthenticated && !isLoading) {
+    if (!hasFetched) {
+      fetchUser();
+    } else if (isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated, isLoading, router]);
-
-  // Show nothing while checking auth
-  if (isLoading) {
-    return <div className="h-screen flex items-center justify-center text-black">Loading...</div>;
-  }
+  }, [hasFetched, isAuthenticated, fetchUser, router]);
 
   return (
     <div className="min-h-screen bg-white">

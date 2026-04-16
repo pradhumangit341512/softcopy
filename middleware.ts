@@ -17,12 +17,17 @@ const publicApiPaths = [
   '/api/auth/signup',
   '/api/auth/logout',
   '/api/auth/otp',
+  '/api/auth/send-otp',
+  '/api/auth/verify-otp',
   '/api/auth/send-email-otp',
   '/api/auth/verify-email-otp',
+  '/api/auth/verify-email',
   '/api/auth/reset-password',
   '/api/auth/forgot-password',
   '/api/webhooks/razorpay',
   '/api/cron/cleanup-otp',
+  '/api/dev/verify-user',
+  '/api/dev/restore-data',
 ];
 
 // Routes that still work even with an expired subscription:
@@ -98,6 +103,21 @@ export async function middleware(request: NextRequest) {
         new URL('/login?error=subscription_expired', request.url)
       );
     }
+  }
+
+  // Role-based path gate.
+  // /admin/* → admin + superadmin only
+  // /team/*  → role === 'user' only
+  // Wrong role → redirect to the correct dashboard (never leak a 403 UI).
+  const role = claims.role;
+  const isAdminRole = role === 'admin' || role === 'superadmin';
+  const isTeamRole = role === 'user';
+
+  if (pathname.startsWith('/admin') && !isAdminRole) {
+    return NextResponse.redirect(new URL('/team/dashboard', request.url));
+  }
+  if (pathname.startsWith('/team') && !isTeamRole) {
+    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
   }
 
   return NextResponse.next();
