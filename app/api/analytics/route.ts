@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { startOfMonth, endOfMonth } from "date-fns";
-import { isValidObjectId, verifyToken, type AuthTokenPayload } from "@/lib/auth";
+import { isValidObjectId, verifyAuth, type AuthTokenPayload } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 type AuthPayload = AuthTokenPayload;
-
-async function verifyAuthFromCookie(req: NextRequest): Promise<AuthPayload | null> {
-  const token = req.cookies.get("auth_token")?.value;
-  if (!token) return null;
-  return verifyToken(token);
-}
 
 // Empty analytics response for dev bypass or missing company
 function emptyAnalytics() {
@@ -31,7 +25,7 @@ function emptyAnalytics() {
 
 export async function GET(req: NextRequest) {
   try {
-    const payload = await verifyAuthFromCookie(req);
+    const payload = await verifyAuth(req);
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -99,24 +93,23 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // Monthly data (last 12 months) — single aggregation instead of 24
-    // sequential count queries. Pulls all rows once, buckets in memory.
+    // Monthly data (last 12 months). Prisma groupBy on DateTime returns one
+    // group per unique timestamp (not per month), so we use a bounded findMany
+    // with minimal select (one field, no joins) and bucket in memory.
     interface MonthlyDataPoint { month: string; leads: number; deals: number; }
     const yearAgo = startOfMonth(new Date(now.getFullYear(), now.getMonth() - 11, 1));
 
-    // 2 round-trips total (vs the previous 24).
     const [leadRows, dealRows] = await Promise.all([
       db.client.findMany({
         where: { ...clientFilter, createdAt: { gte: yearAgo } },
         select: { createdAt: true },
       }),
       db.client.findMany({
-        where: { ...clientFilter, status: "DealDone", updatedAt: { gte: yearAgo } },
+        where: { ...clientFilter, status: 'DealDone', updatedAt: { gte: yearAgo } },
         select: { updatedAt: true },
       }),
     ]);
 
-    // Build a YYYY-MM-keyed bucket map, then walk the last 12 months in order.
     const monthKey = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
@@ -136,7 +129,7 @@ export async function GET(req: NextRequest) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const k = monthKey(date);
       monthlyData.push({
-        month: date.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        month: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
         leads: leadBuckets.get(k) ?? 0,
         deals: dealBuckets.get(k) ?? 0,
       });

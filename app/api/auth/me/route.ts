@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyToken } from "@/lib/auth";
+import { verifyAuth } from "@/lib/auth";
 import { ErrorCode, apiError, newRequestId } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { apiLimiter, getClientIp, rateLimited } from "@/lib/rate-limit";
@@ -19,14 +19,9 @@ export async function GET(req: NextRequest) {
       return rateLimited('Too many requests', limit.retryAfter);
     }
 
-    const token = req.cookies.get("auth_token")?.value;
-    if (!token) {
-      return apiError(ErrorCode.AUTH_UNAUTHORIZED, "Not authenticated", { requestId });
-    }
-
-    const decoded = await verifyToken(token);
+    const decoded = await verifyAuth(req);
     if (!decoded) {
-      return apiError(ErrorCode.AUTH_TOKEN_INVALID, "Invalid or expired token", { requestId });
+      return apiError(ErrorCode.AUTH_UNAUTHORIZED, "Not authenticated", { requestId });
     }
 
     const user = await db.user.findUnique({

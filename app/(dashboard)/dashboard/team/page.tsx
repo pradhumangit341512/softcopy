@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Users, Mail, Phone, Trash2, Shield, X } from 'lucide-react';
+import { Plus, Users, Mail, Phone, Trash2, Shield, X, UserCheck, UserX, Pencil } from 'lucide-react';
 
 import { Loader } from '@/components/common/Loader';
 import { Alert } from '@/components/common/Alert';
@@ -55,6 +55,11 @@ export default function TeamPage() {
     role: 'user',
   });
 
+  // Edit modal state
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: '' as string });
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
   const fetchMembers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -66,7 +71,8 @@ export default function TeamPage() {
       }
       if (!res.ok) throw new Error('Failed to fetch team members');
       const data = await res.json();
-      setMembers(Array.isArray(data) ? data : []);
+      const list = data.users ?? data;
+      setMembers(Array.isArray(list) ? list : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch team');
     } finally {
@@ -142,6 +148,72 @@ export default function TeamPage() {
         type: 'error',
         message: err instanceof Error ? err.message : 'Failed to remove member',
       });
+    }
+  };
+
+  /** Toggle active/inactive — data stays safe, user just can't login */
+  const handleToggleStatus = async (id: string, name: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const action = newStatus === 'active' ? 'activate' : 'deactivate';
+    if (!confirm(`${action === 'activate' ? 'Activate' : 'Deactivate'} ${name}? ${
+      action === 'deactivate'
+        ? 'They will not be able to log in, but all their data (clients, properties, commissions) will be preserved.'
+        : 'They will be able to log in again.'
+    }`)) return;
+
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || `Failed to ${action} member`);
+      }
+      addToast({ type: 'success', message: `${name} ${action}d successfully` });
+      fetchMembers();
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : `Failed to ${action} member`,
+      });
+    }
+  };
+
+  /** Open edit modal pre-filled with member's current data */
+  const openEditModal = (member: TeamMember) => {
+    setEditingMember(member);
+    setEditForm({ name: member.name, email: member.email, phone: member.phone, role: member.role });
+  };
+
+  /** Save edited member details */
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember) return;
+    setEditSubmitting(true);
+    try {
+      const res = await fetch(`/api/users/${editingMember.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(editForm),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to update member');
+      }
+      addToast({ type: 'success', message: `${editForm.name} updated successfully` });
+      setEditingMember(null);
+      fetchMembers();
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to update member',
+      });
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -271,18 +343,60 @@ export default function TeamPage() {
                     </p>
                   </div>
 
-                  {/* Actions */}
-                  {!isSelf && (
-                    <button
-                      onClick={() => handleDelete(member.id, member.name)}
-                      className="w-8 h-8 rounded-lg border border-red-100 bg-red-50
-                        flex items-center justify-center text-red-400 hover:bg-red-100
-                        hover:text-red-600 transition-colors shrink-0"
-                      title="Remove member"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                  {/* Status + Actions */}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {/* Status badge */}
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                      member.status === 'active'
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-red-50 text-red-700 border-red-200'
+                    }`}>
+                      {member.status === 'active' ? 'Active' : 'Inactive'}
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      {/* Edit — always visible (even for yourself) */}
+                      <button
+                        onClick={() => openEditModal(member)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
+                          rounded-lg border border-blue-200 bg-blue-50 text-blue-600
+                          hover:bg-blue-100 transition-colors"
+                      >
+                        <Pencil size={12} />
+                        Edit
+                      </button>
+
+                      {/* Activate/Deactivate/Delete — only for OTHER members */}
+                      {!isSelf && (
+                        <>
+                          <button
+                            onClick={() => handleToggleStatus(member.id, member.name, member.status)}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
+                              rounded-lg border transition-colors ${
+                              member.status === 'active'
+                                ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                            }`}
+                          >
+                            {member.status === 'active' ? (
+                              <><UserX size={12} /> Deactivate</>
+                            ) : (
+                              <><UserCheck size={12} /> Activate</>
+                            )}
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(member.id, member.name)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
+                              rounded-lg border border-red-200 bg-red-50 text-red-600
+                              hover:bg-red-100 transition-colors"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -372,6 +486,72 @@ export default function TeamPage() {
                   onClick={closeModal}
                   className="flex-1"
                 >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* EDIT MODAL */}
+      {editingMember && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center
+          justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <Pencil size={18} className="text-blue-500" />
+                Edit {editingMember.name}
+              </h2>
+              <button
+                onClick={() => setEditingMember(null)}
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSave} className="p-5 space-y-4">
+              <Input
+                label="Full Name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+              <Input
+                label="Email"
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              />
+              <Input
+                label="Phone"
+                type="tel"
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-300
+                    rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="user">Team Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
+                <p className="font-medium text-gray-700 mb-1">Status: {editingMember.status === 'active' ? 'Active' : 'Inactive'}</p>
+                <p>Use the Activate/Deactivate button on the team list to change status. Deactivated members cannot log in but all their data stays safe.</p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button type="submit" loading={editSubmitting} className="flex-1">
+                  {editSubmitting ? 'Saving...' : 'Save Changes'}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setEditingMember(null)} className="flex-1">
                   Cancel
                 </Button>
               </div>

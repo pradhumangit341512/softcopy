@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken } from "@/lib/auth";
+import { verifyAuth } from "@/lib/auth";
 import ExcelJS from "exceljs";
 
 // ✅ Fix #1: Force Node.js runtime so ExcelJS works
@@ -16,11 +16,7 @@ type AuthPayload = {
 export async function GET(req: NextRequest) {
   try {
     /* ================= AUTH ================= */
-    const token = await getTokenCookie();
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = await verifyAuth(req) as AuthPayload | null;
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

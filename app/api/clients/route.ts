@@ -1,25 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  getTokenCookie,
-  verifyToken,
+  verifyAuth,
   isValidObjectId,
   type AuthTokenPayload,
 } from "@/lib/auth";
 import { createClientSchema, parseBody } from "@/lib/validations";
-import { isTeamMember } from "@/lib/authorize";
+import { isTeamMember, isAdminRole } from "@/lib/authorize";
 
 export const runtime = "nodejs";
 
 // ================= GET CLIENTS =================
 export async function GET(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const payload = (await verifyToken(token)) as AuthTokenPayload | null;
+    const payload = await verifyAuth(req);
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -48,6 +42,11 @@ export async function GET(req: NextRequest) {
 
     if (isTeamMember(payload.role)) {
       where.createdBy = payload.userId;
+    } else if (isAdminRole(payload.role)) {
+      const createdByFilter = searchParams.get('createdBy');
+      if (createdByFilter && isValidObjectId(createdByFilter)) {
+        where.createdBy = createdByFilter;
+      }
     }
 
     if (status) where.status = status;
@@ -99,12 +98,7 @@ export async function GET(req: NextRequest) {
 // ================= CREATE CLIENT =================
 export async function POST(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const payload = (await verifyToken(token)) as AuthTokenPayload | null;
+    const payload = await verifyAuth(req);
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -119,6 +113,20 @@ export async function POST(req: NextRequest) {
     const parsed = await parseBody(req, createClientSchema);
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
+
+    // Admin can assign to a team member; team members always self-assign.
+    // Verify the target user belongs to the same company (prevent cross-tenant).
+    let assignTo = payload.userId;
+    if (data.assignedTo && isAdminRole(payload.role)) {
+      const targetUser = await db.user.findFirst({
+        where: { id: data.assignedTo, companyId: payload.companyId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!targetUser) {
+        return NextResponse.json({ error: 'Assigned team member not found in your company' }, { status: 400 });
+      }
+      assignTo = data.assignedTo;
+    }
 
     const client = await db.client.create({
       data: {
@@ -138,9 +146,10 @@ export async function POST(req: NextRequest) {
         propertyVisited: data.propertyVisited,
         visitStatus: data.visitStatus,
         companyId: payload.companyId,
-        createdBy: payload.userId,
+        createdBy: assignTo,
         visitingDate: data.visitingDate,
         followUpDate: data.followUpDate,
+        deletedAt: null,
       },
     });
 

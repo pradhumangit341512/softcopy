@@ -61,7 +61,8 @@ const AUTH_COOKIE_OPTS = {
 };
 
 function redirectPathFor(role: string): string {
-  if (role === 'admin' || role === 'superadmin') return '/admin/dashboard';
+  if (role === 'superadmin') return '/superadmin';
+  if (role === 'admin') return '/admin/dashboard';
   return '/team/dashboard';
 }
 
@@ -118,6 +119,14 @@ export async function POST(req: NextRequest) {
         ErrorCode.AUTH_ACCOUNT_INACTIVE,
         'Account is inactive. Contact support.',
         { requestId }
+      );
+    }
+    // Suspended companies cannot log in. Superadmin (no companyId) bypasses.
+    if (user.company && user.company.status === 'suspended' && user.role !== 'superadmin') {
+      return apiError(
+        ErrorCode.AUTH_ACCOUNT_INACTIVE,
+        'Your account has been suspended. Please contact support.',
+        { requestId, status: 403 }
       );
     }
     if (user.company && new Date() > user.company.subscriptionExpiry) {
@@ -264,19 +273,13 @@ export async function POST(req: NextRequest) {
  * this login qualifies.
  */
 async function completeLogin(
-  user: Awaited<ReturnType<typeof db.user.findUnique>>,
+  user: Awaited<ReturnType<typeof db.user.findUnique>> & { company?: { subscriptionExpiry: Date; status: string } | null },
   req: NextRequest,
   requestId: string
 ): Promise<NextResponse> {
   if (!user) throw new Error('completeLogin called with null user');
 
-  const companyId = user.companyId!;
-  // Prisma returns `company` when include:{company:true} — typescript
-  // sees the loose type. Re-fetch the expiry we need.
-  const company = await db.company.findUnique({
-    where: { id: companyId },
-    select: { subscriptionExpiry: true },
-  });
+  const companyId = user.companyId ?? '';
 
   const token = await generateToken(
     user.id,
@@ -284,7 +287,7 @@ async function completeLogin(
     user.role,
     user.email,
     {
-      subscriptionExpiry: company?.subscriptionExpiry ?? null,
+      subscriptionExpiry: user.company?.subscriptionExpiry ?? null,
       tokenVersion: user.tokenVersion,
     }
   );
@@ -297,6 +300,19 @@ async function completeLogin(
     resourceId: user.id,
     req,
   });
+
+  // Track login session for team-performance analytics
+  if (companyId) {
+    db.userSession.create({
+      data: {
+        userId: user.id,
+        companyId,
+        loginAt: new Date(),
+        ipAddress: getClientIp(req),
+        userAgent: req.headers.get('user-agent') ?? undefined,
+      },
+    }).catch((err) => console.error('Session tracking failed:', err));
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { password: _pw, ...safeUser } = user;

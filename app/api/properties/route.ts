@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  getTokenCookie,
-  verifyToken,
+  verifyAuth,
   isValidObjectId,
   type AuthTokenPayload,
 } from "@/lib/auth";
@@ -14,12 +13,7 @@ export const runtime = "nodejs";
 // ================= GET PROPERTIES =================
 export async function GET(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const payload = (await verifyToken(token)) as AuthTokenPayload | null;
+    const payload = await verifyAuth(req);
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -47,9 +41,10 @@ export async function GET(req: NextRequest) {
       deletedAt: null,
     };
 
-    if (isTeamMember(payload.role)) {
-      where.createdBy = payload.userId;
-    }
+    // Properties are SHARED INVENTORY across the broker company — every
+    // team member sees every property so they can pitch them to their
+    // own clients. Clients (in /api/clients) stay personal-book.
+    // Per product decision: team-member createdBy filter intentionally OMITTED here.
 
     if (status) where.status = status;
     if (propertyType) where.propertyType = propertyType;
@@ -102,12 +97,7 @@ export async function GET(req: NextRequest) {
 // ================= CREATE PROPERTY =================
 export async function POST(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const payload = (await verifyToken(token)) as AuthTokenPayload | null;
+    const payload = await verifyAuth(req);
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -140,6 +130,7 @@ export async function POST(req: NextRequest) {
         ownerEmail: data.ownerEmail,
         companyId: payload.companyId,
         createdBy: payload.userId,
+        deletedAt: null,
       },
     });
 

@@ -17,8 +17,8 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
-import { ALL_MIGRATIONS } from '@/../scripts/migrations';
-import { runPendingMigrations } from '@/../scripts/migrations/_runner';
+import { ALL_MIGRATIONS } from '../../../../scripts/migrations';
+import { runPendingMigrations } from '../../../../scripts/migrations/_runner';
 
 export const runtime = 'nodejs';
 

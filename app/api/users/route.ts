@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  getTokenCookie,
-  verifyToken,
+  verifyAuth,
   hashPassword,
   type AuthTokenPayload,
 } from "@/lib/auth";
@@ -12,16 +11,10 @@ import { recordAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
-async function authFromCookie(): Promise<AuthTokenPayload | null> {
-  const token = await getTokenCookie();
-  if (!token) return null;
-  return verifyToken(token);
-}
-
 // ================= GET USERS =================
 export async function GET(req: NextRequest) {
   try {
-    const payload = await authFromCookie();
+    const payload = await verifyAuth(req);
     if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const forbidden = requireAdmin(payload);
@@ -32,7 +25,12 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 50)));
     const skip = (page - 1) * limit;
 
-    const where = { companyId: payload.companyId, deletedAt: null };
+    const statusFilter = searchParams.get('status');
+    const where: Record<string, unknown> = {
+      companyId: payload.companyId,
+      deletedAt: null,
+      ...(statusFilter ? { status: statusFilter } : {}),
+    };
     const [users, total] = await Promise.all([
       db.user.findMany({
         where,
@@ -65,7 +63,7 @@ export async function GET(req: NextRequest) {
 // ================= CREATE USER =================
 export async function POST(req: NextRequest) {
   try {
-    const payload = await authFromCookie();
+    const payload = await verifyAuth(req);
     if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const forbidden = requireAdmin(payload);
@@ -74,6 +72,41 @@ export async function POST(req: NextRequest) {
     const parsed = await parseBody(req, createUserSchema);
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
+
+    // SEAT-CAP enforcement (only when creating a `user` role; admins
+    // don't count against seat cap because brokers may have multiple
+    // co-owners). Counts ACTIVE non-deleted users in this company.
+    if (data.role === 'user') {
+      const [company, currentSeats] = await Promise.all([
+        db.company.findUnique({
+          where: { id: payload.companyId },
+          select: { seatLimit: true, status: true },
+        }),
+        db.user.count({
+          where: { companyId: payload.companyId, role: 'user', deletedAt: null },
+        }),
+      ]);
+      if (!company) {
+        return NextResponse.json({ error: 'Company not found' }, { status: 404 });
+      }
+      if (company.status !== 'active') {
+        return NextResponse.json(
+          { error: 'Company is suspended; contact support before adding team members.' },
+          { status: 403 }
+        );
+      }
+      if (currentSeats >= company.seatLimit) {
+        return NextResponse.json(
+          {
+            code: 'seat_limit_reached',
+            error: `Your plan includes ${company.seatLimit} team members. Contact support to increase the limit.`,
+            current: currentSeats,
+            limit: company.seatLimit,
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     const existing = await db.user.findFirst({
       where: { OR: [{ email: data.email }, { phone: data.phone }] },
@@ -98,6 +131,12 @@ export async function POST(req: NextRequest) {
           password: hashedPassword,
           role: data.role,
           companyId: payload.companyId,
+          // Explicit nulls prevent the MongoDB "missing field" bug:
+          // Prisma's { deletedAt: null } filter doesn't match docs where
+          // the field is absent. Every create MUST materialize these fields.
+          deletedAt: null,
+          emailVerified: new Date(),
+          tokenVersion: 0,
         },
         select: {
           id: true,

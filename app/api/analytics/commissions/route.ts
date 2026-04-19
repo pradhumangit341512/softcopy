@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken, isValidObjectId } from "@/lib/auth";
+import { verifyAuth, isValidObjectId } from "@/lib/auth";
 
 type AuthPayload = {
   userId: string;
@@ -12,11 +12,7 @@ type AuthPayload = {
 export async function GET(req: NextRequest) {
   try {
     // ── AUTH ──
-    const token = await getTokenCookie();
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = await verifyAuth(req) as AuthPayload | null;
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

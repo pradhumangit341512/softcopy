@@ -47,6 +47,26 @@ export async function POST(req: NextRequest) {
         resourceId: payload.userId,
         req,
       });
+
+      // Close ALL open sessions for this user (handles multi-device + orphans)
+      const now = new Date();
+      const openSessions = await db.userSession.findMany({
+        where: { userId: payload.userId, logoutAt: null },
+        select: { id: true, loginAt: true },
+      });
+      if (openSessions.length > 0) {
+        await Promise.all(
+          openSessions.map((s) =>
+            db.userSession.update({
+              where: { id: s.id },
+              data: {
+                logoutAt: now,
+                duration: Math.round((now.getTime() - s.loginAt.getTime()) / 60000),
+              },
+            }).catch((err) => console.error('Session close failed:', err))
+          )
+        );
+      }
     }
 
     const response = NextResponse.json(

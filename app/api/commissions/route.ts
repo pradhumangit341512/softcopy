@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
         paidStatus: data.paidStatus,
         paymentReference: data.paymentReference,
         paymentDate: data.paidStatus === "Paid" ? new Date() : null,
+        deletedAt: null,
       },
       include: {
         client: { select: { clientName: true } },

@@ -19,7 +19,22 @@ model Company {
   logo               String?
   subscriptionType   String          @default("Basic")
   subscriptionExpiry DateTime
+  // Hard cutoff used by middleware. Authoritative source of truth for whether
+  // a tenant's logins still work. Updated when superadmin records a payment.
+  subscriptionUntil  DateTime?
+  // Internal plan tier — descriptive only, no automated logic ties to it.
+  plan               String          @default("standard")
   status             String          @default("active")
+  // Max number of `role:user` team members the broker admin may create.
+  // Enforced at /api/users POST.
+  seatLimit          Int             @default(5)
+  // What the superadmin (you) charges this customer per cycle.
+  monthlyFee         Float?
+  // Free-text notes the superadmin keeps about this customer (contract terms,
+  // contact preferences, etc.). Never shown to the broker.
+  notes              String?
+  // Superadmin user id who onboarded this company. Audit trail.
+  onboardedBy        String?         @db.ObjectId
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
   users              User[]
@@ -29,8 +44,11 @@ model Company {
   invoices           Invoice[]
   monthlyBudgets     MonthlyBudget[]
   properties         Property[]
+  paymentRecords     PaymentRecord[]
   @@index([status])
   @@index([subscriptionExpiry])
+  @@index([subscriptionUntil])
+  @@index([status, subscriptionUntil])
 }
 
 model User {
@@ -58,10 +76,26 @@ model User {
   properties   Property[]   @relation("PropertyCreator")
   verificationTokens VerificationToken[]
   trustedDevices     TrustedDevice[]
+  sessions           UserSession[]
   @@index([role])
   @@index([companyId, role, status])
   @@index([deletedAt])
   @@index([emailVerified])
+}
+
+model UserSession {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  companyId  String    @db.ObjectId
+  loginAt    DateTime  @default(now())
+  logoutAt   DateTime?
+  duration   Int?
+  ipAddress  String?
+  userAgent  String?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, loginAt])
+  @@index([companyId, loginAt])
+  @@map("user_sessions")
 }
 
 // One-time signed tokens used for email verification + (future) password reset links.
@@ -263,6 +297,29 @@ model MonthlyBudget {
   @@unique([companyId, month])
   @@index([companyId])
   @@map("monthly_budgets")
+}
+
+// Manual ledger of payments the superadmin (you) received from each broker
+// company. Editing rows here is the only mechanism that extends a company's
+// `subscriptionUntil` — keeps revenue tracking and access control in one place.
+model PaymentRecord {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId   String   @db.ObjectId
+  amount      Float
+  paidOn      DateTime
+  // Subscription window this payment buys. When recorded, Company.subscriptionUntil
+  // is updated to MAX(current, coversUntil) so multiple payments stack cleanly.
+  coversFrom  DateTime
+  coversUntil DateTime
+  method      String   // 'bank_transfer' | 'razorpay_link' | 'cash' | 'cheque' | 'upi'
+  reference   String?  // bank txn id, cheque no, UPI ref, etc.
+  notes       String?
+  recordedBy  String   @db.ObjectId   // superadmin user id who logged it
+  createdAt   DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@index([companyId, paidOn])
+  @@index([recordedBy])
+  @@map("payment_records")
 }
 
 model AuditLog {

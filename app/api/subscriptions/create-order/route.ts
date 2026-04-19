@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken } from "@/lib/auth";
+import { verifyAuth } from "@/lib/auth";
 import Razorpay from "razorpay";
-
-type AuthPayload = {
-  userId: string;
-  companyId: string;
-  role: string;
-  email: string;
-};
 
 const PLANS = {
   Basic: 999,
@@ -18,14 +11,7 @@ const PLANS = {
 
 export async function POST(req: NextRequest) {
   try {
-    // ================= AUTH =================
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const payload = (await verifyToken(token)) as AuthPayload | null;
-
+    const payload = await verifyAuth(req);
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

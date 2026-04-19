@@ -7,17 +7,24 @@ import Link from 'next/link';
 import { Card, CardBody, CardHeader } from '@/components/common/Card';
 import { ClientForm } from '@/components/clients/ClientForm';
 import { useClients } from '@/hooks/useClients';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/common/Toast';
 import { Loader } from '@/components/common/Loader';
 import { Button } from '@/components/common/Button';
 import { Client } from '@/lib/types';
 import type { ClientFormData } from '@/hooks/useClients';
 
+interface TeamMember { id: string; name: string }
+
 export default function EditClientPage() {
   const params = useParams();
   const router = useRouter();
   const { updateClient, loading: saving, error } = useClients();
+  const { user } = useAuth();
   const { addToast } = useToast();
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,7 +58,20 @@ export default function EditClientPage() {
     fetchClient();
   }, [clientId]);
 
-  const handleSubmit = async (data: Partial<Client>) => {
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch('/api/users?limit=100', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d.users ?? d;
+        if (Array.isArray(list)) {
+          setTeamMembers(list.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
+        }
+      })
+      .catch(() => {});
+  }, [isAdmin]);
+
+  const handleSubmit = async (data: Partial<Client> & { assignedTo?: string }) => {
     const formData: Partial<ClientFormData> = {
       ...data,
       visitingDate: data.visitingDate instanceof Date ? data.visitingDate.toISOString() : data.visitingDate as string | undefined,
@@ -132,6 +152,9 @@ export default function EditClientPage() {
               onSubmit={handleSubmit}
               initialData={client}
               isLoading={saving}
+              isAdmin={isAdmin}
+              teamMembers={teamMembers}
+              currentUserId={user?.id}
             />
           )}
         </CardBody>

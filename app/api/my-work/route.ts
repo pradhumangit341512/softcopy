@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken, isValidObjectId } from "@/lib/auth";
+import { verifyAuth, isValidObjectId } from "@/lib/auth";
 
 type AuthPayload = {
   userId: string;
@@ -19,12 +19,7 @@ type AuthPayload = {
  */
 export async function GET(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = await verifyAuth(req) as AuthPayload | null;
     if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -60,50 +55,77 @@ export async function GET(req: NextRequest) {
       deletedAt: null,
     };
 
-    const [assignedLeads, pendingFollowUps, todayVisits] = await Promise.all([
-      db.client.findMany({
-        where: myLeadsFilter,
-        include: { creator: { select: { name: true } } },
-        orderBy: { updatedAt: "desc" },
-      }),
-      db.client.findMany({
-        where: {
-          ...myLeadsFilter,
-          followUpDate: { lte: todayEnd },
-          status: { notIn: ["DealDone", "Rejected"] },
-        },
-        orderBy: { followUpDate: "asc" },
-      }),
-      db.client.findMany({
-        where: {
-          ...myLeadsFilter,
-          visitingDate: { gte: todayStart, lt: todayEnd },
-        },
-        select: {
-          id: true,
-          clientName: true,
-          phone: true,
-          visitingDate: true,
-          visitingTime: true,
-          preferredLocation: true,
-          status: true,
-        },
-        orderBy: { visitingTime: "asc" },
-      }),
-    ]);
+    // Stats via groupBy — 1 query returns counts by status (no data transfer)
+    const [statusGroups, followUpCount, visitCount, recentLeads, pendingFollowUps, todayVisits] =
+      await Promise.all([
+        db.client.groupBy({
+          by: ['status'],
+          where: myLeadsFilter,
+          _count: true,
+        }),
+        db.client.count({
+          where: {
+            ...myLeadsFilter,
+            followUpDate: { lte: todayEnd },
+            status: { notIn: ['DealDone', 'Rejected'] },
+          },
+        }),
+        db.client.count({
+          where: {
+            ...myLeadsFilter,
+            visitingDate: { gte: todayStart, lt: todayEnd },
+          },
+        }),
+        db.client.findMany({
+          where: myLeadsFilter,
+          include: { creator: { select: { name: true } } },
+          orderBy: { updatedAt: 'desc' },
+          take: 50,
+        }),
+        db.client.findMany({
+          where: {
+            ...myLeadsFilter,
+            followUpDate: { lte: todayEnd },
+            status: { notIn: ['DealDone', 'Rejected'] },
+          },
+          orderBy: { followUpDate: 'asc' },
+          take: 50,
+        }),
+        db.client.findMany({
+          where: {
+            ...myLeadsFilter,
+            visitingDate: { gte: todayStart, lt: todayEnd },
+          },
+          select: {
+            id: true,
+            clientName: true,
+            phone: true,
+            visitingDate: true,
+            visitingTime: true,
+            preferredLocation: true,
+            status: true,
+          },
+          orderBy: { visitingTime: 'asc' },
+          take: 50,
+        }),
+      ]);
+
+    const countByStatus = (s: string) =>
+      statusGroups.find((g) => g.status === s)?._count ?? 0;
+    const total = statusGroups.reduce((sum, g) => sum + g._count, 0);
 
     const stats = {
-      total: assignedLeads.length,
-      new: assignedLeads.filter((l) => l.status === "New").length,
-      interested: assignedLeads.filter((l) => l.status === "Interested").length,
-      dealDone: assignedLeads.filter((l) => l.status === "DealDone").length,
-      rejected: assignedLeads.filter((l) => l.status === "Rejected").length,
-      followUpsDue: pendingFollowUps.length,
-      visitsToday: todayVisits.length,
+      total,
+      new: countByStatus('New'),
+      interested: countByStatus('Interested'),
+      dealDone: countByStatus('DealDone'),
+      rejected: countByStatus('Rejected'),
+      followUpsDue: followUpCount,
+      visitsToday: visitCount,
     };
 
     return NextResponse.json({
-      assignedLeads,
+      assignedLeads: recentLeads,
       pendingFollowUps,
       todayVisits,
       stats,

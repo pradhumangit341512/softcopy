@@ -64,6 +64,7 @@ const nextConfig: NextConfig = {
   ],
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
+  serverExternalPackages: ["exceljs", "twilio", "jsonwebtoken"],
 
   async headers() {
     return [

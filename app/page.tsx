@@ -61,9 +61,9 @@ export default function Home() {
             <Link href="/login">
               <Button variant="outline">Login</Button>
             </Link>
-            <Link href="/signup">
-              <Button>Get Started</Button>
-            </Link>
+            <a href="#contact">
+              <Button>Request Access</Button>
+            </a>
           </div>
         </div>
       </nav>
@@ -82,12 +82,12 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-16">
-            <Link href="/signup">
+            <a href="#contact">
               <Button size="lg" className="flex items-center gap-2">
-                Start Free Trial
+                Request Access
                 <ArrowRight size={20} />
               </Button>
-            </Link>
+            </a>
             <Link href="/login">
               <Button size="lg" variant="outline">
                 Sign In
@@ -197,8 +197,8 @@ export default function Home() {
               <div className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">
                 1
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Sign Up</h3>
-              <p className="text-gray-600">Create your account in minutes</p>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Contact Us</h3>
+              <p className="text-gray-600">Tell us about your team & we onboard you</p>
             </div>
 
             <div className="text-center">
@@ -263,11 +263,11 @@ export default function Home() {
                 </li>
               </ul>
 
-              <Link href="/signup">
+              <a href="#contact">
                 <Button className="w-full" variant="outline">
-                  Get Started
+                  Request Access
                 </Button>
-              </Link>
+              </a>
             </div>
 
             {/* Pro Plan */}
@@ -305,9 +305,9 @@ export default function Home() {
                 </li>
               </ul>
 
-              <Link href="/signup">
-                <Button className="w-full">Get Started</Button>
-              </Link>
+              <a href="#contact">
+                <Button className="w-full">Request Access</Button>
+              </a>
             </div>
 
             {/* Enterprise Plan */}
@@ -341,11 +341,11 @@ export default function Home() {
                 </li>
               </ul>
 
-              <Link href="/signup">
+              <a href="#contact">
                 <Button className="w-full" variant="outline">
                   Contact Sales
                 </Button>
-              </Link>
+              </a>
             </div>
           </div>
         </div>
@@ -358,11 +358,43 @@ export default function Home() {
           <p className="text-xl text-blue-100 mb-8">
             Join hundreds of real estate professionals using our CRM
           </p>
-          <Link href="/signup">
+          <a href="#contact">
             <Button size='lg' variant="outline" className='bg-white'>
-              Start Your Free Trial
+              Request Access
             </Button>
-          </Link>
+          </a>
+        </div>
+      </section>
+
+      {/* Contact / Request Access */}
+      <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-4xl font-bold text-gray-900 mb-4">Request Access</h2>
+          <p className="text-lg text-gray-600 mb-8">
+            We onboard each broker company manually. Reach out and we&apos;ll set
+            up your account, hand over login credentials, and walk your team
+            through the platform.
+          </p>
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <a
+              href="mailto:hello@yourcompany.com?subject=Broker%20CRM%20Access%20Request&body=Company%20name%3A%20%0ATeam%20size%3A%20%0APhone%3A%20%0ANotes%3A%20"
+              className="inline-block"
+            >
+              <Button size="lg">Email Us</Button>
+            </a>
+            <a
+              href="https://wa.me/919999999999?text=Hi%2C%20I%27d%20like%20to%20get%20access%20to%20the%20Broker%20CRM."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block"
+            >
+              <Button size="lg" variant="outline">WhatsApp</Button>
+            </a>
+          </div>
+          <p className="mt-6 text-sm text-gray-500">
+            Already have an account?{' '}
+            <Link href="/login" className="text-blue-600 hover:underline">Sign in here</Link>.
+          </p>
         </div>
       </section>
 

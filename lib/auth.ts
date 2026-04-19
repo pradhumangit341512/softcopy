@@ -2,6 +2,7 @@ import { jwtVerify, SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import bcrypt from 'bcryptjs';
+import { db } from './db';
 
 // ⚠️ Fail fast at module load. Never fall back to empty string — an empty
 // secret silently makes every token forgeable.
@@ -95,6 +96,12 @@ export async function clearTokenCookie(): Promise<void> {
 
 // ==================== AUTH HELPERS ====================
 
+/**
+ * Full auth verification: JWT signature → tokenVersion DB check → company
+ * status check. Rejects tokens whose `tv` claim doesn't match the current
+ * User.tokenVersion, making session revocation (password reset, suspend,
+ * delete, promote) immediate rather than waiting for 7-day JWT expiry.
+ */
 export async function verifyAuth(req: NextRequest): Promise<AuthTokenPayload | null> {
   let token = getTokenFromRequest(req);
   if (!token) {
@@ -104,7 +111,31 @@ export async function verifyAuth(req: NextRequest): Promise<AuthTokenPayload | n
     } catch {}
   }
   if (!token) return null;
-  return verifyToken(token);
+
+  const payload = await verifyToken(token);
+  if (!payload) return null;
+
+  // Verify user status + company status + tokenVersion against DB on
+  // EVERY request. This is what makes session revocation (password reset,
+  // suspend, delete, promote) immediate. No tv-claim guard — legacy tokens
+  // without tv are treated as version 0 and still checked.
+  if (payload.userId) {
+    try {
+      const user = await db.user.findUnique({
+        where: { id: payload.userId },
+        select: { tokenVersion: true, status: true, company: { select: { status: true } } },
+      });
+      if (!user) return null;
+      if (user.status !== 'active') return null;
+      if (user.company && user.company.status === 'suspended') return null;
+      const claimedTv = typeof payload.tv === 'number' ? payload.tv : 0;
+      if (user.tokenVersion !== claimedTv) return null;
+    } catch {
+      if (process.env.NODE_ENV === 'production') return null;
+    }
+  }
+
+  return payload;
 }
 
 export async function requireAuth() {
@@ -113,6 +144,24 @@ export async function requireAuth() {
   if (!token) return { authorized: false as const, payload: null };
   const payload = await verifyToken(token);
   if (!payload) return { authorized: false as const, payload: null };
+
+  // Same DB check as verifyAuth — no parallel auth path that skips revocation.
+  if (payload.userId) {
+    try {
+      const user = await db.user.findUnique({
+        where: { id: payload.userId },
+        select: { tokenVersion: true, status: true, company: { select: { status: true } } },
+      });
+      if (!user) return { authorized: false as const, payload: null };
+      if (user.status !== 'active') return { authorized: false as const, payload: null };
+      if (user.company && user.company.status === 'suspended') return { authorized: false as const, payload: null };
+      const claimedTv = typeof payload.tv === 'number' ? payload.tv : 0;
+      if (user.tokenVersion !== claimedTv) return { authorized: false as const, payload: null };
+    } catch {
+      if (process.env.NODE_ENV === 'production') return { authorized: false as const, payload: null };
+    }
+  }
+
   return { authorized: true as const, payload };
 }
 

@@ -1,21 +1,42 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardBody, CardHeader } from '@/components/common/Card';
 import { ClientForm } from '@/components/clients/ClientForm';
 import { useClients } from '@/hooks/useClients';
+import { useAuth } from '@/hooks/useAuth';
 import { Loader } from '@/components/common/Loader';
 import { Button } from '@/components/common/Button';
 import type { Client } from '@/lib/types';
 import type { ClientFormData } from '@/hooks/useClients';
 
+interface TeamMember { id: string; name: string }
+
 export default function AddClientPage() {
   const router = useRouter();
   const { addClient, loading } = useClients();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
-  const handleSubmit = async (data: Partial<Client>) => {
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch('/api/users?limit=100', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d.users ?? d;
+        if (Array.isArray(list)) {
+          setTeamMembers(list.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
+        }
+      })
+      .catch(() => {});
+  }, [isAdmin]);
+
+  const handleSubmit = async (data: Partial<Client> & { assignedTo?: string }) => {
     const formData = {
       ...data,
       visitingDate: data.visitingDate instanceof Date ? data.visitingDate.toISOString() : data.visitingDate as string | undefined,
@@ -55,7 +76,13 @@ export default function AddClientPage() {
           {loading ? (
             <Loader size="md" message="Saving..." />
           ) : (
-            <ClientForm onSubmit={handleSubmit} isLoading={loading} />
+            <ClientForm
+              onSubmit={handleSubmit}
+              isLoading={loading}
+              isAdmin={isAdmin}
+              teamMembers={teamMembers}
+              currentUserId={user?.id}
+            />
           )}
         </CardBody>
       </Card>

@@ -41,7 +41,8 @@ const COOKIE_OPTS = {
 
 /** Where this user should land after login, based on role. */
 function redirectPathFor(role: string): string {
-  if (role === 'admin' || role === 'superadmin') return '/admin/dashboard';
+  if (role === 'superadmin') return '/superadmin';
+  if (role === 'admin') return '/admin/dashboard';
   return '/team/dashboard';
 }
 

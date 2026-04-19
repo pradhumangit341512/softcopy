@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useForm, SubmitHandler, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -25,10 +26,18 @@ const formSchema = clientSchema.extend({
 
 type ClientFormValues = z.infer<typeof formSchema>;
 
+interface TeamMemberOption {
+  id: string;
+  name: string;
+}
+
 interface ClientFormProps {
-  onSubmit: (data: Partial<Client>) => Promise<boolean>;
+  onSubmit: (data: Partial<Client> & { assignedTo?: string }) => Promise<boolean>;
   initialData?: Partial<Client>;
   isLoading?: boolean;
+  isAdmin?: boolean;
+  teamMembers?: TeamMemberOption[];
+  currentUserId?: string;
 }
 
 /** Client creation/edit form with Zod validation and date handling */
@@ -36,7 +45,14 @@ export function ClientForm({
   onSubmit,
   initialData,
   isLoading = false,
+  isAdmin = false,
+  teamMembers = [],
+  currentUserId,
 }: ClientFormProps) {
+
+  const [assignedTo, setAssignedTo] = useState(
+    (initialData as Record<string, unknown>)?.createdBy as string ?? ''
+  );
 
   // Pick only the fields the form uses — prevents extra API fields
   // (id, companyId, createdAt, etc.) from leaking into form state
@@ -75,13 +91,15 @@ export function ClientForm({
     defaultValues: cleanDefaults as Partial<ClientFormValues> | undefined,
   });
 
-  // ✅ Convert strings → Date objects before sending to API
   const submitHandler: SubmitHandler<ClientFormValues> = async (data) => {
-    const payload: Partial<Client> = {
+    const payload: Partial<Client> & { assignedTo?: string } = {
       ...data,
       visitingDate: data.visitingDate ? new Date(data.visitingDate) : undefined,
       followUpDate: data.followUpDate ? new Date(data.followUpDate) : undefined,
     };
+    if (isAdmin && assignedTo && assignedTo !== currentUserId) {
+      payload.assignedTo = assignedTo;
+    }
     await onSubmit(payload);
   };
 
@@ -188,6 +206,28 @@ export function ClientForm({
         </div>
 
       </div>
+
+      {/* ── Assign to team member (admin only) ── */}
+      {isAdmin && teamMembers.length > 0 && (
+        <div>
+          <label className={labelStyle}>Assign to Team Member</label>
+          <select
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            className={selectStyle}
+          >
+            <option value="">Myself (default)</option>
+            {teamMembers.map((tm) => (
+              <option key={tm.id} value={tm.id}>
+                {tm.name} {tm.id === currentUserId ? '(You)' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            This client will appear in the selected member&apos;s work dashboard
+          </p>
+        </div>
+      )}
 
       {/* ── Budget & Location ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

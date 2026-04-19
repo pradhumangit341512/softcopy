@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, isValidObjectId } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { assertCompanyOwnership, isTeamMember } from "@/lib/authorize";
-import {
-  updateClientSchema,
-  updateClientByTeamMemberSchema,
-  parseBody,
-} from "@/lib/validations";
+import { assertCompanyOwnership, isTeamMember, isAdminRole } from "@/lib/authorize";
 import { recordAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -62,17 +57,56 @@ export async function PUT(
 
     const { id } = await context.params;
 
-    // Team members use a restricted schema — they cannot set status or
-    // visitStatus (those are admin-only state transitions).
-    const schema = isTeamMember(payload.role)
-      ? updateClientByTeamMemberSchema
-      : updateClientSchema;
+    // Parse the raw body manually — explicit field extraction avoids
+    // Zod v4 transform/strip edge cases that silently drop fields.
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
 
-    const parsed = await parseBody(req, schema);
-    if (!parsed.ok) return parsed.response;
+    // Build update data explicitly — only include fields that are present in the body
+    const updateData: Record<string, unknown> = {};
+    if (body.clientName !== undefined) updateData.clientName = String(body.clientName).trim();
+    if (body.phone !== undefined) updateData.phone = String(body.phone).trim();
+    if (body.email !== undefined) updateData.email = body.email === '' ? null : body.email;
+    if (body.companyName !== undefined) updateData.companyName = body.companyName || null;
+    if (body.requirementType !== undefined) updateData.requirementType = body.requirementType;
+    if (body.inquiryType !== undefined) updateData.inquiryType = body.inquiryType;
+    if (body.budget !== undefined) updateData.budget = body.budget === '' || body.budget === null ? null : Number(body.budget);
+    if (body.preferredLocation !== undefined) updateData.preferredLocation = body.preferredLocation || null;
+    if (body.address !== undefined) updateData.address = body.address || null;
+    if (body.visitingTime !== undefined) updateData.visitingTime = body.visitingTime || null;
+    if (body.source !== undefined) updateData.source = body.source || null;
+    if (body.notes !== undefined) updateData.notes = body.notes || null;
+    if (body.visitingDate !== undefined) updateData.visitingDate = body.visitingDate ? new Date(body.visitingDate as string) : null;
+    if (body.followUpDate !== undefined) updateData.followUpDate = body.followUpDate ? new Date(body.followUpDate as string) : null;
+    if (body.nextFollowUp !== undefined) updateData.nextFollowUp = body.nextFollowUp ? new Date(body.nextFollowUp as string) : null;
+    if (body.lastContactDate !== undefined) updateData.lastContactDate = body.lastContactDate ? new Date(body.lastContactDate as string) : null;
+    if (body.propertyVisited !== undefined) updateData.propertyVisited = body.propertyVisited === true || body.propertyVisited === 'true';
+    if (body.visitStatus !== undefined) updateData.visitStatus = body.visitStatus;
 
-    // Atomic: the WHERE includes companyId + deletedAt + (for team members)
-    // createdBy — collapses ownership check + existence + TOCTOU window.
+    // Status and visitStatus — admin only (team members cannot change these)
+    if (!isTeamMember(payload.role)) {
+      if (body.status !== undefined) updateData.status = body.status;
+    }
+
+    // Admin can reassign the client to another team member
+    if (body.assignedTo && isAdminRole(payload.role) && isValidObjectId(body.assignedTo as string)) {
+      const targetUser = await db.user.findFirst({
+        where: { id: body.assignedTo as string, companyId: payload.companyId, deletedAt: null },
+        select: { id: true },
+      });
+      if (targetUser) {
+        updateData.createdBy = body.assignedTo;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
+
     const where: Record<string, unknown> = {
       id,
       companyId: payload.companyId,
@@ -80,7 +114,7 @@ export async function PUT(
     };
     if (isTeamMember(payload.role)) where.createdBy = payload.userId;
 
-    const result = await db.client.updateMany({ where, data: parsed.data });
+    const result = await db.client.updateMany({ where, data: updateData });
     if (result.count === 0) {
       return NextResponse.json(
         { error: "Client not found or not authorized" },
@@ -88,7 +122,10 @@ export async function PUT(
       );
     }
 
-    const updated = await db.client.findUnique({ where: { id } });
+    const updated = await db.client.findUnique({
+      where: { id },
+      include: { creator: { select: { id: true, name: true } } },
+    });
     return NextResponse.json(updated);
   } catch (error) {
     console.error("Update client error:", error);

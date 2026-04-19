@@ -7,10 +7,11 @@
 
 import type { Migration } from './_runner';
 import { migration as m000 } from './000_backfill_schema_fields';
+import { migration as m001 } from './001_seed_company_subscription_defaults';
+import { migration as m002 } from './002_seed_user_session_defaults';
 
 export const ALL_MIGRATIONS: Migration[] = [
   m000,
-  // ADD NEW MIGRATIONS HERE, e.g.:
-  // import { migration as m001 } from './001_add_something_field';
-  // ...then: m001,
+  m001,
+  m002,
 ];

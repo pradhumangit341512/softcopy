@@ -75,9 +75,17 @@ export async function PUT(
     if (!parsed.ok) return parsed.response;
 
     try {
+      // When deactivating a user, bump tokenVersion so their active
+      // sessions die immediately (verifyAuth checks this per-request).
+      // When reactivating, no bump needed — they'll log in fresh.
+      const updateData = { ...parsed.data } as Record<string, unknown>;
+      if (parsed.data.status === 'inactive') {
+        updateData.tokenVersion = { increment: 1 };
+      }
+
       const updated = await db.user.update({
         where: { id },
-        data: parsed.data,
+        data: updateData,
         select: {
           id: true, name: true, email: true, phone: true,
           role: true, status: true,
@@ -87,7 +95,7 @@ export async function PUT(
       await recordAudit({
         companyId: payload.companyId,
         userId: payload.userId,
-        action: "user.update",
+        action: parsed.data.status ? `user.${parsed.data.status === 'inactive' ? 'deactivate' : 'activate'}` : 'user.update',
         resource: "User",
         resourceId: id,
         metadata: { fields: Object.keys(parsed.data) },

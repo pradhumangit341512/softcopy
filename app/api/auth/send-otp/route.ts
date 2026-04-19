@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
         requestId,
         'invalid_credentials',
         undefined,
-        'No account found with that email, or the password is wrong. Sign up first at /signup.'
+        'No account found with that email, or the password is wrong. Contact your administrator.'
       );
     }
 

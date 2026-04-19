@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken, isValidObjectId } from "@/lib/auth";
+import { verifyAuth, isValidObjectId } from "@/lib/auth";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -14,11 +14,7 @@ type AuthPayload = {
 
 export async function GET(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = await verifyAuth(req) as AuthPayload | null;
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

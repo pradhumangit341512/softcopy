@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -12,6 +12,7 @@ import {
 import { Loader } from '@/components/common/Loader';
 import { Alert } from '@/components/common/Alert';
 import { Badge } from '@/components/common/Badge';
+import { MemberDetailPanel } from '@/components/dashboard/MemberDetailPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency, CHART_COLORS, CustomTooltipProps, TooltipPayloadEntry } from '@/lib/utils';
 
@@ -31,6 +32,14 @@ interface TeamMemberPerformance {
     commissionEarned: number;
     commissionCount: number;
     pendingFollowUps: number;
+  };
+  session?: {
+    isOnline: boolean;
+    lastLoginAt: string | null;
+    totalWeekMinutes: number;
+    totalWeekHours: number;
+    daysActiveThisWeek: number;
+    sessionsThisWeek: number;
   };
 }
 
@@ -62,6 +71,7 @@ export default function TeamPerformancePage() {
   const [members, setMembers] = useState<TeamMemberPerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
   const fetchPerformance = useCallback(async () => {
     setLoading(true);
@@ -243,12 +253,13 @@ export default function TeamPerformancePage() {
               <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-semibold">
                 <tr>
                   <th className="px-4 py-3 text-left">Member</th>
-                  <th className="px-4 py-3 text-left">Role</th>
+                  <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-right">Leads</th>
                   <th className="px-4 py-3 text-right">Deals</th>
                   <th className="px-4 py-3 text-right">Conversion</th>
                   <th className="px-4 py-3 text-right">Commission</th>
                   <th className="px-4 py-3 text-right">Pending</th>
+                  <th className="px-4 py-3 text-right">This Week</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
@@ -260,13 +271,27 @@ export default function TeamPerformancePage() {
                     .join('')
                     .toUpperCase();
 
+                  const isExpanded = expandedMemberId === m.id;
+
                   return (
-                    <tr key={m.id} className="hover:bg-gray-50/60 transition-colors">
+                    <React.Fragment key={m.id}>
+                    <tr
+                      className={`transition-colors cursor-pointer ${
+                        isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50/60'
+                      }`}
+                      onClick={() => setExpandedMemberId(isExpanded ? null : m.id)}
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-blue-600
-                            flex items-center justify-center text-white text-xs font-bold shrink-0">
-                            {initials}
+                          <div className="relative">
+                            <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-blue-600
+                              flex items-center justify-center text-white text-xs font-bold shrink-0">
+                              {initials}
+                            </div>
+                            {m.session?.isOnline && (
+                              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500
+                                border-2 border-white rounded-full" title="Online now" />
+                            )}
                           </div>
                           <div className="min-w-0">
                             <p className="font-semibold text-gray-900 truncate">{m.name}</p>
@@ -275,13 +300,22 @@ export default function TeamPerformancePage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge
-                          label={m.role}
-                          variant={
-                            m.role === 'admin' || m.role === 'superadmin' ? 'primary' : 'gray'
-                          }
-                          size="sm"
-                        />
+                        <div className="flex flex-col gap-1">
+                          <Badge
+                            label={m.role}
+                            variant={m.role === 'admin' || m.role === 'superadmin' ? 'primary' : 'gray'}
+                            size="sm"
+                          />
+                          {m.session?.isOnline ? (
+                            <span className="text-[10px] font-medium text-green-600">Online</span>
+                          ) : m.session?.lastLoginAt ? (
+                            <span className="text-[10px] text-gray-400">
+                              Last: {new Date(m.session.lastLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-gray-400">No login today</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">
                         {m.stats.totalLeads}
@@ -314,7 +348,29 @@ export default function TeamPerformancePage() {
                           <span className="text-xs text-gray-400">—</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        {m.session ? (
+                          <div className="text-right">
+                            <p className="font-semibold text-gray-900">{m.session.totalWeekHours}h</p>
+                            <p className="text-[10px] text-gray-400">{m.session.daysActiveThisWeek}d active</p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
                     </tr>
+                    {isExpanded && (
+                      <MemberDetailPanel
+                        memberId={m.id}
+                        memberName={m.name}
+                        memberEmail={m.email}
+                        memberRole={m.role}
+                        stats={m.stats}
+                        session={m.session}
+                        onClose={() => setExpandedMemberId(null)}
+                      />
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Download, Users, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, Download, Upload, Users, SlidersHorizontal, X } from 'lucide-react';
+import { BulkImportModal } from '@/components/clients/BulkImportModal';
 
 import { Loader } from '@/components/common/Loader';
 import { ClientTable } from '@/components/clients/ClientTable';
@@ -29,6 +30,7 @@ export default function ClientsPage() {
 
   // ✅ Mobile: collapsible filter panel
   const [showFilters, setShowFilters] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // ── Read everything from URL (single source of truth) ──
   const searchFromUrl  = searchParams.get('search')   || '';
@@ -183,6 +185,17 @@ export default function ClientsPage() {
                 {activeFilterCount}
               </span>
             )}
+          </button>
+
+          {/* Bulk Import */}
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5
+              text-sm font-medium text-gray-700 bg-white border border-gray-200
+              rounded-xl shadow-sm hover:bg-gray-50 transition-colors"
+          >
+            <Upload size={15} />
+            <span className="hidden sm:inline">Import</span>
           </button>
 
           {/* Export */}
@@ -350,6 +363,12 @@ export default function ClientsPage() {
         )}
       </div>
 
+      {/* Bulk Import Modal */}
+      <BulkImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImported={() => fetchClients()}
+      />
     </div>
   );
 }

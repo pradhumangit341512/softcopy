@@ -25,16 +25,16 @@ export async function GET(
       return NextResponse.json({ error: "Invalid property ID" }, { status: 400 });
     }
 
+    // Properties are shared inventory — team members can VIEW any property
+    // in their company (matching the list endpoint's behavior). Only
+    // PUT/DELETE restrict to createdBy for write protection.
     const property = await db.property.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, companyId: payload.companyId, deletedAt: null },
       include: { creator: { select: { id: true, name: true } } },
     });
     if (!property) {
       return NextResponse.json({ error: "Property not found" }, { status: 404 });
     }
-
-    const forbidden = assertCompanyOwnership(payload, property);
-    if (forbidden) return forbidden;
 
     return NextResponse.json(property);
   } catch (error) {

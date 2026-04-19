@@ -10,7 +10,7 @@ export interface User {
   email: string;
   phone: string;
   role: 'superadmin' | 'admin' | 'user';
-  companyId: string;
+  companyId: string | null;
   profilePhoto?: string;
   company?: {
     companyName: string;
@@ -18,14 +18,6 @@ export interface User {
     subscriptionType: string;
     subscriptionExpiry: string;
   };
-}
-
-export interface SignupData {
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  companyName: string;
 }
 
 export interface AuthState {
@@ -78,14 +70,6 @@ export const useAuthStore = create<AuthState>()(
 
         setError: (error) => set({ error }),
 
-        // ── Login Step 1: validate creds → returns requireOTP: true
-        // ── Login Step 2: handled directly in LoginPage with otp param
-        // login + signup actions removed — UI calls /api/auth/login and
-        // /api/auth/signup directly via api.post(). Keeping a stub wrapper
-        // here would invite drift from the real auth flow (trusted-device,
-        // OTP conditional, etc.). The login/signup pages own their own
-        // submit handlers.
-
         // ── Logout ──
         logout: async () => {
           set({ isLoading: true });
@@ -106,7 +90,7 @@ export const useAuthStore = create<AuthState>()(
         fetchUser: async () => {
           if (get().hasFetched || get().isLoading) return;
 
-          set({ isLoading: true, hasFetched: true });
+          set({ isLoading: true });
           try {
             const response = await fetch('/api/auth/me', {
               credentials: 'include',
