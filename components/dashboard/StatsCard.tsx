@@ -11,7 +11,8 @@ interface StatsCardProps {
   trend?: 'up' | 'down';
 }
 
-export default function StatsCard({
+/** Stats display card with title, value, icon, trend indicator, and highlight mode */
+export function StatsCard({
   title,
   value,
   icon,

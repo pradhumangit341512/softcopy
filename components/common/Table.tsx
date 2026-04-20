@@ -4,7 +4,7 @@ import clsx from 'clsx';
 interface TableColumn<T> {
   key: keyof T;
   label: string;
-  render?: (value: any, row: T) => ReactNode;
+  render?: (value: T[keyof T], row: T) => ReactNode;
   width?: string;
   sortable?: boolean;
 }
@@ -20,7 +20,8 @@ interface TableProps<T> {
   hover?: boolean;
 }
 
-export default function Table<T>({
+/** Reusable data table component with sorting, striping, and row-click support */
+export function Table<T>({
   columns,
   data,
   keyExtractor,

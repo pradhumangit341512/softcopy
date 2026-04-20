@@ -3,11 +3,11 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Alert from '@/components/common/Alert';
-import { Lock, Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
+import { Alert } from '@/components/common/Alert';
+import { Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
 import { useToast } from '@/components/common/Toast';
-import Button from '@/components/common/ Button';
-import Input from '@/components/common/ Input';
+import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
 
 /* ============================= */
 /* MAIN WRAPPER (Suspense Fix)  */
@@ -32,6 +32,7 @@ function ResetPasswordContent() {
 
   const email = searchParams.get('email') || '';
 
+  const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -40,9 +41,10 @@ function ResetPasswordContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const validatePassword = () => {
+  const validate = () => {
     setError('');
 
+    if (!otp || otp.length !== 6) return setError('Enter the 6-digit code we sent to your email'), false;
     if (!newPassword) return setError('New password is required'), false;
     if (newPassword.length < 6) return setError('Minimum 6 characters'), false;
     if (!/[A-Z]/.test(newPassword)) return setError('Must contain uppercase'), false;
@@ -56,7 +58,7 @@ function ResetPasswordContent() {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validatePassword()) return;
+    if (!validate()) return;
 
     setIsLoading(true);
 
@@ -64,10 +66,13 @@ function ResetPasswordContent() {
       const response = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, newPassword, confirmPassword }),
+        body: JSON.stringify({ email, otp, newPassword, confirmPassword }),
       });
 
-      if (!response.ok) throw new Error('Failed to reset password');
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to reset password');
+      }
 
       setSuccess(true);
 
@@ -77,8 +82,8 @@ function ResetPasswordContent() {
       });
 
       setTimeout(() => router.push('/login'), 2000);
-    } catch (err: any) {
-      const msg = err?.message || 'Reset failed';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Reset failed';
       setError(msg);
       addToast({ type: 'error', message: msg });
     } finally {
@@ -133,12 +138,33 @@ function ResetPasswordContent() {
         {/* EMAIL */}
         <Input type="email" value={email} disabled label="Email Address" />
 
+        {/* OTP */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            6-Digit Code <span className="text-red-500">*</span>
+          </label>
+          <Input
+            type="text"
+            maxLength={6}
+            value={otp}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setOtp(e.target.value.replace(/\D/g, ''))
+            }
+            placeholder="000000"
+            className="w-full px-4 py-3 text-2xl tracking-widest text-center font-mono"
+            required
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Check your email for the reset code.
+          </p>
+        </div>
+
         {/* NEW PASSWORD */}
         <div className="relative">
           <Input
             type={showNewPassword ? 'text' : 'password'}
             value={newPassword}
-            onChange={(e: any) => setNewPassword(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPassword(e.target.value)}
             label="New Password"
             required
           />
@@ -156,7 +182,7 @@ function ResetPasswordContent() {
           <Input
             type={showConfirmPassword ? 'text' : 'password'}
             value={confirmPassword}
-            onChange={(e: any) => setConfirmPassword(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
             label="Confirm Password"
             required
           />
@@ -172,7 +198,7 @@ function ResetPasswordContent() {
         <Button
           type="submit"
           loading={isLoading}
-          disabled={!newPassword || !confirmPassword}
+          disabled={!otp || !newPassword || !confirmPassword}
           className="w-full flex items-center justify-center gap-2"
         >
           Reset Password

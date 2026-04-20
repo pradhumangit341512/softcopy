@@ -7,7 +7,8 @@ interface BadgeProps {
   icon?: React.ReactNode;
 }
 
-export default function Badge({
+/** Status badge component with color variants and optional icon */
+export function Badge({
   label,
   variant = 'primary',
   size = 'sm',

@@ -1,24 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
-import Button from '../common/ Button';
-
-interface Client {
-  id: string;
-  clientName: string;
-  phone: string;
-  email: string;
-  status: 'New' | 'Interested' | 'DealDone' | 'Rejected';
-  requirementType: string;
-  budget: number;
-  preferredLocation: string;
-  visitingDate?: string;
-  followUpDate?: string;
-  source?: string;
-  notes?: string;
-  createdAt: string;
-}
+import { Button } from '../common/Button';
+import { formatDate, formatCurrency } from '@/lib/utils';
+import type { Client } from '@/lib/types';
 
 interface ClientCardProps {
   client: Client;
@@ -41,7 +26,8 @@ const statusIcons = {
   Rejected: '❌',
 };
 
-export default function ClientCard({
+/** Card component for displaying an individual client with status, contact info, and actions */
+export function ClientCard({
   client,
   onEdit,
   onDelete,
@@ -63,14 +49,6 @@ export default function ClientCard({
 
   const handleStatusChange = (newStatus: string) => {
     onStatusChange?.(client.id, newStatus);
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-IN');
-  };
-
-  const formatCurrency = (amount: number) => {
-    return `₹${(amount / 100000).toFixed(2)}L`;
   };
 
   return (
@@ -161,7 +139,7 @@ export default function ClientCard({
         <div className="bg-gray-50 rounded-lg p-3">
           <p className="text-xs text-gray-600 font-medium mb-1">Budget</p>
           <p className="text-sm font-semibold text-gray-800">
-            {formatCurrency(client.budget)}
+            {client.budget ? formatCurrency(client.budget) : '—'}
           </p>
         </div>
 

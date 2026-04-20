@@ -10,7 +10,7 @@ export interface User {
   email: string;
   phone: string;
   role: 'superadmin' | 'admin' | 'user';
-  companyId: string;
+  companyId: string | null;
   profilePhoto?: string;
   company?: {
     companyName: string;
@@ -18,14 +18,6 @@ export interface User {
     subscriptionType: string;
     subscriptionExpiry: string;
   };
-}
-
-export interface SignupData {
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  companyName: string;
 }
 
 export interface AuthState {
@@ -39,8 +31,6 @@ export interface AuthState {
   setUser:       (user: User | null) => void;
   setLoading:    (loading: boolean) => void;
   setError:      (error: string | null) => void;
-  login:         (email: string, password: string) => Promise<{ requireOTP: boolean; message?: string }>;
-  signup:        (data: SignupData) => Promise<{ requireOTP: boolean; message?: string }>;
   logout:        () => Promise<void>;
   fetchUser:     () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
@@ -80,86 +70,6 @@ export const useAuthStore = create<AuthState>()(
 
         setError: (error) => set({ error }),
 
-        // ── Login Step 1: validate creds → returns requireOTP: true
-        // ── Login Step 2: handled directly in LoginPage with otp param
-        login: async (email: string, password: string) => {
-          set({ isLoading: true, error: null });
-          try {
-            const response = await fetch('/api/auth/login', {
-              method:      'POST',
-              headers:     { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body:        JSON.stringify({ email, password }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-              throw new Error(data.error || 'Login failed');
-            }
-
-            // OTP required — not an error (only trust this on 2xx responses)
-            if (data.requireOTP) {
-              set({ isLoading: false });
-              return { requireOTP: true, message: data.message };
-            }
-
-            // Direct login success (no OTP) — set user
-            set({
-              user:            data.user,
-              isAuthenticated: true,
-              hasFetched:      true,
-              isLoading:       false,
-              error:           null,
-            });
-            return { requireOTP: false };
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : 'Login failed';
-            set({ ...initialState, error: msg });
-            throw error;
-          }
-        },
-
-        // ── Signup Step 1: validate + send OTP → returns requireOTP: true
-        // ── Signup Step 2: handled directly in SignupPage with otp param
-        signup: async (data: SignupData) => {
-          set({ isLoading: true, error: null });
-          try {
-            const response = await fetch('/api/auth/signup', {
-              method:      'POST',
-              headers:     { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body:        JSON.stringify(data),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-              throw new Error(result.error || 'Signup failed');
-            }
-
-            // OTP required — not an error (only trust this on 2xx responses)
-            if (result.requireOTP) {
-              set({ isLoading: false });
-              return { requireOTP: true, message: result.message };
-            }
-
-            // Direct signup success (no OTP) — set user
-            set({
-              user:            result.user,
-              isAuthenticated: true,
-              hasFetched:      true,
-              isLoading:       false,
-              error:           null,
-            });
-            return { requireOTP: false };
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : 'Signup failed';
-            set({ ...initialState, error: msg });
-            throw error;
-          }
-        },
-
         // ── Logout ──
         logout: async () => {
           set({ isLoading: true });
@@ -180,7 +90,7 @@ export const useAuthStore = create<AuthState>()(
         fetchUser: async () => {
           if (get().hasFetched || get().isLoading) return;
 
-          set({ isLoading: true, hasFetched: true });
+          set({ isLoading: true });
           try {
             const response = await fetch('/api/auth/me', {
               credentials: 'include',
@@ -188,7 +98,8 @@ export const useAuthStore = create<AuthState>()(
             });
 
             if (!response.ok) {
-              // 401 = not logged in — not an error
+              // 401 = not logged in or token expired — clear stale state
+              useAuthStore.persist.clearStorage();
               set({ ...initialState, hasFetched: true });
               return;
             }
@@ -232,7 +143,6 @@ export const useAuthStore = create<AuthState>()(
           } catch (error) {
             const msg = error instanceof Error ? error.message : 'Update failed';
             set({ error: msg, isLoading: false });
-            throw error;
           }
         },
 
@@ -247,20 +157,21 @@ export const useAuthStore = create<AuthState>()(
         name:    'auth-storage',
         storage: createJSONStorage(() => localStorage),
 
-        // ✅ Only persist these — never persist loading/error/hasFetched
-        partialize: (state) => ({
-          user:            state.user,
-          isAuthenticated: state.isAuthenticated,
-        }),
+        // 🔐 Persist NOTHING. The cookie is the only source of truth.
+        // - No user object → XSS can't exfiltrate PII
+        // - No isAuthenticated flag → no "ghost" auth state that lingers after
+        //   the cookie has expired (which causes redirect loops like
+        //   `/` → `/dashboard` → `/login`)
+        // Every page load re-verifies via /api/auth/me.
+        partialize: () => ({}),
 
-        // ✅ Replace don't merge — prevents stale user bleeding into new session
-        merge: (persistedState, currentState) => ({
+        merge: (_persistedState, currentState) => ({
           ...currentState,
-          ...(persistedState as Partial<AuthState>),
-          // Always reset these on rehydrate
-          isLoading:  false,
-          hasFetched: false,  // ✅ force re-verify on every page load
-          error:      null,
+          user:            null,
+          isAuthenticated: false,
+          isLoading:       false,
+          hasFetched:      false,
+          error:           null,
         }),
       }
     )

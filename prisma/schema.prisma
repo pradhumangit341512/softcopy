@@ -7,13 +7,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  superadmin
+  admin
+  user
+}
+
 model Company {
   id                 String          @id @default(auto()) @map("_id") @db.ObjectId
   companyName        String
   logo               String?
   subscriptionType   String          @default("Basic")
   subscriptionExpiry DateTime
+  // Hard cutoff used by middleware. Authoritative source of truth for whether
+  // a tenant's logins still work. Updated when superadmin records a payment.
+  subscriptionUntil  DateTime?
+  // Internal plan tier — descriptive only, no automated logic ties to it.
+  plan               String          @default("standard")
   status             String          @default("active")
+  // Max number of `role:user` team members the broker admin may create.
+  // Enforced at /api/users POST.
+  seatLimit          Int             @default(5)
+  // What the superadmin (you) charges this customer per cycle.
+  monthlyFee         Float?
+  // Free-text notes the superadmin keeps about this customer (contract terms,
+  // contact preferences, etc.). Never shown to the broker.
+  notes              String?
+  // Superadmin user id who onboarded this company. Audit trail.
+  onboardedBy        String?         @db.ObjectId
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
   users              User[]
@@ -23,8 +44,11 @@ model Company {
   invoices           Invoice[]
   monthlyBudgets     MonthlyBudget[]
   properties         Property[]
+  paymentRecords     PaymentRecord[]
   @@index([status])
   @@index([subscriptionExpiry])
+  @@index([subscriptionUntil])
+  @@index([status, subscriptionUntil])
 }
 
 model User {
@@ -33,18 +57,82 @@ model User {
   phone        String       @unique
   email        String       @unique
   password     String
-  role         String       @default("user")
+  role         Role         @default(user)
   companyId    String?      @db.ObjectId
   profilePhoto String?
   status       String       @default("active")
+  // null  = never verified (e.g. new signup awaiting email-link click)
+  // Date  = verified at this timestamp
+  emailVerified     DateTime?
+  // Bumping this invalidates all previously-issued tokens for this user.
+  // Set at login-issue-time (as `tv` JWT claim) so revocation is instant.
+  tokenVersion Int          @default(0)
+  deletedAt    DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   company      Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clients      Client[]
   commissions  Commission[]
   properties   Property[]   @relation("PropertyCreator")
-  @@index([companyId])
+  verificationTokens VerificationToken[]
+  trustedDevices     TrustedDevice[]
+  sessions           UserSession[]
   @@index([role])
+  @@index([companyId, role, status])
+  @@index([deletedAt])
+  @@index([emailVerified])
+}
+
+model UserSession {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  companyId  String    @db.ObjectId
+  loginAt    DateTime  @default(now())
+  logoutAt   DateTime?
+  duration   Int?
+  ipAddress  String?
+  userAgent  String?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, loginAt])
+  @@index([companyId, loginAt])
+  @@map("user_sessions")
+}
+
+// One-time signed tokens used for email verification + (future) password reset links.
+// The link we email contains the raw token; only the hash is stored.
+model VerificationToken {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  tokenHash  String    @unique
+  purpose    String    // 'email-verification' | (future) 'password-reset'
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+// Tracks devices a user has completed an OTP challenge on. While a device's
+// row is active (not expired, not revoked), subsequent logins from that device
+// skip the OTP step — email+password is enough. Admins never use these rows
+// (the login code always forces OTP for admin + superadmin).
+model TrustedDevice {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  tokenHash   String    @unique   // sha256 of the cookie value
+  label       String?              // "Chrome on macOS" — populated from UA for future UI
+  userAgent   String?
+  ipAddress   String?
+  expiresAt   DateTime
+  lastUsedAt  DateTime  @default(now())
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("trusted_devices")
 }
 
 model Client {
@@ -70,17 +158,22 @@ model Client {
   notes             String?
   companyId         String       @db.ObjectId
   createdBy         String       @db.ObjectId
+  deletedAt         DateTime?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   creator           User         @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   commissions       Commission[]
-  @@index([companyId])
-  @@index([createdBy])
-  @@index([status])
-  @@index([visitingDate])
   @@index([followUpDate])
   @@index([phone])
+  @@index([deletedAt])
+  // Hot paths: dashboard listing, team-scoped filters, date-range reports.
+  // Leftmost-prefix rules cover single-field companyId / status queries too.
+  @@index([companyId, createdBy, status, createdAt])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, visitingDate])
+  // Soft-delete-aware composite — every list query filters deletedAt: null
+  @@index([companyId, deletedAt, createdAt])
 }
 
 model Commission {
@@ -95,6 +188,7 @@ model Commission {
   paidStatus           String    @default("Pending")
   paymentDate          DateTime?
   paymentReference     String?
+  deletedAt            DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   client               Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -104,6 +198,11 @@ model Commission {
   @@index([userId])
   @@index([clientId])
   @@index([paidStatus])
+  @@index([deletedAt])
+  // Hot paths: company totals, month-scoped payouts, status grouping
+  @@index([companyId, paidStatus, createdAt])
+  @@index([companyId, createdAt])
+  @@index([companyId, deletedAt, createdAt])
 }
 
 model OTP {
@@ -129,6 +228,7 @@ model EmailOTP {
   expiresAt DateTime
   createdAt DateTime @default(now())
   @@index([email])
+  @@index([email, purpose])
   @@index([expiresAt])
   @@map("email_otps")
 }
@@ -149,6 +249,7 @@ model Invoice {
   company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   @@index([companyId])
   @@index([paymentStatus])
+  @@index([companyId, paymentStatus, createdAt])
 }
 
 model Property {
@@ -171,16 +272,18 @@ model Property {
 
   companyId      String   @db.ObjectId
   createdBy      String   @db.ObjectId
+  deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   creator        User     @relation("PropertyCreator", fields: [createdBy], references: [id], onDelete: Restrict)
 
-  @@index([companyId])
-  @@index([createdBy])
   @@index([ownerPhone])
-  @@index([status])
+  @@index([deletedAt])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, createdBy, status, createdAt])
+  @@index([companyId, deletedAt, createdAt])
 }
 
 model MonthlyBudget {
@@ -194,4 +297,43 @@ model MonthlyBudget {
   @@unique([companyId, month])
   @@index([companyId])
   @@map("monthly_budgets")
+}
+
+// Manual ledger of payments the superadmin (you) received from each broker
+// company. Editing rows here is the only mechanism that extends a company's
+// `subscriptionUntil` — keeps revenue tracking and access control in one place.
+model PaymentRecord {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId   String   @db.ObjectId
+  amount      Float
+  paidOn      DateTime
+  // Subscription window this payment buys. When recorded, Company.subscriptionUntil
+  // is updated to MAX(current, coversUntil) so multiple payments stack cleanly.
+  coversFrom  DateTime
+  coversUntil DateTime
+  method      String   // 'bank_transfer' | 'razorpay_link' | 'cash' | 'cheque' | 'upi'
+  reference   String?  // bank txn id, cheque no, UPI ref, etc.
+  notes       String?
+  recordedBy  String   @db.ObjectId   // superadmin user id who logged it
+  createdAt   DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@index([companyId, paidOn])
+  @@index([recordedBy])
+  @@map("payment_records")
+}
+
+model AuditLog {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId  String   @db.ObjectId
+  userId     String   @db.ObjectId
+  action     String   // e.g. "client.create", "commission.delete"
+  resource   String   // e.g. "Client", "Commission"
+  resourceId String?  @db.ObjectId
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  @@index([companyId, createdAt])
+  @@index([userId, createdAt])
+  @@index([resource, resourceId])
+  @@map("audit_logs")
 }

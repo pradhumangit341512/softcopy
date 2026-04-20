@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { Camera, User, Lock, Settings, LogOut, Eye, EyeOff, Shield, Phone, Mail, Pencil, X, Check } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/common/Toast';
-import Input from '@/components/common/ Input';
+import { Input } from '@/components/common/Input';
 
 type TabId = 'profile' | 'security' | 'account';
 
-const TABS: { id: TabId; label: string; icon: any }[] = [
+interface Tab { id: TabId; label: string; icon: LucideIcon; adminOnly?: boolean }
+
+const ALL_TABS: Tab[] = [
   { id: 'profile',  label: 'Profile',  icon: User   },
   { id: 'security', label: 'Security', icon: Lock   },
-  { id: 'account',  label: 'Account',  icon: Settings },
+  { id: 'account',  label: 'Account',  icon: Settings, adminOnly: true },
 ];
 
 // ── Role badge ──
@@ -29,7 +32,7 @@ const RoleBadge = ({ role }: { role: string }) => {
 };
 
 // ── Info row ──
-const InfoRow = ({ icon: Icon, label, value }: { icon: any; label: string; value: string }) => (
+const InfoRow = ({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) => (
   <div className="flex items-center gap-4 py-3.5 border-b border-gray-50 last:border-0">
     <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center flex-shrink-0">
       <Icon size={16} className="text-gray-400" />
@@ -76,6 +79,8 @@ export default function SettingsPage() {
   const { user, logout } = useAuth();
   const { addToast } = useToast();
 
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const tabs = ALL_TABS.filter((t) => !t.adminOnly || isAdmin);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -161,7 +166,7 @@ export default function SettingsPage() {
 
         {/* Tab bar */}
         <div className="flex border-b border-gray-100">
-          {TABS.map(({ id, label, icon: Icon }) => (
+          {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => { setActiveTab(id); setIsEditing(false); }}
@@ -239,13 +244,23 @@ export default function SettingsPage() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
-                <Input
-                  label="Email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
+                {isAdmin ? (
+                  <Input
+                    label="Email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    required
+                  />
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Email</label>
+                    <p className="px-4 py-2.5 text-sm text-gray-600 bg-gray-50 rounded-xl border border-gray-200">
+                      {formData.email}
+                    </p>
+                    <p className="text-xs text-gray-400">Contact admin to change email</p>
+                  </div>
+                )}
                 <Input
                   label="Phone"
                   type="tel"

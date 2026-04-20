@@ -1,143 +1,169 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+/**
+ * Option-A login UI: email + password first. OTP step only appears if the
+ * server tells us it's needed (new device OR admin-role always-on 2FA).
+ *
+ * Flow:
+ *   1. User enters email + password → submits
+ *   2. Server either:
+ *      - Returns { message, user, redirectTo } → we redirect ✓
+ *      - Returns { requireOTP: true, reason } → we reveal the OTP input
+ *   3. If OTP step, user types code + submits → same endpoint, now with `otp`
+ *   4. Server returns { message, user, redirectTo } → we redirect
+ */
+
+import { useState, useRef, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, CheckCircle } from 'lucide-react';
+
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/common/Toast';
-import Alert from '@/components/common/Alert';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from 'lucide-react';
-import Input from '@/components/common/ Input';
-import Button from '@/components/common/ Button';
+import { Alert } from '@/components/common/Alert';
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
+import { api, ApiError } from '@/lib/fetch';
 
-type Step = 'credentials' | 'otp';
+type LoginResponse =
+  | { message: string; user: unknown; redirectTo: string }
+  | { requireOTP: true; message: string; reason?: 'new-device' | 'admin-2fa' };
 
 export default function LoginPage() {
-  const router       = useRouter();
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-gray-500">Loading…</div>}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
+  const searchParams = useSearchParams();
   const { addToast } = useToast();
-  const { setUser }  = useAuthStore();
+  const { setUser } = useAuthStore();
 
-  const [step, setStep]               = useState<Step>('credentials');
-  const [email, setEmail]             = useState('');
-  const [password, setPassword]       = useState('');
-  const [otp, setOtp]                 = useState('');
+  // Flags from redirect URL
+  const urlError = searchParams.get('error');
+  const justVerified = searchParams.get('verified') === '1';
+  const verificationFailed = searchParams.get('verified') === '0';
+
+  const initialError =
+    urlError === 'subscription_expired' ? 'Your subscription has expired. Please renew to continue.' :
+    urlError === 'session_expired'      ? 'Your session expired. Please sign in again.' :
+    verificationFailed                   ? 'That verification link is invalid or has expired. Please sign up again.' :
+                                           '';
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpReason, setOtpReason] = useState<'new-device' | 'admin-2fa' | null>(null);
+
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors]           = useState({ email: '', password: '', otp: '' });
-  const [localError, setLocalError]   = useState('');
-  const [loading, setLoading]         = useState(false);
-  const [countdown, setCountdown]     = useState(0);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; otp?: string }>({});
+  const [formError, setFormError] = useState(initialError);
+  const [loading, setLoading] = useState(false);
+
+  const [resendCountdown, setResendCountdown] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => { if (countdownRef.current) clearInterval(countdownRef.current); }, []);
 
-  useEffect(() => {
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-  }, []);
-
-  const startCountdown = () => {
+  const startCountdown = (seconds = 60) => {
     if (countdownRef.current) clearInterval(countdownRef.current);
-    setCountdown(60);
+    setResendCountdown(seconds);
     countdownRef.current = setInterval(() => {
-      setCountdown(p => {
-        if (p <= 1) { clearInterval(countdownRef.current!); countdownRef.current = null; return 0; }
-        return p - 1;
+      setResendCountdown((n) => {
+        if (n <= 1) {
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          countdownRef.current = null;
+          return 0;
+        }
+        return n - 1;
       });
     }, 1000);
   };
 
-  const validateCredentials = () => {
-    const e = { email: '', password: '', otp: '' };
-    let ok = true;
-    if (!email) { e.email = 'Email is required'; ok = false; }
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { e.email = 'Invalid email'; ok = false; }
-    if (!password) { e.password = 'Password is required'; ok = false; }
-    setErrors(e);
-    return ok;
+  const applyApiError = (err: unknown, fallback: string) => {
+    if (err instanceof ApiError) {
+      if (err.fields) {
+        const e: typeof fieldErrors = {};
+        if (err.fields.email) e.email = err.fields.email;
+        if (err.fields.password) e.password = err.fields.password;
+        if (err.fields.otp) e.otp = err.fields.otp;
+        setFieldErrors(e);
+      }
+      setFormError(err.message || fallback);
+    } else {
+      setFormError(fallback);
+    }
   };
 
-  // ── Step 1: Submit email+password → receive OTP ──
-  const handleCredentials = async (e: React.FormEvent) => {
+  const validate = (): boolean => {
+    const errs: typeof fieldErrors = {};
+    if (!email.trim()) errs.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs.email = 'Please enter a valid email';
+    if (!password) errs.password = 'Password is required';
+    if (otpReason && (!otp || otp.length !== 6)) errs.otp = 'Enter the 6-digit code';
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLocalError('');
-    if (!validateCredentials()) return;
+    setFormError('');
+    if (!validate()) return;
 
     setLoading(true);
     try {
-      const res  = await fetch('/api/auth/login', {
-        method:      'POST',
-        headers:     { 'Content-Type': 'application/json' },
-        credentials: 'include',   // ✅ needed for cookies
-        body:        JSON.stringify({ email, password }),
+      const res = await api.post<LoginResponse>('/api/auth/login', {
+        email: email.trim(),
+        password,
+        ...(otp ? { otp } : {}),
       });
-      const data = await res.json();
 
-      if (!res.ok) {
-        setLocalError(data.error || 'Login failed');
-        // Still transition to OTP step if server says OTP is required (even on rate-limit)
-        if (data.requireOTP && step !== 'otp') setStep('otp');
-        return;
+      if ('requireOTP' in res) {
+        // Server says this device needs an OTP step.
+        setOtpReason(res.reason ?? 'new-device');
+        setOtp('');
+        setFieldErrors((p) => ({ ...p, otp: undefined }));
+        startCountdown(60);
+        addToast({ type: 'info', message: res.message });
+      } else {
+        // Full login returned.
+        setUser(res.user as Parameters<typeof setUser>[0]);
+        addToast({ type: 'success', message: 'Welcome back!' });
+        // Validate redirectTo is a same-origin absolute path. Defense
+        // against future server bug returning a user-controlled URL.
+        const isSafeRedirect =
+          typeof res.redirectTo === 'string' &&
+          res.redirectTo.startsWith('/') &&
+          !res.redirectTo.startsWith('//') &&
+          !res.redirectTo.startsWith('/\\');
+        window.location.href = isSafeRedirect ? res.redirectTo : '/dashboard';
       }
-
-      setStep('otp');
-      startCountdown();
-      addToast({ type: 'success', message: 'OTP sent to your email!' });
-    } catch {
-      setLocalError('Something went wrong. Please try again.');
+    } catch (err) {
+      applyApiError(err, 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Step 2: Submit OTP → get JWT cookie + user ──
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLocalError('');
-
-    if (!otp || otp.length !== 6) {
-      setErrors(p => ({ ...p, otp: 'Enter the 6-digit OTP' }));
-      return;
-    }
-
+  const handleResendOtp = async () => {
+    if (resendCountdown > 0 || loading) return;
+    setFormError('');
+    setOtp('');
     setLoading(true);
     try {
-      const res  = await fetch('/api/auth/login', {
-        method:      'POST',
-        headers:     { 'Content-Type': 'application/json' },
-        credentials: 'include',   // ✅ required to receive cookie
-        body:        JSON.stringify({ email, password, otp }),
+      // Submitting without otp to the same endpoint triggers a new send.
+      const res = await api.post<LoginResponse>('/api/auth/login', {
+        email: email.trim(),
+        password,
       });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setLocalError(data.error || 'Invalid OTP');
-        return;
+      if ('requireOTP' in res) {
+        startCountdown(60);
+        addToast({ type: 'success', message: 'A new code has been sent.' });
       }
-
-      // ✅ Update store — sets isAuthenticated: true + hasFetched: true
-      setUser(data.user);
-      addToast({ type: 'success', message: 'Login successful!' });
-      router.replace('/dashboard');
-    } catch {
-      setLocalError('Verification failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Resend OTP ──
-  const handleResend = async () => {
-    if (countdown > 0) return;
-    setLocalError(''); setOtp(''); setLoading(true);
-    try {
-      const res  = await fetch('/api/auth/send-email-otp', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email, purpose: 'login' }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setLocalError(data.error || 'Failed to resend'); return; }
-      startCountdown();
-      addToast({ type: 'success', message: 'New OTP sent!' });
-    } catch {
-      setLocalError('Failed to resend OTP');
+    } catch (err) {
+      applyApiError(err, 'Could not resend code.');
     } finally {
       setLoading(false);
     }
@@ -145,134 +171,172 @@ export default function LoginPage() {
 
   return (
     <div>
-      {/* Step indicator */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-          ${step === 'credentials' ? 'bg-blue-600 text-white' : 'bg-emerald-500 text-white'}`}>
-          {step === 'otp' ? '✓' : '1'}
-        </div>
-        <div className={`flex-1 h-1 rounded ${step === 'otp' ? 'bg-blue-600' : 'bg-gray-200'}`} />
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-          ${step === 'otp' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
-          2
-        </div>
-      </div>
-
-      <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 mb-1">
-        {step === 'credentials' ? 'Welcome Back' : 'Verify Your Email'}
+      <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1">
+        {otpReason ? 'One more step' : 'Welcome back'}
       </h2>
       <p className="text-gray-500 mb-6 text-sm">
-        {step === 'credentials'
-          ? 'Sign in to your BrokerCRM account'
-          : `We sent a 6-digit code to ${email}`}
+        {otpReason === 'admin-2fa'
+          ? 'As an admin, we require a verification code on every login.'
+          : otpReason === 'new-device'
+          ? `We sent a 6-digit code to ${email}. Enter it below to sign in.`
+          : 'Sign in to your BrokerCRM account'}
       </p>
 
-      {localError && (
-        <Alert type="error" title="Error" message={localError}
-          closeable onClose={() => setLocalError('')} />
+      {justVerified && (
+        <Alert
+          type="success"
+          title="Email verified"
+          message="Your email has been confirmed. You can sign in now."
+        />
       )}
 
-      {/* ══ STEP 1 ══ */}
-      {step === 'credentials' && (
-        <form onSubmit={handleCredentials} className="space-y-5">
-          <Input
-            label="Email Address" type="email" placeholder="john@example.com"
-            className="text-black" value={email}
-            onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: '' })); }}
-            error={errors.email} icon={<Mail size={18} />} required
-          />
+      {formError && (
+        <Alert
+          type="error"
+          title="Error"
+          message={formError}
+          closeable
+          onClose={() => setFormError('')}
+        />
+      )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+      <form onSubmit={onSubmit} className="space-y-5" noValidate>
+        <Input
+          label="Email Address"
+          type="email"
+          placeholder="you@company.com"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setFieldErrors((p) => ({ ...p, email: undefined }));
+          }}
+          disabled={!!otpReason || loading}
+          error={fieldErrors.email}
+          icon={<Mail size={18} />}
+          className="text-black"
+          autoComplete="email"
+          required
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setFieldErrors((p) => ({ ...p, password: undefined }));
+              }}
+              disabled={!!otpReason || loading}
+              placeholder="Enter your password"
+              className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 text-black
+                disabled:bg-gray-50 disabled:text-gray-500"
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              disabled={!!otpReason || loading}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+          {fieldErrors.password && (
+            <p className="mt-1 text-sm text-red-500">{fieldErrors.password}</p>
+          )}
+        </div>
+
+        {otpReason && (
+          <div className="space-y-3">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex gap-2">
+              <ShieldCheck size={18} className="text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700">
+                {otpReason === 'admin-2fa'
+                  ? 'Admin accounts require a fresh code on every sign-in.'
+                  : "We don't recognize this device. Enter the code we just emailed to continue."}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Verification Code <span className="text-red-500">*</span>
+              </label>
               <input
-                type={showPassword ? 'text' : 'password'} value={password}
-                onChange={e => { setPassword(e.target.value); setErrors(p => ({ ...p, password: '' })); }}
-                placeholder="Enter your password"
-                className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-                required
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => {
+                  setOtp(e.target.value.replace(/\D/g, ''));
+                  setFieldErrors((p) => ({ ...p, otp: undefined }));
+                }}
+                placeholder="000000"
+                className="w-full px-3 sm:px-4 py-3 text-2xl sm:text-3xl tracking-[0.3em] sm:tracking-[0.5em]
+                  text-center border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2
+                  focus:ring-blue-500 focus:border-blue-400 font-mono text-black"
+                autoFocus
+                autoComplete="one-time-code"
               />
-              <button type="button" onClick={() => setShowPassword(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              {fieldErrors.otp && <p className="mt-1 text-sm text-red-500">{fieldErrors.otp}</p>}
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">
+                {resendCountdown > 0
+                  ? <>Resend in <span className="font-semibold text-red-500">{resendCountdown}s</span></>
+                  : "Didn't get it?"}
+              </span>
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={resendCountdown > 0 || loading}
+                className="text-blue-600 font-semibold hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                Resend code
               </button>
             </div>
-            {errors.password && <p className="mt-1 text-sm text-red-500">{errors.password}</p>}
           </div>
+        )}
 
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-              <span className="text-sm text-gray-600">Remember me</span>
-            </label>
+        <Button
+          type="submit"
+          className="w-full flex items-center justify-center gap-2"
+          loading={loading}
+          disabled={otpReason !== null && otp.length !== 6}
+        >
+          {otpReason ? <>Verify & Sign In <CheckCircle size={18} /></> : <>Sign in <ArrowRight size={18} /></>}
+        </Button>
+
+        {otpReason && (
+          <button
+            type="button"
+            onClick={() => {
+              setOtpReason(null);
+              setOtp('');
+              setFieldErrors({});
+              setFormError('');
+            }}
+            disabled={loading}
+            className="w-full text-sm text-gray-500 hover:text-gray-700 text-center disabled:opacity-50"
+          >
+            ← Use a different account
+          </button>
+        )}
+
+        {!otpReason && (
+          <div className="text-right">
             <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700">
               Forgot password?
             </Link>
           </div>
-
-          <Button type="submit" className="w-full flex items-center justify-center gap-2" loading={loading}>
-            Continue <ArrowRight size={18} />
-          </Button>
-        </form>
-      )}
-
-      {/* ══ STEP 2 ══ */}
-      {step === 'otp' && (
-        <form onSubmit={handleVerifyOTP} className="space-y-5">
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
-            <ShieldCheck size={20} className="text-blue-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-blue-800">Check your inbox</p>
-              <p className="text-xs text-blue-600 mt-0.5">
-                Sent to <strong>{email}</strong> — expires in 10 minutes.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Enter OTP <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text" inputMode="numeric" maxLength={6} value={otp}
-              onChange={e => { setOtp(e.target.value.replace(/\D/g, '')); setErrors(p => ({ ...p, otp: '' })); }}
-              placeholder="000000"
-              className="w-full px-3 sm:px-4 py-3 sm:py-4 text-2xl sm:text-3xl tracking-[0.3em] sm:tracking-[0.5em] text-center border-2
-                border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500
-                focus:border-blue-400 font-mono text-black"
-              autoFocus
-            />
-            {errors.otp && <p className="mt-1 text-sm text-red-500">{errors.otp}</p>}
-          </div>
-
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-500">
-              {countdown > 0
-                ? <>Resend in <span className="font-bold text-red-500">{countdown}s</span></>
-                : "Didn't receive it?"}
-            </span>
-            <button type="button" onClick={handleResend}
-              disabled={countdown > 0 || loading}
-              className="text-blue-600 font-semibold hover:text-blue-700
-                disabled:text-gray-400 disabled:cursor-not-allowed">
-              Resend OTP
-            </button>
-          </div>
-
-          <Button type="submit" className="w-full flex items-center justify-center gap-2"
-            loading={loading} disabled={otp.length !== 6}>
-            Verify & Sign In <ShieldCheck size={18} />
-          </Button>
-
-          <button type="button"
-            onClick={() => { setStep('credentials'); setOtp(''); setLocalError(''); }}
-            className="w-full text-sm text-gray-500 hover:text-gray-700 text-center">
-            ← Back to login
-          </button>
-        </form>
-      )}
+        )}
+      </form>
 
       <div className="my-6 flex items-center gap-4">
         <div className="flex-1 border-t border-gray-200" />
@@ -281,9 +345,9 @@ export default function LoginPage() {
       </div>
 
       <p className="text-center text-gray-600 text-sm">
-        Don't have an account?{' '}
-        <Link href="/signup" className="text-blue-600 font-semibold hover:text-blue-700">
-          Sign up
+        Don&apos;t have an account?{' '}
+        <Link href="/#contact" className="text-blue-600 font-semibold hover:text-blue-700">
+          Request access
         </Link>
       </p>
     </div>

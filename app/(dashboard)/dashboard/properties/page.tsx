@@ -5,13 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Building2, SlidersHorizontal, X, Download } from 'lucide-react';
 
-import Loader from '@/components/common/Loader';
-import PropertyTable from '@/components/properties/PropertyTable';
-import PropertyFilters from '@/components/properties/PropertyFilters';
+import { Loader } from '@/components/common/Loader';
+import { PropertyTable } from '@/components/properties/PropertyTable';
+import { PropertyFilters } from '@/components/properties/PropertyFilters';
 import { useAuth } from '@/hooks/useAuth';
-import Alert from '@/components/common/Alert';
-import Pagination from '@/components/common/Pagination';
-import Button from '@/components/common/ Button';
+import { Alert } from '@/components/common/Alert';
+import { Pagination } from '@/components/common/Pagination';
+import { Button } from '@/components/common/Button';
 
 import type { Property } from '@/lib/types';
 
@@ -19,6 +19,14 @@ export default function PropertiesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
+
+  // Admin-only page — team members don't see properties
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (user.role === 'user') {
+      router.replace('/dashboard/my-work');
+    }
+  }, [authLoading, user, router]);
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,8 +90,9 @@ export default function PropertiesPage() {
       setProperties(data.properties || []);
       setTotalPages(data.pagination?.pages || 1);
       setTotalCount(data.pagination?.total || 0);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch properties');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch properties';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -105,8 +114,9 @@ export default function PropertiesPage() {
         throw new Error(data.error || 'Delete failed');
       }
       fetchProperties();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete property';
+      setError(msg);
     }
   };
 
@@ -130,8 +140,9 @@ export default function PropertiesPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       a.remove();
-    } catch (err: any) {
-      setError(err.message || 'Export failed');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Export failed';
+      setError(msg);
     } finally {
       setExporting(false);
     }

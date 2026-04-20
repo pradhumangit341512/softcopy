@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react';
 import { X, AlertCircle, Calendar, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Button from '../common/ Button';
+import { Button } from '../common/Button';
 
 interface VisitReminderProps {
   visitCount: number;
 }
 
-export default function VisitReminder({ visitCount }: VisitReminderProps) {
+/** Dismissible banner and popup reminder for scheduled client visits */
+export function VisitReminder({ visitCount }: VisitReminderProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [showPopup, setShowPopup]  = useState(false);
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function VisitReminder({ visitCount }: VisitReminderProps) {
             {visitCount} client visit{visitCount > 1 ? 's' : ''} scheduled today
           </p>
           <p className="text-xs text-red-600 mt-0.5">
-            Ensure you're prepared and confirm with clients.
+            Ensure you&apos;re prepared and confirm with clients.
           </p>
         </div>
 
@@ -78,7 +79,7 @@ export default function VisitReminder({ visitCount }: VisitReminderProps) {
                   <Calendar size={20} className="text-white" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Today's Visits</h3>
+                  <h3 className="text-base font-bold text-white">Today&apos;s Visits</h3>
                   <p className="text-xs text-red-100 mt-0.5">Reminder</p>
                 </div>
               </div>

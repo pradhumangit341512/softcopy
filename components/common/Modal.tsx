@@ -1,6 +1,6 @@
 import { ReactNode, useEffect } from 'react';
 import { X } from 'lucide-react';
-import Button from './ Button';
+import { Button } from './Button';
 
 interface ModalProps {
   isOpen: boolean;
@@ -13,7 +13,8 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-export default function Modal({
+/** Modal dialog component with configurable size, title, and action buttons */
+export function Modal({
   isOpen,
   title,
   children,

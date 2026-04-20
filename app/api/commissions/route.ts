@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth, isValidObjectId } from "@/lib/auth";
+import { createCommissionSchema, parseBody } from "@/lib/validations";
+import { isTeamMember } from "@/lib/authorize";
 
-type AuthPayload = { userId: string; companyId: string; role: string; email: string };
+export const runtime = "nodejs";
 
 // ── GET: List commissions with filters, search, pagination ──
 export async function GET(req: NextRequest) {
   try {
-    const payload = (await verifyAuth(req)) as AuthPayload | null;
+    const payload = await verifyAuth(req);
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -20,13 +22,20 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const page       = Number(searchParams.get("page") || "1");
-    const limit      = Number(searchParams.get("limit") || "10");
+    const page = Math.max(1, Number(searchParams.get("page") || "1"));
+    const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || "10")));
     const paidStatus = searchParams.get("paidStatus") || undefined;
-    const search     = searchParams.get("search") || "";
-    const skip       = (page - 1) * limit;
+    const search = searchParams.get("search") || "";
+    const skip = (page - 1) * limit;
 
-    const where: any = { companyId: payload.companyId };
+    const where: Record<string, unknown> = {
+      companyId: payload.companyId,
+      deletedAt: null,
+    };
+
+    if (isTeamMember(payload.role)) {
+      where.client = { createdBy: payload.userId };
+    }
     if (paidStatus) where.paidStatus = paidStatus;
     if (search) {
       where.OR = [
@@ -35,7 +44,18 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    const [commissions, total, allCommissions] = await Promise.all([
+    // Totals are company-wide (not affected by paidStatus filter), but still
+    // respect team-member scoping. Uses groupBy to replace the old
+    // "load every row then sum in JS" N+1.
+    const totalsWhere: Record<string, unknown> = {
+      companyId: payload.companyId,
+      deletedAt: null,
+    };
+    if (isTeamMember(payload.role)) {
+      totalsWhere.client = { createdBy: payload.userId };
+    }
+
+    const [commissions, total, grouped] = await Promise.all([
       db.commission.findMany({
         where,
         skip,
@@ -43,20 +63,24 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "desc" },
         include: {
           client: { select: { clientName: true } },
-          user:   { select: { name: true } },
+          user: { select: { name: true } },
         },
       }),
       db.commission.count({ where }),
-      db.commission.findMany({
-        where: { companyId: payload.companyId },
-        select: { commissionAmount: true, paidStatus: true },
+      db.commission.groupBy({
+        by: ["paidStatus"],
+        where: totalsWhere,
+        _sum: { commissionAmount: true },
       }),
     ]);
 
-    const totalCommission   = allCommissions.reduce((s, c) => s + c.commissionAmount, 0);
-    const pendingCommission = allCommissions
-      .filter(c => c.paidStatus === "Pending")
-      .reduce((s, c) => s + c.commissionAmount, 0);
+    const totalCommission = grouped.reduce(
+      (s, row) => s + (row._sum.commissionAmount ?? 0),
+      0
+    );
+    const pendingCommission = grouped
+      .filter((row) => row.paidStatus === "Pending")
+      .reduce((s, row) => s + (row._sum.commissionAmount ?? 0), 0);
 
     return NextResponse.json({
       commissions,
@@ -72,46 +96,57 @@ export async function GET(req: NextRequest) {
 // ── POST: Create commission ──
 export async function POST(req: NextRequest) {
   try {
-    const payload = (await verifyAuth(req)) as AuthPayload | null;
+    const payload = await verifyAuth(req);
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     if (!isValidObjectId(payload.companyId)) {
-      return NextResponse.json({ error: "Invalid session. Please log out and log in again." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid session. Please log out and log in again." },
+        { status: 400 }
+      );
     }
 
-    const body = await req.json();
-    const {
-      clientId,
-      salesPersonName,   // free-text, optional
-      dealAmount,
-      commissionPercentage,
-      paidStatus,
-      paymentReference,
-    } = body;
+    const parsed = await parseBody(req, createCommissionSchema);
+    if (!parsed.ok) return parsed.response;
+    const data = parsed.data;
 
-    if (!clientId)    return NextResponse.json({ error: "Client is required" }, { status: 400 });
-    if (!dealAmount)  return NextResponse.json({ error: "Deal amount is required" }, { status: 400 });
+    // Verify the client belongs to this company (prevents cross-company writes)
+    const client = await db.client.findFirst({
+      where: { id: data.clientId, companyId: payload.companyId, deletedAt: null },
+      select: { id: true, createdBy: true },
+    });
+    if (!client) {
+      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+    if (
+      isTeamMember(payload.role) &&
+      client.createdBy !== payload.userId
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden — not your client" },
+        { status: 403 }
+      );
+    }
 
-    const deal       = Number(dealAmount);
-    const pct        = Number(commissionPercentage || 0);
-    const commission = (deal * pct) / 100;
+    const commissionAmount = (data.dealAmount * data.commissionPercentage) / 100;
 
     const newCommission = await db.commission.create({
       data: {
-        clientId,
-        companyId:           payload.companyId,
-        salesPersonName:     salesPersonName?.trim() || null,
-        dealAmount:          deal,
-        commissionPercentage: pct,
-        commissionAmount:    commission,
-        paidStatus:          paidStatus || "Pending",
-        paymentReference:    paymentReference || null,
-        paymentDate:         paidStatus === "Paid" ? new Date() : null,
+        clientId: data.clientId,
+        companyId: payload.companyId,
+        salesPersonName: data.salesPersonName,
+        dealAmount: data.dealAmount,
+        commissionPercentage: data.commissionPercentage,
+        commissionAmount,
+        paidStatus: data.paidStatus,
+        paymentReference: data.paymentReference,
+        paymentDate: data.paidStatus === "Paid" ? new Date() : null,
+        deletedAt: null,
       },
       include: {
         client: { select: { clientName: true } },
-        user:   { select: { name: true } },
+        user: { select: { name: true } },
       },
     });
 

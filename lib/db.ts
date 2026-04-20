@@ -1,8 +1,7 @@
-import { PrismaClient } from "@prisma/client";
-
-/**
- * Prevent multiple Prisma instances in Next.js dev (hot reload issue)
- */
+// Import env validation FIRST so the app refuses to boot with a broken
+// environment rather than running with empty/unsafe defaults.
+import './env';
+import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -11,12 +10,9 @@ const globalForPrisma = globalThis as unknown as {
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
 
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = db;
 }

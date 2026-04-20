@@ -1,6 +1,7 @@
 'use client';
 
-import { useForm, SubmitHandler } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, SubmitHandler, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
@@ -12,8 +13,8 @@ import {
   Client,
 } from '@/lib/types';
 
-import Input from '@/components/common/ Input';   // ✅ Fixed: removed space
-import Button from '@/components/common/ Button'; // ✅ Fixed: removed space
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
 
 // Extend schema to allow string dates (HTML date inputs always return strings)
 // Use .passthrough() instead of .strict() so extra fields from initialData
@@ -25,17 +26,33 @@ const formSchema = clientSchema.extend({
 
 type ClientFormValues = z.infer<typeof formSchema>;
 
-interface ClientFormProps {
-  onSubmit: (data: Partial<Client>) => Promise<boolean>;
-  initialData?: Partial<Client>;
-  isLoading?: boolean;
+interface TeamMemberOption {
+  id: string;
+  name: string;
 }
 
-export default function ClientForm({
+interface ClientFormProps {
+  onSubmit: (data: Partial<Client> & { assignedTo?: string }) => Promise<boolean>;
+  initialData?: Partial<Client>;
+  isLoading?: boolean;
+  isAdmin?: boolean;
+  teamMembers?: TeamMemberOption[];
+  currentUserId?: string;
+}
+
+/** Client creation/edit form with Zod validation and date handling */
+export function ClientForm({
   onSubmit,
   initialData,
   isLoading = false,
+  isAdmin = false,
+  teamMembers = [],
+  currentUserId,
 }: ClientFormProps) {
+
+  const [assignedTo, setAssignedTo] = useState(
+    (initialData as Record<string, unknown>)?.createdBy as string ?? ''
+  );
 
   // Pick only the fields the form uses — prevents extra API fields
   // (id, companyId, createdAt, etc.) from leaking into form state
@@ -44,7 +61,7 @@ export default function ClientForm({
         clientName:        initialData.clientName ?? '',
         phone:             initialData.phone ?? '',
         email:             initialData.email ?? '',
-        companyName:       (initialData as any).companyName ?? '',
+        companyName:       initialData.companyName ?? '',
         requirementType:   initialData.requirementType ?? '',
         inquiryType:       initialData.inquiryType ?? '',
         budget:            initialData.budget,
@@ -53,15 +70,15 @@ export default function ClientForm({
         visitingDate:      initialData.visitingDate
           ? new Date(initialData.visitingDate).toISOString().split('T')[0]
           : '',
-        visitingTime:      (initialData as any).visitingTime ?? '',
+        visitingTime:      (initialData as Record<string, unknown>).visitingTime as string ?? '',
         followUpDate:      initialData.followUpDate
           ? new Date(initialData.followUpDate).toISOString().split('T')[0]
           : '',
         status:            initialData.status ?? 'New',
         source:            initialData.source ?? '',
         notes:             initialData.notes ?? '',
-        propertyVisited:   (initialData as any).propertyVisited ?? false,
-        visitStatus:       (initialData as any).visitStatus ?? 'NotVisited',
+        propertyVisited:   initialData.propertyVisited ?? false,
+        visitStatus:       initialData.visitStatus ?? 'NotVisited',
       }
     : undefined;
 
@@ -70,17 +87,19 @@ export default function ClientForm({
     handleSubmit,
     formState: { errors },
   } = useForm<ClientFormValues>({
-    resolver: zodResolver(formSchema) as any,
-    defaultValues: cleanDefaults as any,
+    resolver: zodResolver(formSchema) as unknown as Resolver<ClientFormValues>,
+    defaultValues: cleanDefaults as Partial<ClientFormValues> | undefined,
   });
 
-  // ✅ Convert strings → Date objects before sending to API
   const submitHandler: SubmitHandler<ClientFormValues> = async (data) => {
-    const payload: Partial<Client> = {
+    const payload: Partial<Client> & { assignedTo?: string } = {
       ...data,
       visitingDate: data.visitingDate ? new Date(data.visitingDate) : undefined,
       followUpDate: data.followUpDate ? new Date(data.followUpDate) : undefined,
     };
+    if (isAdmin && assignedTo && assignedTo !== currentUserId) {
+      payload.assignedTo = assignedTo;
+    }
     await onSubmit(payload);
   };
 
@@ -92,7 +111,7 @@ export default function ClientForm({
 
   return (
     <form
-      onSubmit={handleSubmit(submitHandler)}
+      onSubmit={handleSubmit(submitHandler as SubmitHandler<Record<string, unknown>>)}
       className="w-full max-w-2xl mx-auto space-y-5 px-4 sm:px-6"
       noValidate
     >
@@ -187,6 +206,28 @@ export default function ClientForm({
         </div>
 
       </div>
+
+      {/* ── Assign to team member (admin only) ── */}
+      {isAdmin && teamMembers.length > 0 && (
+        <div>
+          <label className={labelStyle}>Assign to Team Member</label>
+          <select
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            className={selectStyle}
+          >
+            <option value="">Myself (default)</option>
+            {teamMembers.map((tm) => (
+              <option key={tm.id} value={tm.id}>
+                {tm.name} {tm.id === currentUserId ? '(You)' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            This client will appear in the selected member&apos;s work dashboard
+          </p>
+        </div>
+      )}
 
       {/* ── Budget & Location ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

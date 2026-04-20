@@ -10,7 +10,8 @@ interface CardProps {
   rounded?: 'sm' | 'md' | 'lg';
 }
 
-export default function Card({
+/** Container card component with configurable shadow, border, and hover effects */
+export function Card({
   children,
   className,
   hoverable = false,
@@ -54,6 +55,7 @@ interface CardHeaderProps {
   children?: ReactNode;
 }
 
+/** Card header section with optional title, subtitle, and action slot */
 export function CardHeader({
   title,
   subtitle,
@@ -77,6 +79,7 @@ interface CardBodyProps {
   className?: string;
 }
 
+/** Card body section with configurable padding */
 export function CardBody({ children, className }: CardBodyProps) {
   return <div className={clsx('p-6', className)}>{children}</div>;
 }
@@ -86,6 +89,7 @@ interface CardFooterProps {
   className?: string;
 }
 
+/** Card footer section with top border */
 export function CardFooter({ children, className }: CardFooterProps) {
   return (
     <div className={clsx('border-t border-gray-200 p-6', className)}>

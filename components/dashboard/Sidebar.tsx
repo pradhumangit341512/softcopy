@@ -5,26 +5,65 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, TrendingUp,
   BarChart3, Settings, X, Building2,
+  GitBranch, Briefcase, UserCog, Award,
 } from 'lucide-react';
 import clsx from 'clsx';
-import Button from '../common/ Button';
+import type { LucideIcon } from 'lucide-react';
+import { Button } from '../common/Button';
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  user: any;
+  user: { name?: string; email?: string; role?: string } | null;
 }
 
-const navItems = [
-  { href: '/dashboard',             icon: LayoutDashboard, label: 'Dashboard'   },
-  { href: '/dashboard/clients',     icon: Users,           label: 'Clients'     },
-  { href: '/dashboard/properties',  icon: Building2,       label: 'Properties'  },
-  { href: '/dashboard/commissions', icon: TrendingUp,      label: 'Commissions' },
-  { href: '/dashboard/analytics',   icon: BarChart3,       label: 'Analytics'   },
-  { href: '/dashboard/settings',    icon: Settings,        label: 'Settings'    },
+interface NavItem {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  /** If defined, only these roles see the item */
+  roles?: Array<'admin' | 'superadmin' | 'user'>;
+}
+
+/** Nav items with optional role-based visibility.
+ * If `roles` is omitted, all roles see the item.
+ * If `roles` is set, only those roles see it.
+ */
+const navItems: NavItem[] = [
+  // ── Everyone ──
+  { href: '/dashboard',                  icon: LayoutDashboard, label: 'Dashboard'         },
+
+  // ── Team member only ──
+  { href: '/dashboard/my-work',          icon: Briefcase,       label: 'My Work',
+    roles: ['user'] },
+  { href: '/dashboard/clients',          icon: Users,           label: 'My Clients',
+    roles: ['user'] },
+  { href: '/dashboard/pipeline',         icon: GitBranch,       label: 'My Pipeline',
+    roles: ['user'] },
+  { href: '/dashboard/commissions',      icon: TrendingUp,      label: 'My Commissions',
+    roles: ['user'] },
+  { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'          },
+
+
+  // ── Admin / SuperAdmin only ──
+  { href: '/dashboard/clients',          icon: Users,           label: 'Clients',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/pipeline',         icon: GitBranch,       label: 'Deal Pipeline',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/properties',       icon: Building2,       label: 'Properties',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/commissions',      icon: TrendingUp,      label: 'Commissions',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/analytics',        icon: BarChart3,       label: 'Analytics',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/team',             icon: UserCog,         label: 'Team',
+    roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/team-performance', icon: Award,           label: 'Team Performance',
+    roles: ['admin', 'superadmin'] },
 ];
 
-export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
+/** Main navigation sidebar with links, user info, and mobile responsive behavior */
+export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
   const pathname = usePathname();
 
   // initials from name
@@ -74,14 +113,22 @@ export default function Sidebar({ isOpen, onClose, user }: SidebarProps) {
 
         {/* ── Navigation ── */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ href, icon: Icon, label }) => {
+          {navItems
+            .filter((item) => {
+              // No roles restriction → visible to everyone
+              if (!item.roles) return true;
+              // Hide until we know the user's role
+              if (!user?.role) return false;
+              return item.roles.includes(user.role as 'admin' | 'superadmin' | 'user');
+            })
+            .map(({ href, icon: Icon, label }, idx) => {
             const isActive =
               href === '/dashboard'
                 ? pathname === '/dashboard'
                 : pathname === href || pathname.startsWith(href + '/');
 
             return (
-              <Link key={href} href={href} onClick={onClose}>
+              <Link key={`${href}-${idx}`} href={href} onClick={onClose}>
                 <span
                   className={clsx(
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150',

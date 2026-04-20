@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken } from "@/lib/auth";
+import { verifyAuth } from "@/lib/auth";
 import ExcelJS from "exceljs";
 
 // ✅ Fix #1: Force Node.js runtime so ExcelJS works
@@ -16,11 +16,7 @@ type AuthPayload = {
 export async function GET(req: NextRequest) {
   try {
     /* ================= AUTH ================= */
-    const token = await getTokenCookie();
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = await verifyAuth(req) as AuthPayload | null;
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -36,7 +32,12 @@ export async function GET(req: NextRequest) {
     const dateTo   = searchParams.get("dateTo") || "";
 
     /* ================= BUILD WHERE CLAUSE ================= */
-    let where: any = { companyId };
+    const where: Record<string, unknown> = { companyId };
+
+    // Role-based filtering: team members only export their own data
+    if (payload.role === 'user') {
+      where.createdBy = payload.userId;
+    }
 
     if (type === "today") {
       const today = new Date();
@@ -65,10 +66,14 @@ export async function GET(req: NextRequest) {
     }
 
     /* ================= FETCH DATA ================= */
+    // Hard cap to keep serverless memory + request time bounded.
+    // Past this, users should narrow the filter or use the async export (planned).
+    const EXPORT_LIMIT = 50_000;
     const clients = await db.client.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       include: { creator: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
+      take: EXPORT_LIMIT,
     });
 
     /* ================= CREATE EXCEL ================= */

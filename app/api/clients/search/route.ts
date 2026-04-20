@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getTokenCookie, verifyToken } from '@/lib/auth';
+import { verifyAuth } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const payload = await verifyToken(token);
+    const payload = await verifyAuth(req);
     if (!payload) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -22,27 +17,24 @@ export async function GET(req: NextRequest) {
     const limit = 20;
     const skip = (page - 1) * limit;
 
-    // ✅ Proper Prisma typing
+    // Build search filter with role-based isolation
+    const searchCondition = {
+      OR: [
+        { clientName: { contains: query, mode: Prisma.QueryMode.insensitive } },
+        { phone: { contains: query } },
+        { email: { contains: query, mode: Prisma.QueryMode.insensitive } },
+      ],
+    };
+
     const where: Prisma.ClientWhereInput = {
       companyId: payload.companyId,
-      OR: [
-        {
-          clientName: {
-            contains: query,
-            mode: Prisma.QueryMode.insensitive,
-          },
-        },
-        {
-          phone: {
-            contains: query,
-          },
-        },
-        {
-          email: {
-            contains: query,
-            mode: Prisma.QueryMode.insensitive,
-          },
-        },
+      deletedAt: null, // hide soft-deleted clients from search results
+      AND: [
+        searchCondition,
+        // Role-based isolation: non-admin users only see their own clients
+        ...(!['admin', 'superadmin'].includes(payload.role)
+          ? [{ createdBy: payload.userId }]
+          : []),
       ],
     };
 

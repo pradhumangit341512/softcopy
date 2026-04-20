@@ -2,10 +2,10 @@
 
 import { useForm, SubmitHandler, useWatch } from 'react-hook-form';
 import { PropertyType, PropertyStatus, BHK_TYPE_OPTIONS, PROPERTY_TYPES_WITH_BHK } from '@/lib/types';
-import Input from '@/components/common/ Input';
-import Button from '@/components/common/ Button';
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
 
-interface PropertyFormValues {
+export interface PropertyFormValues {
   propertyName: string;
   address: string;
   propertyType: string;
@@ -22,12 +22,13 @@ interface PropertyFormValues {
 }
 
 interface PropertyFormProps {
-  onSubmit: (data: any) => Promise<boolean>;
-  initialData?: any;
+  onSubmit: (data: PropertyFormValues) => Promise<boolean>;
+  initialData?: Partial<PropertyFormValues>;
   isLoading?: boolean;
 }
 
-export default function PropertyForm({
+/** Property creation/edit form with validation and conditional BHK selector */
+export function PropertyForm({
   onSubmit,
   initialData,
   isLoading = false,

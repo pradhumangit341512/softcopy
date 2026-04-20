@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useToast } from '@/components/common/Toast';
+import { api, ApiError } from '@/lib/fetch';
 
 export interface Commission {
   id: string;
@@ -29,7 +30,7 @@ interface UseCommissionsReturn {
   summary: CommissionSummary;
   loading: boolean;
   error: string | null;
-  fetchCommissions: (filters?: any) => Promise<void>;
+  fetchCommissions: (filters?: { paidStatus?: string; userId?: string }) => Promise<void>;
   createCommission: (data: {
     clientId: string;
     userId: string;
@@ -40,6 +41,15 @@ interface UseCommissionsReturn {
   deleteCommission: (id: string) => Promise<boolean>;
 }
 
+interface ListResponse {
+  commissions: Commission[];
+  totals: CommissionSummary;
+}
+
+/**
+ * Commissions CRUD hook. Routes through `authFetch` so 401/402 redirects
+ * + timeouts + structured ApiError handling are uniform with other hooks.
+ */
 export function useCommissions(): UseCommissionsReturn {
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [summary, setSummary] = useState<CommissionSummary>({
@@ -51,33 +61,34 @@ export function useCommissions(): UseCommissionsReturn {
   const [error, setError] = useState<string | null>(null);
   const { addToast } = useToast();
 
-  const fetchCommissions = useCallback(async (filters?: any) => {
-    try {
-      setLoading(true);
-      setError(null);
+  const messageOf = (err: unknown, fallback: string): string =>
+    err instanceof ApiError ? err.message : fallback;
 
-      const params = new URLSearchParams();
-      if (filters?.paidStatus) params.append('paidStatus', filters.paidStatus);
-      if (filters?.userId) params.append('userId', filters.userId);
+  const fetchCommissions = useCallback(
+    async (filters?: { paidStatus?: string; userId?: string }) => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      const response = await fetch(`/api/commissions?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch');
+        const params = new URLSearchParams();
+        if (filters?.paidStatus) params.append('paidStatus', filters.paidStatus);
+        if (filters?.userId) params.append('userId', filters.userId);
 
-      const data = await response.json();
-      setCommissions(data.commissions || []);
-      setSummary(data.totals || {
-        totalCommission: 0,
-        pendingCommission: 0,
-        paidCommission: 0,
-      });
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to fetch commissions';
-      setError(errorMsg);
-      addToast({ type: 'error', message: errorMsg });
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
+        const data = await api.get<ListResponse>(`/api/commissions?${params}`);
+        setCommissions(data.commissions ?? []);
+        setSummary(
+          data.totals ?? { totalCommission: 0, pendingCommission: 0, paidCommission: 0 }
+        );
+      } catch (err) {
+        const msg = messageOf(err, 'Failed to fetch commissions');
+        setError(msg);
+        addToast({ type: 'error', message: msg });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [addToast]
+  );
 
   const createCommission = useCallback(
     async (data: {
@@ -85,28 +96,15 @@ export function useCommissions(): UseCommissionsReturn {
       userId: string;
       dealAmount: number;
       commissionPercentage: number;
-    }): Promise<boolean> => {
+    }) => {
       try {
         setLoading(true);
-
-        const response = await fetch('/api/commissions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-
-        if (!response.ok) throw new Error('Failed to create');
-
-        addToast({
-          type: 'success',
-          message: 'Commission created successfully',
-        });
-
+        await api.post('/api/commissions', data);
+        addToast({ type: 'success', message: 'Commission created successfully' });
         await fetchCommissions();
         return true;
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to create commission';
-        addToast({ type: 'error', message: errorMsg });
+        addToast({ type: 'error', message: messageOf(err, 'Failed to create commission') });
         return false;
       } finally {
         setLoading(false);
@@ -116,26 +114,14 @@ export function useCommissions(): UseCommissionsReturn {
   );
 
   const markAsPaid = useCallback(
-    async (id: string): Promise<boolean> => {
+    async (id: string) => {
       try {
-        const response = await fetch(`/api/commissions/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paidStatus: 'Paid' }),
-        });
-
-        if (!response.ok) throw new Error('Failed to update');
-
-        addToast({
-          type: 'success',
-          message: 'Commission marked as paid',
-        });
-
+        await api.put(`/api/commissions/${id}`, { paidStatus: 'Paid' });
+        addToast({ type: 'success', message: 'Commission marked as paid' });
         await fetchCommissions();
         return true;
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to update';
-        addToast({ type: 'error', message: errorMsg });
+        addToast({ type: 'error', message: messageOf(err, 'Failed to update') });
         return false;
       }
     },
@@ -143,24 +129,14 @@ export function useCommissions(): UseCommissionsReturn {
   );
 
   const deleteCommission = useCallback(
-    async (id: string): Promise<boolean> => {
+    async (id: string) => {
       try {
-        const response = await fetch(`/api/commissions/${id}`, {
-          method: 'DELETE',
-        });
-
-        if (!response.ok) throw new Error('Failed to delete');
-
-        addToast({
-          type: 'success',
-          message: 'Commission deleted',
-        });
-
+        await api.del(`/api/commissions/${id}`);
+        addToast({ type: 'success', message: 'Commission deleted' });
         await fetchCommissions();
         return true;
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to delete';
-        addToast({ type: 'error', message: errorMsg });
+        addToast({ type: 'error', message: messageOf(err, 'Failed to delete') });
         return false;
       }
     },

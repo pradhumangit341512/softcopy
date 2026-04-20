@@ -5,19 +5,30 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import StatsCard from './StatsCard';
-import VisitReminder from './VisitReminder';
+import { StatsCard } from './StatsCard';
+import { VisitReminder } from './VisitReminder';
 import { TodayVisit } from '@/lib/types';
-import { Users, CheckCircle2, TrendingUp, CalendarCheck, Phone, MapPin, Clock } from 'lucide-react';
+import { CHART_COLORS, CustomTooltipProps, TooltipPayloadEntry } from '@/lib/utils';
+import { CalendarCheck, Phone, MapPin } from 'lucide-react';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+interface DashboardData {
+  summary: {
+    totalClients: number;
+    todayVisitsCount: number;
+    closedDeals: number;
+    totalCommission: number;
+  };
+  todayVisits: TodayVisit[];
+  leadsByStatus: Array<{ status: string; _count: number }>;
+  monthlyData: Array<{ month: string; leads: number; deals: number }>;
+}
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload?.length) {
     return (
       <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3">
         <p className="text-xs font-semibold text-gray-500 mb-1">{label}</p>
-        {payload.map((p: any, i: number) => (
+        {payload.map((p: TooltipPayloadEntry, i: number) => (
           <p key={i} className="text-sm font-bold" style={{ color: p.color }}>
             {p.name}: {p.value}
           </p>
@@ -28,8 +39,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export default function Dashboard() {
-  const [data, setData] = useState<any>(null);
+/** Main dashboard view with stats, visit reminders, charts, and lead status */
+export function Dashboard() {
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchAnalytics(); }, []);
@@ -108,7 +120,7 @@ export default function Dashboard() {
               <CalendarCheck size={14} className="text-blue-500" />
             </div>
             <h3 className="text-sm font-semibold text-gray-800">
-              Today's Visiting Clients
+              Today&apos;s Visiting Clients
               <span className="ml-2 text-xs font-medium text-gray-400 bg-gray-100
                 px-2 py-0.5 rounded-full">
                 {todayVisits.length}
@@ -219,9 +231,9 @@ export default function Dashboard() {
             <p className="text-xs text-gray-400 mt-0.5">Distribution across pipeline</p>
           </div>
           <div className="space-y-3">
-            {data.leadsByStatus.map((status: any, index: number) => {
+            {data.leadsByStatus.map((status: { status: string; _count: number }, index: number) => {
               const pct = Math.round((status._count / totalClients) * 100);
-              const color = COLORS[index % COLORS.length];
+              const color = CHART_COLORS[index % CHART_COLORS.length];
               return (
                 <div key={status.status}>
                   <div className="flex items-center justify-between mb-1">

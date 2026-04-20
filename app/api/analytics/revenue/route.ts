@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
       const commissions = await db.commission.aggregate({
         where: {
           companyId,
+          deletedAt: null, // exclude soft-deleted commissions from revenue chart
           createdAt: { gte: mStart, lte: mEnd },
         },
         _sum: { dealAmount: true },

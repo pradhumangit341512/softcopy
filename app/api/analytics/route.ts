@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { startOfMonth, endOfMonth } from "date-fns";
-import jwt from "jsonwebtoken";
-import { isValidObjectId } from "@/lib/auth";
+import { isValidObjectId, verifyAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-type AuthPayload = { userId: string; companyId: string; role: string; email: string };
-
-async function verifyAuthFromCookie(req: NextRequest): Promise<AuthPayload | null> {
-  try {
-    const token = req.cookies.get("auth_token")?.value;
-    if (!token) return null;
-    if (!process.env.JWT_SECRET) return null;
-    return jwt.verify(token, process.env.JWT_SECRET) as AuthPayload;
-  } catch {
-    return null;
-  }
-}
+// type AuthPayload = AuthTokenPayload;
 
 // Empty analytics response for dev bypass or missing company
 function emptyAnalytics() {
@@ -37,7 +25,7 @@ function emptyAnalytics() {
 
 export async function GET(req: NextRequest) {
   try {
-    const payload = await verifyAuthFromCookie(req);
+    const payload = await verifyAuth(req);
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -55,6 +43,17 @@ export async function GET(req: NextRequest) {
     const todayEnd   = new Date(todayStart);
     todayEnd.setDate(todayEnd.getDate() + 1);
 
+    // Role-based filter: team members see only their own data.
+    // Always exclude soft-deleted rows — otherwise tombstoned records
+    // inflate every count/aggregate below.
+    const isTeamMember = payload.role === 'user';
+    const clientFilter = isTeamMember
+      ? { companyId, createdBy: payload.userId, deletedAt: null }
+      : { companyId, deletedAt: null };
+    const commissionFilter = isTeamMember
+      ? { companyId, deletedAt: null, client: { createdBy: payload.userId, deletedAt: null } }
+      : { companyId, deletedAt: null, client: { deletedAt: null } };
+
     const [
       totalClients,
       todayVisitsCount,
@@ -63,14 +62,14 @@ export async function GET(req: NextRequest) {
       commissions,
       leadsByStatus,
     ] = await Promise.all([
-      db.client.count({ where: { companyId } }),
+      db.client.count({ where: clientFilter }),
 
       db.client.count({
-        where: { companyId, visitingDate: { gte: todayStart, lt: todayEnd } },
+        where: { ...clientFilter, visitingDate: { gte: todayStart, lt: todayEnd } },
       }),
 
       db.client.findMany({
-        where: { companyId, visitingDate: { gte: todayStart, lt: todayEnd } },
+        where: { ...clientFilter, visitingDate: { gte: todayStart, lt: todayEnd } },
         select: {
           id: true, clientName: true, phone: true,
           visitingDate: true, visitingTime: true, preferredLocation: true,
@@ -79,36 +78,60 @@ export async function GET(req: NextRequest) {
       }),
 
       db.client.count({
-        where: { companyId, status: "DealDone", updatedAt: { gte: monthStart, lte: monthEnd } },
+        where: { ...clientFilter, status: "DealDone", updatedAt: { gte: monthStart, lte: monthEnd } },
       }),
 
       db.commission.aggregate({
-        where: { companyId, createdAt: { gte: monthStart, lte: monthEnd } },
+        where: { ...commissionFilter, createdAt: { gte: monthStart, lte: monthEnd } },
         _sum: { commissionAmount: true },
       }),
 
       db.client.groupBy({
         by: ["status"],
-        where: { companyId },
+        where: clientFilter,
         _count: true,
       }),
     ]);
 
-    // Monthly data (last 12 months)
-    const monthlyData: any[] = [];
+    // Monthly data (last 12 months). Prisma groupBy on DateTime returns one
+    // group per unique timestamp (not per month), so we use a bounded findMany
+    // with minimal select (one field, no joins) and bucket in memory.
+    interface MonthlyDataPoint { month: string; leads: number; deals: number; }
+    const yearAgo = startOfMonth(new Date(now.getFullYear(), now.getMonth() - 11, 1));
+
+    const [leadRows, dealRows] = await Promise.all([
+      db.client.findMany({
+        where: { ...clientFilter, createdAt: { gte: yearAgo } },
+        select: { createdAt: true },
+      }),
+      db.client.findMany({
+        where: { ...clientFilter, status: 'DealDone', updatedAt: { gte: yearAgo } },
+        select: { updatedAt: true },
+      }),
+    ]);
+
+    const monthKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+    const leadBuckets = new Map<string, number>();
+    for (const r of leadRows) {
+      const k = monthKey(r.createdAt);
+      leadBuckets.set(k, (leadBuckets.get(k) ?? 0) + 1);
+    }
+    const dealBuckets = new Map<string, number>();
+    for (const r of dealRows) {
+      const k = monthKey(r.updatedAt);
+      dealBuckets.set(k, (dealBuckets.get(k) ?? 0) + 1);
+    }
+
+    const monthlyData: MonthlyDataPoint[] = [];
     for (let i = 11; i >= 0; i--) {
-      const date   = new Date(now);
-      date.setMonth(date.getMonth() - i);
-      const mStart = startOfMonth(date);
-      const mEnd   = endOfMonth(date);
-      const [leads, deals] = await Promise.all([
-        db.client.count({ where: { companyId, createdAt: { gte: mStart, lte: mEnd } } }),
-        db.client.count({ where: { companyId, status: "DealDone", updatedAt: { gte: mStart, lte: mEnd } } }),
-      ]);
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = monthKey(date);
       monthlyData.push({
-        month: date.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-        leads,
-        deals,
+        month: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        leads: leadBuckets.get(k) ?? 0,
+        deals: dealBuckets.get(k) ?? 0,
       });
     }
 

@@ -1,9 +1,9 @@
 'use client';
 
 import { Edit2, Trash2 } from 'lucide-react';
-import Badge from '@/components/common/Badge';
-import { formatCurrency } from '@/lib/utils';
-import Button from '@/components/common/ Button';
+import { Badge } from '@/components/common/Badge';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { Button } from '@/components/common/Button';
 
 import type { Property } from '@/lib/types';
 
@@ -13,17 +13,8 @@ interface PropertyTableProps {
   onDelete?: (id: string) => Promise<void>;
 }
 
-const formatDate = (date?: Date | string | null): string => {
-  if (!date) return '—';
-  const d = new Date(date);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
-
-export default function PropertyTable({ properties, onEdit, onDelete }: PropertyTableProps) {
+/** Table component for displaying a list of properties with inline actions */
+export function PropertyTable({ properties, onEdit, onDelete }: PropertyTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
       <table className="w-full text-sm min-w-[900px]">

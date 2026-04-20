@@ -1,133 +1,175 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken, hashPassword } from "@/lib/auth";
-import { z } from "zod";
+import {
+  verifyAuth,
+  hashPassword,
+} from "@/lib/auth";
+import { requireAdmin } from "@/lib/authorize";
+import { createUserSchema, parseBody } from "@/lib/validations";
+import { recordAudit } from "@/lib/audit";
 
-type AuthPayload = {
-  userId: string;
-  companyId: string;
-  role: string;
-  email: string;
-};
-
-const createUserSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/),
-  password: z.string().min(6),
-  role: z.enum(["admin", "user"]),
-});
+export const runtime = "nodejs";
 
 // ================= GET USERS =================
 export async function GET(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const payload = await verifyAuth(req);
+    if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // FIX: await verifyToken
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
 
-    if (!payload) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, Number(searchParams.get('page') || 1));
+    const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 50)));
+    const skip = (page - 1) * limit;
 
-    // Only admin can view team
-    const user = await db.user.findUnique({
-      where: { id: payload.userId },
+    const statusFilter = searchParams.get('status');
+    const where: Record<string, unknown> = {
+      companyId: payload.companyId,
+      deletedAt: null,
+      ...(statusFilter ? { status: statusFilter } : {}),
+    };
+    const [users, total] = await Promise.all([
+      db.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'asc' },
+        skip,
+        take: limit,
+      }),
+      db.user.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      users,
+      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
-
-    if (!user || !["admin", "superadmin"].includes(user.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const users = await db.user.findMany({
-      where: { companyId: payload.companyId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        status: true,
-        createdAt: true,
-      },
-    });
-
-    return NextResponse.json(users);
   } catch (error) {
     console.error("Fetch users error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch users" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
   }
 }
 
 // ================= CREATE USER =================
 export async function POST(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const payload = await verifyAuth(req);
+    if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
+
+    const parsed = await parseBody(req, createUserSchema);
+    if (!parsed.ok) return parsed.response;
+    const data = parsed.data;
+
+    // SEAT-CAP enforcement (only when creating a `user` role; admins
+    // don't count against seat cap because brokers may have multiple
+    // co-owners). Counts ACTIVE non-deleted users in this company.
+    if (data.role === 'user') {
+      const [company, currentSeats] = await Promise.all([
+        db.company.findUnique({
+          where: { id: payload.companyId },
+          select: { seatLimit: true, status: true },
+        }),
+        db.user.count({
+          where: { companyId: payload.companyId, role: 'user', deletedAt: null },
+        }),
+      ]);
+      if (!company) {
+        return NextResponse.json({ error: 'Company not found' }, { status: 404 });
+      }
+      if (company.status !== 'active') {
+        return NextResponse.json(
+          { error: 'Company is suspended; contact support before adding team members.' },
+          { status: 403 }
+        );
+      }
+      if (currentSeats >= company.seatLimit) {
+        return NextResponse.json(
+          {
+            code: 'seat_limit_reached',
+            error: `Your plan includes ${company.seatLimit} team members. Contact support to increase the limit.`,
+            current: currentSeats,
+            limit: company.seatLimit,
+          },
+          { status: 403 }
+        );
+      }
     }
 
-    const payload = (await verifyToken(token)) as AuthPayload | null;
-
-    if (!payload) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Only admin can create users
-    const requester = await db.user.findUnique({
-      where: { id: payload.userId },
-    });
-
-    if (!requester || requester.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const validated = createUserSchema.parse(body);
-
-    // Check duplicate
     const existing = await db.user.findFirst({
-      where: {
-        OR: [{ email: validated.email }, { phone: validated.phone }],
-      },
+      where: { OR: [{ email: data.email }, { phone: data.phone }] },
+      select: { email: true, phone: true },
     });
-
     if (existing) {
+      const field = existing.email === data.email ? "email" : "phone";
       return NextResponse.json(
-        { error: "User already exists" },
-        { status: 400 }
+        { error: `User with this ${field} already exists` },
+        { status: 409 }
       );
     }
 
-    const hashedPassword = await hashPassword(validated.password);
+    const hashedPassword = await hashPassword(data.password);
 
-    const newUser = await db.user.create({
-      data: {
-        ...validated,
-        password: hashedPassword,
+    try {
+      const newUser = await db.user.create({
+        data: {
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          password: hashedPassword,
+          role: data.role,
+          companyId: payload.companyId,
+          // Explicit nulls prevent the MongoDB "missing field" bug:
+          // Prisma's { deletedAt: null } filter doesn't match docs where
+          // the field is absent. Every create MUST materialize these fields.
+          deletedAt: null,
+          emailVerified: new Date(),
+          tokenVersion: 0,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      });
+
+      await recordAudit({
         companyId: payload.companyId,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-      },
-    });
+        userId: payload.userId,
+        action: "user.create",
+        resource: "User",
+        resourceId: newUser.id,
+        metadata: { role: data.role },
+        req,
+      });
 
-    return NextResponse.json(newUser, { status: 201 });
+      return NextResponse.json(newUser, { status: 201 });
+    } catch (err: unknown) {
+      const prismaErr = err as { code?: string; meta?: { target?: string[] } };
+      if (prismaErr?.code === "P2002") {
+        const field = prismaErr.meta?.target?.[0] || "field";
+        return NextResponse.json(
+          { error: `User with this ${field} already exists` },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
   } catch (error) {
     console.error("Create user error:", error);
-    return NextResponse.json(
-      { error: "Failed to create user" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
   }
 }

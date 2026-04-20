@@ -1,360 +1,251 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/authStore';
-import { useToast } from '@/components/common/Toast';
-import Alert from '@/components/common/Alert';
-import {
-  User, Mail, Phone, Building2, Lock,
-  Eye, EyeOff, ArrowRight, CheckCircle, ShieldCheck,
-} from 'lucide-react';
-import Input from '@/components/common/ Input';
-import Button from '@/components/common/ Button';
+/**
+ * Option-A signup UI: single form (no OTP). On successful submit the server
+ * creates a pending-verification account and emails a link. We render a
+ * "check your email" confirmation state.
+ */
 
-type Step = 'personal' | 'company' | 'otp';
+import { useState } from 'react';
+import Link from 'next/link';
+import {
+  Mail, Lock, Eye, EyeOff, ArrowRight,
+  User as UserIcon, Phone, Building2, CheckCircle,
+} from 'lucide-react';
+
+import { useToast } from '@/components/common/Toast';
+import { Alert } from '@/components/common/Alert';
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
+import { api, ApiError } from '@/lib/fetch';
+
+type SignupResponse = {
+  success: true;
+  message: string;
+  __dev?: { verifyLink?: string };
+};
 
 export default function SignupPage() {
-  const router       = useRouter();
   const { addToast } = useToast();
-  // ✅ Use setUser instead of direct setState — keeps hasFetched in sync
-  const { setUser }  = useAuthStore();
 
-  const [step, setStep] = useState<Step>('personal');
-  const [formData, setFormData] = useState({
-    name: '', email: '', phone: '', companyName: '', password: '', confirmPassword: '',
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    companyName: '',
   });
-  const [otp, setOtp]                             = useState('');
-  const [showPassword, setShowPassword]           = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [errors, setErrors]                       = useState<Record<string, string>>({});
-  const [localError, setLocalError]               = useState('');
-  const [agreeTerms, setAgreeTerms]               = useState(false);
-  const [loading, setLoading]                     = useState(false);
-  const [countdown, setCountdown]                 = useState(0);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [devLink, setDevLink] = useState<string | null>(null);
 
-  useEffect(() => {
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-  }, []);
-
-  const update = (key: string, val: string) => {
-    setFormData(p => ({ ...p, [key]: val }));
-    setErrors(p => ({ ...p, [key]: '' }));
+  const update = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((f) => ({ ...f, [field]: e.target.value }));
+    setFieldErrors((p) => ({ ...p, [field]: '' }));
   };
 
-  const startCountdown = () => {
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    setCountdown(60);
-    countdownRef.current = setInterval(() => {
-      setCountdown(p => {
-        if (p <= 1) { clearInterval(countdownRef.current!); countdownRef.current = null; return 0; }
-        return p - 1;
-      });
-    }, 1000);
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!form.name.trim() || form.name.trim().length < 2) errs.name = 'Name must be at least 2 characters';
+    if (!form.email.trim()) errs.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = 'Please enter a valid email';
+    if (!form.phone.trim()) errs.phone = 'Phone is required';
+    if (!form.password) errs.password = 'Password is required';
+    else if (form.password.length < 6) errs.password = 'Min 6 characters';
+    else if (!/[A-Z]/.test(form.password)) errs.password = 'Must include an uppercase letter';
+    else if (!/[a-z]/.test(form.password)) errs.password = 'Must include a lowercase letter';
+    else if (!/[0-9]/.test(form.password)) errs.password = 'Must include a number';
+    if (!form.companyName.trim() || form.companyName.trim().length < 2) errs.companyName = 'Company name is required';
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
-  // ── Validate step 1 ──
-  const validateStep1 = () => {
-    const e: Record<string, string> = {};
-    if (!formData.name.trim()) e.name = 'Full name is required';
-    if (!formData.email)       e.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) e.email = 'Invalid email';
-    if (!formData.phone)       e.phone = 'Phone is required';
-    else if (!/^\+?[1-9]\d{1,14}$/.test(formData.phone.replace(/\s/g, '')))
-      e.phone = 'Invalid phone number';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+  const applyApiError = (err: unknown, fallback: string) => {
+    if (err instanceof ApiError) {
+      if (err.fields) setFieldErrors((p) => ({ ...p, ...err.fields }));
+      setFormError(err.message || fallback);
+    } else {
+      setFormError(fallback);
+    }
   };
 
-  // ── Validate step 2 ──
-  const validateStep2 = () => {
-    const e: Record<string, string> = {};
-    if (!formData.companyName.trim())  e.companyName = 'Company name is required';
-    if (!formData.password)            e.password    = 'Password is required';
-    else if (formData.password.length < 6) e.password = 'Min 6 characters';
-    else if (!/[A-Z]/.test(formData.password)) e.password = 'Must contain uppercase';
-    else if (!/[a-z]/.test(formData.password)) e.password = 'Must contain lowercase';
-    else if (!/[0-9]/.test(formData.password)) e.password = 'Must contain a number';
-    if (formData.password !== formData.confirmPassword) e.confirmPassword = 'Passwords do not match';
-    if (!agreeTerms) e.terms = 'You must agree to the terms';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  // ── Step 2: send OTP ──
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLocalError('');
-    if (!validateStep2()) return;
+    setFormError('');
+    if (!validate()) return;
 
     setLoading(true);
     try {
-      const res  = await fetch('/api/auth/signup', {
-        method:      'POST',
-        headers:     { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body:        JSON.stringify({ ...formData }),
+      const res = await api.post<SignupResponse>('/api/auth/signup', {
+        ...form,
+        email: form.email.trim(),
       });
-      const data = await res.json();
-
-      if (res.status === 409) {
-        setErrors(p => ({ ...p, email: data.error }));
-        setStep('personal');
-        return;
-      }
-      if (!res.ok) {
-        setLocalError(data.error || 'Failed to send OTP');
-        if (data.requireOTP && step !== 'otp') setStep('otp');
-        return;
-      }
-
-      setStep('otp');
-      startCountdown();
-      addToast({ type: 'success', message: 'OTP sent to your email!' });
-    } catch {
-      setLocalError('Something went wrong. Please try again.');
+      setDevLink(res.__dev?.verifyLink ?? null);
+      setSubmitted(true);
+      addToast({ type: 'success', message: res.message });
+    } catch (err) {
+      applyApiError(err, 'Could not create account.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Step 3: verify OTP → create account ──
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLocalError('');
-    if (!otp || otp.length !== 6) {
-      setErrors(p => ({ ...p, otp: 'Enter the 6-digit OTP' }));
-      return;
-    }
+  if (submitted) {
+    return (
+      <div className="text-center py-6">
+        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <CheckCircle className="text-emerald-600" size={32} />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Check your email</h2>
+        <p className="text-gray-600 text-sm mb-6 max-w-sm mx-auto">
+          We sent a verification link to <strong>{form.email}</strong>. Click it to activate
+          your account, then come back to sign in.
+        </p>
 
-    setLoading(true);
-    try {
-      const res  = await fetch('/api/auth/signup', {
-        method:      'POST',
-        headers:     { 'Content-Type': 'application/json' },
-        credentials: 'include',   // ✅ required to receive cookie
-        body:        JSON.stringify({ ...formData, otp }),
-      });
-      const data = await res.json();
+        {devLink && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-left">
+            <p className="text-xs font-semibold text-amber-800 mb-2">DEV MODE — link echo</p>
+            <a
+              href={devLink}
+              className="text-xs text-amber-700 underline break-all font-mono"
+            >
+              {devLink}
+            </a>
+          </div>
+        )}
 
-      if (!res.ok) {
-        setLocalError(data.error || 'Verification failed');
-        return;
-      }
-
-      // ✅ Use setUser — properly sets isAuthenticated + hasFetched: true
-      setUser(data.user);
-      addToast({ type: 'success', message: 'Account created! Welcome aboard!' });
-      router.replace('/dashboard');
-    } catch {
-      setLocalError('Verification failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Resend OTP ──
-  const handleResend = async () => {
-    if (countdown > 0) return;
-    setLocalError(''); setOtp(''); setLoading(true);
-    try {
-      const res  = await fetch('/api/auth/send-email-otp', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email: formData.email, purpose: 'signup' }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setLocalError(data.error || 'Failed to resend'); return; }
-      startCountdown();
-      addToast({ type: 'success', message: 'New OTP sent!' });
-    } catch {
-      setLocalError('Failed to resend OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const stepNumber = step === 'personal' ? 1 : step === 'company' ? 2 : 3;
+        <div className="space-y-3">
+          <Link href="/login">
+            <Button className="w-full">Go to sign in</Button>
+          </Link>
+          <p className="text-xs text-gray-500">
+            Didn&apos;t get it? Check your spam folder or{' '}
+            <button
+              type="button"
+              onClick={() => setSubmitted(false)}
+              className="text-blue-600 hover:text-blue-700 font-semibold"
+            >
+              try again
+            </button>
+            .
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Create Your Account</h2>
-      <p className="text-gray-500 text-sm mb-4 sm:mb-6">Join hundreds of real estate professionals</p>
+      <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1">Create your account</h2>
+      <p className="text-gray-500 mb-6 text-sm">
+        Start your 30-day free trial. No credit card required.
+      </p>
 
-      {/* Progress */}
-      <div className="flex items-center gap-2 mb-6 sm:mb-8">
-        {(['personal', 'company', 'otp'] as Step[]).map((s, i) => (
-          <div key={s} className="flex items-center flex-1">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all
-              ${stepNumber > i + 1 ? 'bg-emerald-500 text-white' :
-                stepNumber === i + 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
-              {stepNumber > i + 1 ? <CheckCircle size={14} /> : i + 1}
-            </div>
-            <span className="ml-1.5 text-xs font-medium hidden sm:block text-gray-500 capitalize">
-              {s === 'otp' ? 'Verify' : s}
-            </span>
-            {i < 2 && (
-              <div className={`flex-1 h-1 mx-2 rounded transition-all
-                ${stepNumber > i + 1 ? 'bg-blue-500' : 'bg-gray-200'}`} />
-            )}
-          </div>
-        ))}
-      </div>
-
-      {localError && (
-        <Alert type="error" title="Error" message={localError}
-          closeable onClose={() => setLocalError('')} />
+      {formError && (
+        <Alert type="error" title="Error" message={formError} closeable onClose={() => setFormError('')} />
       )}
 
-      {/* ══ STEP 1: PERSONAL ══ */}
-      {step === 'personal' && (
-        <form
-          onSubmit={e => { e.preventDefault(); if (validateStep1()) { setStep('company'); setErrors({}); } }}
-          className="space-y-5">
-          <Input label="Full Name" type="text" placeholder="John Doe" className="text-black"
-            value={formData.name} onChange={e => update('name', e.target.value)}
-            error={errors.name} icon={<User size={18} />} required />
-          <Input label="Email Address" type="email" placeholder="john@example.com" className="text-black"
-            value={formData.email} onChange={e => update('email', e.target.value)}
-            error={errors.email} icon={<Mail size={18} />} required />
-          <Input label="Phone Number" type="tel" placeholder="+91 9876543210" className="text-black"
-            value={formData.phone} onChange={e => update('phone', e.target.value)}
-            error={errors.phone} icon={<Phone size={18} />} helper="Include country code" required />
-          <Button type="submit" className="w-full flex items-center justify-center gap-2">
-            Continue <ArrowRight size={18} />
-          </Button>
-        </form>
-      )}
+      <form onSubmit={onSubmit} className="space-y-5" noValidate>
+        <Input
+          label="Full Name"
+          value={form.name}
+          onChange={update('name')}
+          disabled={loading}
+          error={fieldErrors.name}
+          icon={<UserIcon size={18} />}
+          className="text-black"
+          autoComplete="name"
+          required
+        />
 
-      {/* ══ STEP 2: COMPANY ══ */}
-      {step === 'company' && (
-        <form onSubmit={handleSendOTP} className="space-y-5">
-          <Input label="Company Name" type="text" placeholder="ABC Real Estate" className="text-black"
-            value={formData.companyName} onChange={e => update('companyName', e.target.value)}
-            error={errors.companyName} icon={<Building2 size={18} />} required />
+        <Input
+          label="Company Name"
+          value={form.companyName}
+          onChange={update('companyName')}
+          disabled={loading}
+          error={fieldErrors.companyName}
+          icon={<Building2 size={18} />}
+          className="text-black"
+          autoComplete="organization"
+          required
+        />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input type={showPassword ? 'text' : 'password'} value={formData.password}
-                onChange={e => update('password', e.target.value)}
-                placeholder="Min 6 chars, 1 uppercase, 1 number"
-                className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 text-black" required />
-              <button type="button" onClick={() => setShowPassword(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            {errors.password && <p className="mt-1 text-sm text-red-500">{errors.password}</p>}
-          </div>
+        <Input
+          label="Email Address"
+          type="email"
+          placeholder="you@company.com"
+          value={form.email}
+          onChange={update('email')}
+          disabled={loading}
+          error={fieldErrors.email}
+          icon={<Mail size={18} />}
+          className="text-black"
+          autoComplete="email"
+          required
+        />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Confirm Password <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input type={showConfirmPassword ? 'text' : 'password'} value={formData.confirmPassword}
-                onChange={e => update('confirmPassword', e.target.value)}
-                placeholder="Re-enter your password"
-                className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 text-black" required />
-              <button type="button" onClick={() => setShowConfirmPassword(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            {errors.confirmPassword && <p className="mt-1 text-sm text-red-500">{errors.confirmPassword}</p>}
-          </div>
+        <Input
+          label="Phone"
+          type="tel"
+          placeholder="+91 98765 43210"
+          value={form.phone}
+          onChange={update('phone')}
+          disabled={loading}
+          error={fieldErrors.phone}
+          icon={<Phone size={18} />}
+          className="text-black"
+          autoComplete="tel"
+          required
+        />
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" checked={agreeTerms}
-              onChange={e => { setAgreeTerms(e.target.checked); setErrors(p => ({ ...p, terms: '' })); }}
-              className="w-5 h-5 rounded border-gray-300 mt-0.5" />
-            <span className="text-sm text-gray-600">
-              I agree to the{' '}
-              <Link href="#" className="text-blue-600 hover:text-blue-700">Terms of Service</Link>
-              {' '}and{' '}
-              <Link href="#" className="text-blue-600 hover:text-blue-700">Privacy Policy</Link>
-            </span>
-          </label>
-          {errors.terms && <p className="text-sm text-red-500">{errors.terms}</p>}
-
-          <div className="flex gap-3">
-            <Button type="button" variant="outline" className="flex-1"
-              onClick={() => { setStep('personal'); setErrors({}); }}>
-              Back
-            </Button>
-            <Button type="submit" className="flex-1 flex items-center justify-center gap-2" loading={loading}>
-              Send OTP <ArrowRight size={18} />
-            </Button>
-          </div>
-        </form>
-      )}
-
-      {/* ══ STEP 3: OTP ══ */}
-      {step === 'otp' && (
-        <form onSubmit={handleVerifyOTP} className="space-y-5">
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
-            <ShieldCheck size={20} className="text-blue-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-blue-800">Verify your email</p>
-              <p className="text-xs text-blue-600 mt-0.5">
-                A 6-digit code was sent to <strong>{formData.email}</strong>. Expires in 10 minutes.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Enter OTP <span className="text-red-500">*</span>
-            </label>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
-              type="text" inputMode="numeric" maxLength={6} value={otp}
-              onChange={e => { setOtp(e.target.value.replace(/\D/g, '')); setErrors(p => ({ ...p, otp: '' })); }}
-              placeholder="000000"
-              className="w-full px-3 sm:px-4 py-3 sm:py-4 text-2xl sm:text-3xl tracking-[0.3em] sm:tracking-[0.5em] text-center border-2
-                border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500
-                focus:border-blue-400 font-mono text-black"
-              autoFocus
+              type={showPassword ? 'text' : 'password'}
+              value={form.password}
+              onChange={update('password')}
+              disabled={loading}
+              placeholder="At least 6 chars, mix of letters + number"
+              className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg
+                focus:outline-none focus:ring-2 focus:ring-blue-500 text-black
+                disabled:bg-gray-50 disabled:text-gray-500"
+              autoComplete="new-password"
+              required
             />
-            {errors.otp && <p className="mt-1 text-sm text-red-500">{errors.otp}</p>}
-          </div>
-
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-500">
-              {countdown > 0
-                ? <>Resend in <span className="font-bold text-red-500">{countdown}s</span></>
-                : "Didn't receive it?"}
-            </span>
-            <button type="button" onClick={handleResend}
-              disabled={countdown > 0 || loading}
-              className="text-blue-600 font-semibold hover:text-blue-700
-                disabled:text-gray-400 disabled:cursor-not-allowed">
-              Resend OTP
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              disabled={loading}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
+          {fieldErrors.password && <p className="mt-1 text-sm text-red-500">{fieldErrors.password}</p>}
+        </div>
 
-          <Button type="submit" className="w-full flex items-center justify-center gap-2"
-            loading={loading} disabled={otp.length !== 6}>
-            Verify & Create Account <ShieldCheck size={18} />
-          </Button>
+        <Button
+          type="submit"
+          className="w-full flex items-center justify-center gap-2"
+          loading={loading}
+        >
+          Create account <ArrowRight size={18} />
+        </Button>
+      </form>
 
-          <button type="button"
-            onClick={() => { setStep('company'); setOtp(''); setLocalError(''); }}
-            className="w-full text-sm text-gray-500 hover:text-gray-700 text-center">
-            ← Back
-          </button>
-        </form>
-      )}
+      <div className="my-6 flex items-center gap-4">
+        <div className="flex-1 border-t border-gray-200" />
+        <span className="text-sm text-gray-400">or</span>
+        <div className="flex-1 border-t border-gray-200" />
+      </div>
 
-      <p className="mt-6 text-center text-sm text-gray-600">
+      <p className="text-center text-gray-600 text-sm">
         Already have an account?{' '}
         <Link href="/login" className="text-blue-600 font-semibold hover:text-blue-700">
           Sign in

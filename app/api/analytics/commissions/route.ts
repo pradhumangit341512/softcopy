@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken, isValidObjectId } from "@/lib/auth";
+import { verifyAuth, isValidObjectId } from "@/lib/auth";
 
 type AuthPayload = {
   userId: string;
@@ -12,11 +12,7 @@ type AuthPayload = {
 export async function GET(req: NextRequest) {
   try {
     // ── AUTH ──
-    const token = await getTokenCookie();
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = await verifyAuth(req) as AuthPayload | null;
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -40,6 +36,7 @@ export async function GET(req: NextRequest) {
       by: ["paidStatus"],
       where: {
         companyId,
+        deletedAt: null, // exclude soft-deleted commissions from totals
         createdAt: { gte: monthStart, lte: monthEnd },
       },
       _sum: { commissionAmount: true },
@@ -52,6 +49,7 @@ export async function GET(req: NextRequest) {
       by: ["userId"],
       where: {
         companyId,
+        deletedAt: null, // exclude soft-deleted commissions from rankings
         userId: { not: null },   // skip commissions with no linked user
       },
       _sum: { commissionAmount: true },
@@ -85,6 +83,7 @@ export async function GET(req: NextRequest) {
       by: ["salesPersonName"],
       where: {
         companyId,
+        deletedAt: null,
         userId: null,
         salesPersonName: { not: null },
       },

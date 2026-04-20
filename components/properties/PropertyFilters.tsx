@@ -1,20 +1,23 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import Select from '@/components/common/Select';
-import Input from '../common/ Input';
-import Button from '../common/ Button';
+import { Select } from '@/components/common/Select';
+import { Input } from '../common/Input';
+import { Button } from '../common/Button';
 
-interface PropertyFiltersProps {
-  filters: {
-    status: string;
-    propertyType: string;
-    search: string;
-  };
-  onFilterChange: (filters: any) => void;
+interface PropertyFilterValues {
+  status: string;
+  propertyType: string;
+  search: string;
 }
 
-export default function PropertyFilters({
+interface PropertyFiltersProps {
+  filters: PropertyFilterValues;
+  onFilterChange: (filters: PropertyFilterValues) => void;
+}
+
+/** Filter controls for the properties list — search, status, and property type */
+export function PropertyFilters({
   filters,
   onFilterChange,
 }: PropertyFiltersProps) {

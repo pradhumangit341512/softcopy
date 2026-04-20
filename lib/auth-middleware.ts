@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
+import { verifyToken, type AuthTokenPayload } from "./auth";
 
 /* ================= TYPES ================= */
 
-export interface AuthPayload {
-  userId: string;
-  companyId: string;
-  role: string;
-  email: string;
-}
+export type AuthPayload = AuthTokenPayload;
 
 export interface AuthResult {
   authorized: boolean;
@@ -20,7 +15,6 @@ export interface AuthResult {
 
 export async function requireAuth(req: NextRequest): Promise<AuthResult> {
   try {
-    // 1️⃣ Get token from cookie
     const token = req.cookies.get("auth_token")?.value;
 
     if (!token) {
@@ -34,19 +28,8 @@ export async function requireAuth(req: NextRequest): Promise<AuthResult> {
       };
     }
 
-    // 2️⃣ Verify JWT
-    try {
-      const payload = jwt.verify(
-        token,
-        process.env.JWT_SECRET!
-      ) as AuthPayload;
-
-      return {
-        authorized: true,
-        response: NextResponse.next(), // always valid response
-        payload,
-      };
-    } catch {
+    const payload = await verifyToken(token);
+    if (!payload) {
       return {
         authorized: false,
         response: NextResponse.json(
@@ -56,9 +39,14 @@ export async function requireAuth(req: NextRequest): Promise<AuthResult> {
         payload: null,
       };
     }
+
+    return {
+      authorized: true,
+      response: NextResponse.next(),
+      payload,
+    };
   } catch (error) {
     console.error("Auth middleware error:", error);
-
     return {
       authorized: false,
       response: NextResponse.json(

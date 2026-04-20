@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getTokenCookie, verifyToken, isValidObjectId } from "@/lib/auth";
+import { verifyAuth, isValidObjectId } from "@/lib/auth";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -14,11 +14,7 @@ type AuthPayload = {
 
 export async function GET(req: NextRequest) {
   try {
-    const token = await getTokenCookie();
-    if (!token)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const payload = (await verifyToken(token)) as AuthPayload | null;
+    const payload = await verifyAuth(req) as AuthPayload | null;
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -27,9 +23,14 @@ export async function GET(req: NextRequest) {
     const propertyType = searchParams.get("propertyType") || "";
     const search = searchParams.get("search") || "";
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (isValidObjectId(payload.companyId)) {
       where.companyId = payload.companyId;
+    }
+
+    // Role-based filtering: team members only export their own properties
+    if (payload.role === 'user') {
+      where.createdBy = payload.userId;
     }
 
     if (status) where.status = status;
@@ -44,10 +45,12 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    const EXPORT_LIMIT = 50_000;
     const properties = await db.property.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       include: { creator: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
+      take: EXPORT_LIMIT,
     });
 
     const workbook = new ExcelJS.Workbook();

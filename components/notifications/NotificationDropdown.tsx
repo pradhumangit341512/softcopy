@@ -9,7 +9,8 @@ interface Props {
   onClose: () => void;
 }
 
-export default function NotificationDropdown({ visits, onClose }: Props) {
+/** Dropdown panel showing today's scheduled client visits */
+export function NotificationDropdown({ visits, onClose }: Props) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -39,7 +40,7 @@ export default function NotificationDropdown({ visits, onClose }: Props) {
             <Calendar size={14} className="text-blue-500" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-gray-900">Today's Visits</h4>
+            <h4 className="text-sm font-bold text-gray-900">Today&apos;s Visits</h4>
             {sortedVisits.length > 0 && (
               <p className="text-xs text-gray-400">{sortedVisits.length} scheduled</p>
             )}

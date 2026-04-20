@@ -3,17 +3,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Download, Users, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, Download, Upload, Users, SlidersHorizontal, X } from 'lucide-react';
+import { BulkImportModal } from '@/components/clients/BulkImportModal';
 
-import Loader from '@/components/common/Loader';
-import ClientTable from '@/components/clients/ClientTable';
+import { Loader } from '@/components/common/Loader';
+import { ClientTable } from '@/components/clients/ClientTable';
 import { useAuth } from '@/hooks/useAuth';
-import Alert from '@/components/common/Alert';
-import Pagination from '@/components/common/Pagination';
+import { Alert } from '@/components/common/Alert';
+import { Pagination } from '@/components/common/Pagination';
 
 import type { Client } from '@/lib/types';
-import ClientFilters from '@/components/clients/ ClientFilters';
-import Button from '@/components/common/ Button';
+import { ClientFilters } from '@/components/clients/ClientFilters';
+import { Button } from '@/components/common/Button';
 
 export default function ClientsPage() {
   const router       = useRouter();
@@ -29,6 +30,7 @@ export default function ClientsPage() {
 
   // ✅ Mobile: collapsible filter panel
   const [showFilters, setShowFilters] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // ── Read everything from URL (single source of truth) ──
   const searchFromUrl  = searchParams.get('search')   || '';
@@ -87,14 +89,18 @@ export default function ClientsPage() {
         ...(dateToUrl     && { dateTo:   dateToUrl }),
         page: String(pageFromUrl),
       });
-      const response = await fetch(`/api/clients?${params}`, { credentials: 'include' });
+      const response = await fetch(`/api/clients?${params}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (!response.ok) throw new Error('Failed to fetch clients');
       const data = await response.json();
       setClients(data.clients || []);
       setTotalPages(data.pagination?.pages || 1);
       setTotalCount(data.pagination?.total || 0);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch clients');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch clients';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -139,7 +145,10 @@ export default function ClientsPage() {
       const res = await fetch(`/api/clients/${id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Delete failed');
       fetchClients();
-    } catch (err: any) { setError(err.message); }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete client';
+      setError(msg);
+    }
   };
 
   return (
@@ -176,6 +185,17 @@ export default function ClientsPage() {
                 {activeFilterCount}
               </span>
             )}
+          </button>
+
+          {/* Bulk Import */}
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5
+              text-sm font-medium text-gray-700 bg-white border border-gray-200
+              rounded-xl shadow-sm hover:bg-gray-50 transition-colors"
+          >
+            <Upload size={15} />
+            <span className="hidden sm:inline">Import</span>
           </button>
 
           {/* Export */}
@@ -343,6 +363,12 @@ export default function ClientsPage() {
         )}
       </div>
 
+      {/* Bulk Import Modal */}
+      <BulkImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImported={() => fetchClients()}
+      />
     </div>
   );
 }

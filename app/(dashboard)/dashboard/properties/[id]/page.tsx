@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import Card, { CardBody, CardHeader } from '@/components/common/Card';
-import PropertyForm from '@/components/properties/PropertyForm';
+import { Card, CardBody, CardHeader } from '@/components/common/Card';
+import { PropertyForm, type PropertyFormValues } from '@/components/properties/PropertyForm';
 import { useToast } from '@/components/common/Toast';
-import Loader from '@/components/common/Loader';
-import Alert from '@/components/common/Alert';
-import Button from '@/components/common/ Button';
+import { Loader } from '@/components/common/Loader';
+import { Alert } from '@/components/common/Alert';
+import { Button } from '@/components/common/Button';
+import type { Property } from '@/lib/types';
 
 export default function EditPropertyPage() {
   const router = useRouter();
@@ -17,7 +18,7 @@ export default function EditPropertyPage() {
   const id = params.id as string;
   const { addToast } = useToast();
 
-  const [property, setProperty] = useState<any>(null);
+  const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,8 +34,9 @@ export default function EditPropertyPage() {
         }
         const data = await res.json();
         setProperty(data);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to fetch property';
+        setError(msg);
       } finally {
         setLoading(false);
       }
@@ -42,7 +44,7 @@ export default function EditPropertyPage() {
     fetchProperty();
   }, [id]);
 
-  const handleSubmit = async (data: any) => {
+  const handleSubmit = async (data: PropertyFormValues) => {
     setSaving(true);
     try {
       const res = await fetch(`/api/properties/${id}`, {
@@ -60,8 +62,9 @@ export default function EditPropertyPage() {
       addToast({ type: 'success', message: 'Property updated successfully!' });
       router.push('/dashboard/properties');
       return true;
-    } catch (err: any) {
-      addToast({ type: 'error', message: err.message || 'Failed to update property' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update property';
+      addToast({ type: 'error', message: msg });
       return false;
     } finally {
       setSaving(false);
@@ -112,7 +115,13 @@ export default function EditPropertyPage() {
         <CardBody>
           <PropertyForm
             onSubmit={handleSubmit}
-            initialData={property}
+            initialData={property ? {
+              ...property,
+              propertyType: property.propertyType as string,
+              status: property.status as string,
+              askingRent: property.askingRent != null ? String(property.askingRent) : undefined,
+              sellingPrice: property.sellingPrice != null ? String(property.sellingPrice) : undefined,
+            } : undefined}
             isLoading={saving}
           />
         </CardBody>

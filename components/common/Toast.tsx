@@ -1,8 +1,8 @@
 'use client';
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useRef, ReactNode } from 'react';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import clsx from 'clsx';
-import Button from './ Button';
+import { Button } from './Button';
 
 interface Toast {
   id: string;
@@ -21,9 +21,13 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // Monotonic counter — works in every browser and context (HTTPS, IP, insecure
+  // localhost alternatives) without depending on crypto.randomUUID.
+  const idCounter = useRef(0);
 
   const addToast = (toast: Omit<Toast, 'id'>) => {
-    const id = Math.random().toString(36).substr(2, 9);
+    idCounter.current += 1;
+    const id = `toast-${idCounter.current}`;
     const newToast = { ...toast, id };
 
     setToasts((prev) => [...prev, newToast]);

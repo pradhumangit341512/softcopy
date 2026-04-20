@@ -1,21 +1,24 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import Select from '@/components/common/Select';
-import Input from '../common/ Input';
-import Button from '../common/ Button';
+import { Select } from '@/components/common/Select';
+import { Input } from '../common/Input';
+import { Button } from '../common/Button';
 
-interface ClientFiltersProps {
-  filters: {
-    status: string;
-    search: string;
-    dateFrom: string;
-    dateTo: string;
-  };
-  onFilterChange: (filters: any) => void;
+interface ClientFilterValues {
+  status: string;
+  search: string;
+  dateFrom: string;
+  dateTo: string;
 }
 
-export default function ClientFilters({
+interface ClientFiltersProps {
+  filters: ClientFilterValues;
+  onFilterChange: (filters: ClientFilterValues) => void;
+}
+
+/** Filter controls for the clients list — search, status, and date range */
+export function ClientFilters({
   filters,
   onFilterChange,
 }: ClientFiltersProps) {

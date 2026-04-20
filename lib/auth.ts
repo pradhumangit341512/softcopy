@@ -1,16 +1,36 @@
 import { jwtVerify, SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
+import bcrypt from 'bcryptjs';
+import { db } from './db';
 
-if (!process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not set.');
+// ⚠️ Fail fast at module load. Never fall back to empty string — an empty
+// secret silently makes every token forgeable.
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  throw new Error(
+    'FATAL: JWT_SECRET must be set and at least 32 characters long.'
+  );
 }
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? '');
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
+const JWT_ALG = 'HS256' as const;
+const JWT_ALGS = [JWT_ALG] as const;
 
-const COOKIE_NAME = 'auth_token'; // ✅ single source of truth — matches login & signup
+const COOKIE_NAME = 'auth_token';
+const JWT_EXPIRY = 7 * 24 * 60 * 60; // 7 days
 
-const JWT_EXPIRY = 7 * 24 * 60 * 60; // 7 days in seconds
+// ==================== TOKEN TYPES ====================
+
+export interface AuthTokenPayload {
+  userId: string;
+  companyId: string;
+  role: string;
+  email: string;
+  /** token version — bumping User.tokenVersion instantly revokes old sessions */
+  tv?: number;
+  /** subscription expiry (epoch ms) — optional so legacy tokens still verify */
+  subExp?: number;
+}
 
 // ==================== TOKEN GENERATION ====================
 
@@ -18,34 +38,29 @@ export async function generateToken(
   userId: string,
   companyId: string,
   role: string,
-  email: string
+  email: string,
+  opts?: { subscriptionExpiry?: Date | null; tokenVersion?: number }
 ): Promise<string> {
-  try {
-    const token = await new SignJWT({ userId, companyId, role, email })
-      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
-      .setIssuedAt()
-      .setExpirationTime('7d')
-      .sign(JWT_SECRET);
-    return token;
-  } catch (error) {
-    console.error('Token generation error:', error);
-    throw new Error('Failed to generate token');
-  }
+  const claims: Record<string, unknown> = { userId, companyId, role, email };
+  if (opts?.subscriptionExpiry) claims.subExp = opts.subscriptionExpiry.getTime();
+  if (typeof opts?.tokenVersion === 'number') claims.tv = opts.tokenVersion;
+
+  return new SignJWT(claims)
+    .setProtectedHeader({ alg: JWT_ALG, typ: 'JWT' })
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .sign(JWT_SECRET);
 }
 
 // ==================== TOKEN VERIFICATION ====================
 
-export async function verifyToken(token: string): Promise<{
-  userId: string;
-  companyId: string;
-  role: string;
-  email: string;
-} | null> {
+export async function verifyToken(token: string): Promise<AuthTokenPayload | null> {
   try {
-    const verified = await jwtVerify(token, JWT_SECRET);
-    return verified.payload as any;
-  } catch (error) {
-    console.error('Token verification error:', error);
+    // Explicit algorithm allowlist — do not accept tokens signed with any
+    // other algorithm, even if the key type later changes.
+    const verified = await jwtVerify(token, JWT_SECRET, { algorithms: [...JWT_ALGS] });
+    return verified.payload as unknown as AuthTokenPayload;
+  } catch {
     return null;
   }
 }
@@ -61,97 +76,101 @@ const COOKIE_OPTIONS = {
 };
 
 export async function setTokenCookie(token: string): Promise<void> {
-  try {
-    const cookieStore = await cookies();
-    cookieStore.set(COOKIE_NAME, token, COOKIE_OPTIONS);
-  } catch (error) {
-    console.error('Set token cookie error:', error);
-  }
+  const cookieStore = await cookies();
+  cookieStore.set(COOKIE_NAME, token, COOKIE_OPTIONS);
 }
 
 export async function getTokenCookie(): Promise<string | null> {
-  try {
-    const cookieStore = await cookies();
-    return cookieStore.get(COOKIE_NAME)?.value ?? null;
-  } catch (error) {
-    console.error('Get token cookie error:', error);
-    return null;
-  }
+  const cookieStore = await cookies();
+  return cookieStore.get(COOKIE_NAME)?.value ?? null;
 }
 
 export function getTokenFromRequest(req: NextRequest): string | null {
-  try {
-    return req.cookies.get(COOKIE_NAME)?.value ?? null;
-  } catch (error) {
-    console.error('Get token from request error:', error);
-    return null;
-  }
+  return req.cookies.get(COOKIE_NAME)?.value ?? null;
 }
 
 export async function clearTokenCookie(): Promise<void> {
-  try {
-    const cookieStore = await cookies();
-    cookieStore.set(COOKIE_NAME, '', { ...COOKIE_OPTIONS, maxAge: 0 });
-  } catch (error) {
-    console.error('Clear token cookie error:', error);
-  }
+  const cookieStore = await cookies();
+  cookieStore.set(COOKIE_NAME, '', { ...COOKIE_OPTIONS, maxAge: 0 });
 }
 
-// ==================== AUTH MIDDLEWARE ====================
+// ==================== AUTH HELPERS ====================
 
-export async function verifyAuth(req: NextRequest): Promise<{
-  userId: string;
-  companyId: string;
-  role: string;
-  email: string;
-} | null> {
-  try {
-    // Try request cookies first (fastest path)
-    let token = getTokenFromRequest(req);
+/**
+ * Full auth verification: JWT signature → tokenVersion DB check → company
+ * status check. Rejects tokens whose `tv` claim doesn't match the current
+ * User.tokenVersion, making session revocation (password reset, suspend,
+ * delete, promote) immediate rather than waiting for 7-day JWT expiry.
+ */
+export async function verifyAuth(req: NextRequest): Promise<AuthTokenPayload | null> {
+  let token = getTokenFromRequest(req);
+  if (!token) {
+    try {
+      const cookieStore = await cookies();
+      token = cookieStore.get(COOKIE_NAME)?.value ?? null;
+    } catch {}
+  }
+  if (!token) return null;
 
-    // Fallback to next/headers (needed in some server contexts)
-    if (!token) {
-      try {
-        const cookieStore = await cookies();
-        token = cookieStore.get(COOKIE_NAME)?.value ?? null;
-      } catch {}
+  const payload = await verifyToken(token);
+  if (!payload) return null;
+
+  // Verify user status + company status + tokenVersion against DB on
+  // EVERY request. This is what makes session revocation (password reset,
+  // suspend, delete, promote) immediate. No tv-claim guard — legacy tokens
+  // without tv are treated as version 0 and still checked.
+  if (payload.userId) {
+    try {
+      const user = await db.user.findUnique({
+        where: { id: payload.userId },
+        select: { tokenVersion: true, status: true, company: { select: { status: true } } },
+      });
+      if (!user) return null;
+      if (user.status !== 'active') return null;
+      if (user.company && user.company.status === 'suspended') return null;
+      const claimedTv = typeof payload.tv === 'number' ? payload.tv : 0;
+      if (user.tokenVersion !== claimedTv) return null;
+    } catch {
+      if (process.env.NODE_ENV === 'production') return null;
     }
-
-    if (!token) return null;
-    return await verifyToken(token);
-  } catch (error) {
-    console.error('Auth verification error:', error);
-    return null;
   }
-}
 
-// ==================== REQUIRE AUTH ====================
+  return payload;
+}
 
 export async function requireAuth() {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(COOKIE_NAME)?.value;
-    if (!token) return { authorized: false, payload: null };
-    const payload = await verifyToken(token);
-    if (!payload) return { authorized: false, payload: null };
-    return { authorized: true, payload };
-  } catch (error) {
-    console.error('Require auth error:', error);
-    return { authorized: false, payload: null };
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (!token) return { authorized: false as const, payload: null };
+  const payload = await verifyToken(token);
+  if (!payload) return { authorized: false as const, payload: null };
+
+  // Same DB check as verifyAuth — no parallel auth path that skips revocation.
+  if (payload.userId) {
+    try {
+      const user = await db.user.findUnique({
+        where: { id: payload.userId },
+        select: { tokenVersion: true, status: true, company: { select: { status: true } } },
+      });
+      if (!user) return { authorized: false as const, payload: null };
+      if (user.status !== 'active') return { authorized: false as const, payload: null };
+      if (user.company && user.company.status === 'suspended') return { authorized: false as const, payload: null };
+      const claimedTv = typeof payload.tv === 'number' ? payload.tv : 0;
+      if (user.tokenVersion !== claimedTv) return { authorized: false as const, payload: null };
+    } catch {
+      if (process.env.NODE_ENV === 'production') return { authorized: false as const, payload: null };
+    }
   }
+
+  return { authorized: true as const, payload };
 }
 
 // ==================== PASSWORD HASHING ====================
 
+const BCRYPT_COST = 12;
+
 export async function hashPassword(password: string): Promise<string> {
-  try {
-    const bcrypt = require('bcryptjs');
-    const salt = await bcrypt.genSalt(10);
-    return await bcrypt.hash(password, salt);
-  } catch (error) {
-    console.error('Password hashing error:', error);
-    throw new Error('Failed to hash password');
-  }
+  return bcrypt.hash(password, BCRYPT_COST);
 }
 
 export async function comparePasswords(
@@ -159,79 +178,69 @@ export async function comparePasswords(
   hashedPassword: string
 ): Promise<boolean> {
   try {
-    const bcrypt = require('bcryptjs');
     return await bcrypt.compare(password, hashedPassword);
-  } catch (error) {
-    console.error('Password comparison error:', error);
+  } catch {
     return false;
   }
 }
 
-// ==================== VALIDATION ====================
+/**
+ * Pre-computed bcrypt hash, used to prevent user-enumeration timing attacks.
+ * We compare against this when the user doesn't exist so the total response
+ * time matches the "user exists, wrong password" path.
+ *
+ * Computed eagerly at module load (top-level await) so the FIRST request
+ * after a cold-start doesn't pay the ~200ms hash cost — eliminating the
+ * cold-start timing leak.
+ */
+const USER_ENUMERATION_SHIELD: string = await bcrypt.hash(
+  // The actual content doesn't matter — we just need a valid bcrypt hash
+  // at the same cost factor as real user passwords.
+  'enum-shield-' + Date.now(),
+  BCRYPT_COST
+);
 
-export function validateEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+export async function getEnumerationShieldHash(): Promise<string> {
+  return USER_ENUMERATION_SHIELD;
 }
 
-export function validatePhone(phone: string): boolean {
-  return /^\+?[1-9]\d{1,14}$/.test(phone.replace(/\s/g, ''));
-}
+// ==================== DEV BYPASS (hardened) ====================
 
-export function validatePassword(password: string): {
-  isValid: boolean;
-  errors: string[];
-} {
-  const errors: string[] = [];
-  if (password.length < 6)       errors.push('Password must be at least 6 characters');
-  if (!/[A-Z]/.test(password))   errors.push('Password must contain at least one uppercase letter');
-  if (!/[a-z]/.test(password))   errors.push('Password must contain at least one lowercase letter');
-  if (!/[0-9]/.test(password))   errors.push('Password must contain at least one number');
-  return { isValid: errors.length === 0, errors };
-}
+/**
+ * True only when:
+ *   - running locally (NODE_ENV=development)
+ *   - NOT on Vercel (no VERCEL or VERCEL_ENV env markers — those are always
+ *     set by Vercel in preview+production, so a leaked BYPASS_AUTH=true in
+ *     prod env vars cannot enable bypass)
+ *   - BYPASS_AUTH=true explicitly set
+ *
+ * Even when enabled, consumers MUST still verify the user's real password
+ * and use the user's real role — bypass only skips the OTP step.
+ */
+export const IS_DEV_BYPASS =
+  process.env.NODE_ENV === 'development' &&
+  !process.env.VERCEL &&
+  !process.env.VERCEL_ENV &&
+  process.env.BYPASS_AUTH === 'true';
 
-// ==================== UTILITY ====================
+// ==================== UTILITIES ====================
 
-export function generateRandomString(length = 32): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
-export function isTokenExpired(expiresAt: Date): boolean {
-  return new Date() > expiresAt;
-}
-
-export function getTokenExpiry(): Date {
-  const expiry = new Date();
-  expiry.setSeconds(expiry.getSeconds() + JWT_EXPIRY);
-  return expiry;
-}
-
-// ==================== BYPASS / OBJECTID HELPERS ====================
-
-export const IS_BYPASS_AUTH =
-  process.env.NODE_ENV === "development" && process.env.BYPASS_AUTH === "true";
-
-/** Returns true if the string is a valid 24-char hex MongoDB ObjectId */
 export function isValidObjectId(id: string | null | undefined): boolean {
-  return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
+  return typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id);
 }
 
 // ==================== ERROR MESSAGES ====================
 
 export const AUTH_ERRORS = {
-  INVALID_CREDENTIALS:    'Invalid email or password',
-  ACCOUNT_INACTIVE:       'Account is inactive',
-  SUBSCRIPTION_EXPIRED:   'Subscription has expired',
-  INVALID_TOKEN:          'Invalid or expired token',
-  NOT_AUTHENTICATED:      'Not authenticated',
-  UNAUTHORIZED:           'Unauthorized access',
-  USER_NOT_FOUND:         'User not found',
-  EMAIL_ALREADY_EXISTS:   'Email already registered',
-  PHONE_ALREADY_EXISTS:   'Phone number already registered',
-  INVALID_EMAIL:          'Invalid email format',
-  INVALID_PHONE:          'Invalid phone number',
-  WEAK_PASSWORD:          'Password does not meet requirements',
-  PASSWORDS_DONT_MATCH:   'Passwords do not match',
-  OTP_INVALID:            'Invalid or expired OTP',
-  OTP_SENT:               'OTP sent successfully',
+  INVALID_CREDENTIALS:  'Invalid email or password',
+  ACCOUNT_INACTIVE:     'Account is inactive',
+  SUBSCRIPTION_EXPIRED: 'Subscription has expired',
+  INVALID_TOKEN:        'Invalid or expired token',
+  NOT_AUTHENTICATED:    'Not authenticated',
+  UNAUTHORIZED:         'Unauthorized access',
+  USER_NOT_FOUND:       'User not found',
+  EMAIL_ALREADY_EXISTS: 'Email already registered',
+  PHONE_ALREADY_EXISTS: 'Phone number already registered',
+  WEAK_PASSWORD:        'Password does not meet requirements',
+  OTP_INVALID:          'Invalid or expired OTP',
 };

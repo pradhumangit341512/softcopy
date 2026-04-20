@@ -5,7 +5,8 @@ interface SpinnerProps {
   color?: 'blue' | 'white' | 'gray' | 'green' | 'red';
 }
 
-export default function Spinner({ size = 'md', color = 'blue' }: SpinnerProps) {
+/** Animated spinner component with configurable size and color */
+export function Spinner({ size = 'md', color = 'blue' }: SpinnerProps) {
   const sizeClasses = {
     xs: 'w-4 h-4 border-2',
     sm: 'w-6 h-6 border-2',

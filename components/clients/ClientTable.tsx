@@ -1,9 +1,10 @@
 'use client';
 
-import { Edit2, Trash2 } from 'lucide-react';
-import Badge from '@/components/common/Badge';
-import { formatCurrency } from '@/lib/utils';
-import Button from '@/components/common/ Button';
+import { useState, useRef, useEffect } from 'react';
+import { Edit2, Trash2, Phone, MessageCircle, FileText, X } from 'lucide-react';
+import { Badge } from '@/components/common/Badge';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { Button } from '@/components/common/Button';
 
 import type { Client } from '@/lib/types';
 
@@ -13,39 +14,59 @@ interface ClientTableProps {
   onDelete?: (id: string) => Promise<void>;
 }
 
-const formatDate = (date?: Date | string | null): string => {
-  if (!date) return '—';
-  const d = new Date(date);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
+function cleanPhone(phone: string): string {
+  return phone.replace(/[\s\-()]/g, '');
+}
 
-export default function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
+function whatsappUrl(phone: string): string {
+  const clean = cleanPhone(phone).replace(/^\+/, '');
+  return `https://wa.me/${clean}`;
+}
+
+/** Table component for displaying a list of clients with inline actions */
+export function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Close notes popup on click outside or Escape
+  useEffect(() => {
+    if (!openNoteId) return;
+
+    function handleClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpenNoteId(null);
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpenNoteId(null);
+    }
+
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [openNoteId]);
+
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-      <table className="w-full text-sm min-w-[1200px]">
+      <table className="w-full text-sm min-w-[1000px]">
 
         {/* ── HEADER ── */}
-        <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-semibold tracking-wider">
+        <thead className="bg-gray-100 text-gray-600 uppercase text-xs tracking-wider">
           <tr>
-            <th className="px-3 sm:px-4 py-3 text-center w-20">Actions</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Client Name</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Phone</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Email</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Requirement</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Inquiry</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Status</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Visited</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Budget</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Location</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Address</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Visit Date</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Follow Up</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Source</th>
-            <th className="px-3 sm:px-4 py-3 text-left">Notes</th>
+            <th className="px-4 py-3 text-center w-20">Actions</th>
+            <th className="px-4 py-3 text-left">Client</th>
+            <th className="px-4 py-3 text-left">Contact</th>
+            <th className="px-4 py-3 text-left">Requirement</th>
+            <th className="px-4 py-3 text-left">Budget</th>
+            <th className="px-4 py-3 text-left">Location</th>
+            <th className="px-4 py-3 text-left">Visit Date</th>
+            <th className="px-4 py-3 text-left">Follow Up</th>
+            <th className="px-4 py-3 text-left">Notes</th>
+            <th className="px-4 py-3 text-left">Visited</th>
+            <th className="px-4 py-3 text-left">Status</th>
           </tr>
         </thead>
 
@@ -53,7 +74,7 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
         <tbody className="divide-y divide-gray-100 bg-white">
           {clients.length === 0 ? (
             <tr>
-              <td colSpan={15} className="text-center py-12 text-gray-400 text-sm">
+              <td colSpan={11} className="text-center py-12 text-gray-400 text-sm">
                 No clients found
               </td>
             </tr>
@@ -65,7 +86,7 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
               >
 
                 {/* ACTIONS */}
-                <td className="px-3 sm:px-4 py-3 text-center">
+                <td className="px-4 py-3 text-center">
                   <div className="flex items-center justify-center gap-1.5">
                     <Button
                       size="sm"
@@ -90,49 +111,175 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
                   </div>
                 </td>
 
-                {/* CLIENT NAME */}
-                <td className="px-3 sm:px-4 py-3">
+                {/* CLIENT */}
+                <td className="px-4 py-3">
                   <p className="font-semibold text-gray-900 leading-tight">
                     {client.clientName}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {client.creator?.name ? `by ${client.creator.name}` : '—'}
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {client.creator?.name ? `by ${client.creator.name}` : 'Unassigned'}
                   </p>
                 </td>
 
-                {/* PHONE */}
-                <td className="px-3 sm:px-4 py-3 text-gray-900 whitespace-nowrap">
-                  {client.phone}
+                {/* CONTACT — click-to-call + WhatsApp */}
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <a
+                      href={`tel:${cleanPhone(client.phone)}`}
+                      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium group"
+                      title="Click to call"
+                    >
+                      <Phone size={12} className="text-blue-500 group-hover:text-blue-700" />
+                      {client.phone}
+                    </a>
+                    <a
+                      href={whatsappUrl(client.phone)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-6 h-6 rounded-full bg-green-50 border border-green-200
+                        flex items-center justify-center text-green-600 hover:bg-green-100
+                        transition-colors shrink-0"
+                      title="Open WhatsApp"
+                    >
+                      <MessageCircle size={11} />
+                    </a>
+                  </div>
+                  {client.email && (
+                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[160px]">
+                      {client.email}
+                    </p>
+                  )}
+                  {/* Follow-up hint under contact */}
+                  {client.followUpDate && client.notes && (
+                    <p className="text-[10px] text-amber-600 mt-1 truncate max-w-[180px]">
+                      Last: {client.notes.slice(0, 40)}{client.notes.length > 40 ? '...' : ''}
+                    </p>
+                  )}
                 </td>
 
-                {/* EMAIL */}
-                <td className="px-3 sm:px-4 py-3">
-                  <span className="text-gray-700 truncate block max-w-[180px]">
-                    {client.email || '—'}
-                  </span>
+                {/* REQUIREMENT */}
+                <td className="px-4 py-3">
+                  <p className="text-gray-900">{client.requirementType}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{client.inquiryType}</p>
                 </td>
 
-                {/* REQUIREMENT TYPE */}
-                <td className="px-3 sm:px-4 py-3">
-                  <Badge label={client.requirementType} variant="primary" />
+                {/* BUDGET */}
+                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                  {client.budget ? formatCurrency(client.budget) : '—'}
                 </td>
 
-                {/* INQUIRY TYPE */}
-                <td className="px-3 sm:px-4 py-3">
+                {/* LOCATION */}
+                <td className="px-4 py-3 text-gray-700 max-w-[120px] truncate">
+                  {client.preferredLocation || '—'}
+                </td>
+
+                {/* VISIT DATE */}
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  {formatDate(client.visitingDate)}
+                </td>
+
+                {/* FOLLOW UP */}
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  {formatDate(client.followUpDate)}
+                </td>
+
+                {/* NOTES — click to expand popup */}
+                <td className="px-4 py-3 relative">
+                  {client.notes ? (
+                    <div>
+                      <button
+                        onClick={() => setOpenNoteId(openNoteId === client.id ? null : client.id)}
+                        className="flex items-start gap-1 text-left group cursor-pointer max-w-[180px]"
+                      >
+                        <FileText size={12} className="text-blue-400 mt-0.5 shrink-0 group-hover:text-blue-600" />
+                        <span className="text-xs text-gray-700 line-clamp-2 group-hover:text-blue-700 transition-colors">
+                          {client.notes}
+                        </span>
+                      </button>
+
+                      {/* Notes Popup */}
+                      {openNoteId === client.id && (
+                        <div
+                          ref={popoverRef}
+                          className="absolute z-50 top-0 left-0 mt-8 w-72 bg-white rounded-xl
+                            border border-gray-200 shadow-xl p-4 animate-in fade-in slide-in-from-top-2"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                              <FileText size={14} className="text-blue-500" />
+                              {client.clientName}
+                            </h4>
+                            <button
+                              onClick={() => setOpenNoteId(null)}
+                              className="w-6 h-6 rounded-lg hover:bg-gray-100 flex items-center
+                                justify-center text-gray-400 hover:text-gray-600"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          {/* Status + follow-up context */}
+                          <div className="flex items-center gap-2 mb-3 text-xs">
+                            <Badge
+                              label={client.status}
+                              variant={client.status === 'DealDone' ? 'success' : client.status === 'Rejected' ? 'danger' : 'primary'}
+                              size="sm"
+                            />
+                            {client.followUpDate && (
+                              <span className="text-gray-500">
+                                Follow-up: {formatDate(client.followUpDate)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Full notes */}
+                          <div className="bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                              {client.notes}
+                            </p>
+                          </div>
+
+                          {/* Quick actions */}
+                          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                            <a
+                              href={`tel:${cleanPhone(client.phone)}`}
+                              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              <Phone size={11} /> Call
+                            </a>
+                            <a
+                              href={whatsappUrl(client.phone)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium"
+                            >
+                              <MessageCircle size={11} /> WhatsApp
+                            </a>
+                            <button
+                              onClick={() => { setOpenNoteId(null); onEdit(client.id); }}
+                              className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 font-medium ml-auto"
+                            >
+                              <Edit2 size={11} /> Edit
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
+                </td>
+
+                {/* VISITED */}
+                <td className="px-4 py-3">
                   <Badge
-                    label={client.inquiryType}
-                    variant={
-                      client.inquiryType === 'Buy'
-                        ? 'success'
-                        : client.inquiryType === 'Rent'
-                        ? 'warning'
-                        : 'gray'
-                    }
+                    label={client.propertyVisited ? 'Visited' : 'Not Visited'}
+                    variant={client.propertyVisited ? 'success' : 'warning'}
                   />
                 </td>
 
                 {/* STATUS */}
-                <td className="px-3 sm:px-4 py-3">
+                <td className="px-4 py-3">
                   <Badge
                     label={client.status}
                     variant={
@@ -140,60 +287,9 @@ export default function ClientTable({ clients, onEdit, onDelete }: ClientTablePr
                         ? 'success'
                         : client.status === 'Rejected'
                         ? 'danger'
-                        : client.status === 'Interested'
-                        ? 'warning'
                         : 'primary'
                     }
                   />
-                </td>
-
-                {/* PROPERTY VISITED */}
-                <td className="px-3 sm:px-4 py-3">
-                  <Badge
-                    label={client.propertyVisited ? 'Yes' : 'No'}
-                    variant={client.propertyVisited ? 'success' : 'gray'}
-                  />
-                </td>
-
-                {/* BUDGET */}
-                <td className="px-3 sm:px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
-                  {client.budget ? formatCurrency(client.budget) : '—'}
-                </td>
-
-                {/* PREFERRED LOCATION */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700">
-                  <span className="truncate block max-w-[140px]">
-                    {client.preferredLocation || '—'}
-                  </span>
-                </td>
-
-                {/* ADDRESS */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700">
-                  <span className="truncate block max-w-[160px]">
-                    {client.address || '—'}
-                  </span>
-                </td>
-
-                {/* VISITING DATE */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap">
-                  {formatDate(client.visitingDate)}
-                </td>
-
-                {/* FOLLOW UP DATE */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700 whitespace-nowrap">
-                  {formatDate(client.followUpDate)}
-                </td>
-
-                {/* SOURCE */}
-                <td className="px-3 sm:px-4 py-3 text-gray-700">
-                  {client.source || '—'}
-                </td>
-
-                {/* NOTES */}
-                <td className="px-3 sm:px-4 py-3 text-gray-600">
-                  <span className="truncate block max-w-[180px]" title={client.notes || ''}>
-                    {client.notes || '—'}
-                  </span>
                 </td>
 
               </tr>

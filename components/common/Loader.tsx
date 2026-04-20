@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import clsx from 'clsx';
 
 interface LoaderProps {
   size?: 'sm' | 'md' | 'lg';
@@ -9,7 +8,8 @@ interface LoaderProps {
   message?: string;
 }
 
-export default function Loader({
+/** Premium animated loading indicator with optional full-screen overlay */
+export function Loader({
   size = 'md',
   fullScreen = false,
   message = 'Loading...',

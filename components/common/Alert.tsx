@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { AlertCircle, CheckCircle, Info, AlertTriangle, X } from 'lucide-react';
 import clsx from 'clsx';
-import Button from './ Button';
+import { Button } from './Button';
 
 interface AlertProps {
   type?: 'success' | 'error' | 'warning' | 'info';
@@ -12,7 +12,8 @@ interface AlertProps {
   icon?: ReactNode;
 }
 
-export default function Alert({
+/** Alert banner component with type variants and optional close button */
+export function Alert({
   type = 'info',
   title,
   message,

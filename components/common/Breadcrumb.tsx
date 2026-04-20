@@ -10,7 +10,8 @@ interface BreadcrumbProps {
   items: BreadcrumbItem[];
 }
 
-export default function Breadcrumb({ items }: BreadcrumbProps) {
+/** Navigation breadcrumb trail component */
+export function Breadcrumb({ items }: BreadcrumbProps) {
   return (
     <nav className="flex items-center gap-2 text-sm text-gray-600 mb-4">
       {items.map((item, index) => (
