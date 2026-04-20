@@ -32,7 +32,6 @@ interface NavItem {
 const navItems: NavItem[] = [
   // ── Everyone ──
   { href: '/dashboard',                  icon: LayoutDashboard, label: 'Dashboard'         },
-  { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'          },
 
   // ── Team member only ──
   { href: '/dashboard/my-work',          icon: Briefcase,       label: 'My Work',
@@ -43,6 +42,8 @@ const navItems: NavItem[] = [
     roles: ['user'] },
   { href: '/dashboard/commissions',      icon: TrendingUp,      label: 'My Commissions',
     roles: ['user'] },
+  { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'          },
+
 
   // ── Admin / SuperAdmin only ──
   { href: '/dashboard/clients',          icon: Users,           label: 'Clients',
