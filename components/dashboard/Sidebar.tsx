@@ -42,8 +42,6 @@ const navItems: NavItem[] = [
     roles: ['user'] },
   { href: '/dashboard/commissions',      icon: TrendingUp,      label: 'My Commissions',
     roles: ['user'] },
-  { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'          },
-
 
   // ── Admin / SuperAdmin only ──
   { href: '/dashboard/clients',          icon: Users,           label: 'Clients',
@@ -60,6 +58,9 @@ const navItems: NavItem[] = [
     roles: ['admin', 'superadmin'] },
   { href: '/dashboard/team-performance', icon: Award,           label: 'Team Performance',
     roles: ['admin', 'superadmin'] },
+
+  // ── Everyone (bottom) ──
+  { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'          },
 ];
 
 /** Main navigation sidebar with links, user info, and mobile responsive behavior */
