@@ -303,99 +303,100 @@ export default function TeamPage() {
               return (
                 <div
                   key={member.id}
-                  className="px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 hover:bg-gray-50/60 transition-colors"
+                  className="px-4 sm:px-5 py-4 sm:py-5 hover:bg-gray-50/60 transition-colors"
                 >
-                  {/* Avatar */}
-                  <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-blue-600
-                    flex items-center justify-center text-white text-sm font-bold shrink-0">
-                    {initials}
-                  </div>
+                  {/* Top row: Avatar + Name + Status */}
+                  <div className="flex items-start gap-3">
+                    {/* Avatar */}
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600
+                      flex items-center justify-center text-white text-sm sm:text-base font-bold shrink-0">
+                      {initials}
+                    </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-bold text-gray-900 truncate">
-                        {member.name}
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm sm:text-base font-bold text-gray-900 truncate">
+                          {member.name}
+                        </p>
+                        {isSelf && (
+                          <span className="text-xs text-gray-400">(You)</span>
+                        )}
+                        <Badge
+                          label={member.role}
+                          variant={
+                            member.role === 'admin' || member.role === 'superadmin'
+                              ? 'primary'
+                              : 'gray'
+                          }
+                          size="sm"
+                        />
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                          member.status === 'active'
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : 'bg-red-50 text-red-700 border-red-200'
+                        }`}>
+                          {member.status === 'active' ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
+                        <span className="text-xs sm:text-sm text-gray-500 flex items-center gap-1.5">
+                          <Mail size={13} className="text-gray-400" /> {member.email}
+                        </span>
+                        <span className="text-xs sm:text-sm text-gray-500 flex items-center gap-1.5">
+                          <Phone size={13} className="text-gray-400" /> {member.phone}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Joined {formatDate(member.createdAt)}
                       </p>
-                      {isSelf && (
-                        <span className="text-xs text-gray-400">(You)</span>
-                      )}
-                      <Badge
-                        label={member.role}
-                        variant={
-                          member.role === 'admin' || member.role === 'superadmin'
-                            ? 'primary'
-                            : 'gray'
-                        }
-                        size="sm"
-                      />
                     </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <Mail size={10} /> {member.email}
-                      </span>
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <Phone size={10} /> {member.phone}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Joined {formatDate(member.createdAt)}
-                    </p>
                   </div>
 
-                  {/* Status + Actions */}
-                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                    {/* Status badge */}
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                      member.status === 'active'
-                        ? 'bg-green-50 text-green-700 border-green-200'
-                        : 'bg-red-50 text-red-700 border-red-200'
-                    }`}>
-                      {member.status === 'active' ? 'Active' : 'Inactive'}
-                    </span>
+                  {/* Action buttons — full width row below info on mobile */}
+                  <div className="flex items-center gap-2 mt-3 pl-14 sm:pl-15 flex-wrap">
+                    {/* Edit — always visible */}
+                    <button
+                      onClick={() => openEditModal(member)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium
+                        rounded-lg border border-blue-200 bg-blue-50 text-blue-600
+                        hover:bg-blue-100 active:bg-blue-200 transition-colors"
+                    >
+                      <Pencil size={14} />
+                      Edit
+                    </button>
 
-                    <div className="flex items-center gap-1.5">
-                      {/* Edit — always visible (even for yourself) */}
-                      <button
-                        onClick={() => openEditModal(member)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
-                          rounded-lg border border-blue-200 bg-blue-50 text-blue-600
-                          hover:bg-blue-100 transition-colors"
-                      >
-                        <Pencil size={12} />
-                        Edit
-                      </button>
+                    {/* Activate/Deactivate/Delete — only for OTHER members */}
+                    {!isSelf && (
+                      <>
+                        <button
+                          onClick={() => handleToggleStatus(member.id, member.name, member.status)}
+                          className={`flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium
+                            rounded-lg border transition-colors active:scale-95 ${
+                            member.status === 'active'
+                              ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                              : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                          }`}
+                        >
+                          {member.status === 'active' ? (
+                            <><UserX size={14} /> Deactivate</>
+                          ) : (
+                            <><UserCheck size={14} /> Activate</>
+                          )}
+                        </button>
 
-                      {/* Activate/Deactivate/Delete — only for OTHER members */}
-                      {!isSelf && (
-                        <>
-                          <button
-                            onClick={() => handleToggleStatus(member.id, member.name, member.status)}
-                            className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
-                              rounded-lg border transition-colors ${
-                              member.status === 'active'
-                                ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-                            }`}
-                          >
-                            {member.status === 'active' ? (
-                              <><UserX size={12} /> Deactivate</>
-                            ) : (
-                              <><UserCheck size={12} /> Activate</>
-                            )}
-                          </button>
-
-                          <button
-                            onClick={() => handleDelete(member.id, member.name)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium
-                              rounded-lg border border-red-200 bg-red-50 text-red-600
-                              hover:bg-red-100 transition-colors"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </>
-                      )}
-                    </div>
+                        <button
+                          onClick={() => handleDelete(member.id, member.name)}
+                          className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium
+                            rounded-lg border border-red-200 bg-red-50 text-red-600
+                            hover:bg-red-100 active:bg-red-200 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                          <span className="hidden sm:inline">Delete</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
