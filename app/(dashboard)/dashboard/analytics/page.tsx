@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   LineChart,
   Line,
@@ -134,13 +135,19 @@ const renderCustomLabel = ({
 };
 
 export default function AnalyticsPage() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) fetchAnalytics();
-  }, [user]);
+    if (authLoading || !user) return;
+    if (user.role === 'user') {
+      router.replace('/dashboard/my-work');
+      return;
+    }
+    fetchAnalytics();
+  }, [user, authLoading]);
 
   const fetchAnalytics = async () => {
     try {

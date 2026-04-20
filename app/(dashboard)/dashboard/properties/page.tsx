@@ -20,6 +20,14 @@ export default function PropertiesPage() {
   const searchParams = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
 
+  // Admin-only page — team members don't see properties
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (user.role === 'user') {
+      router.replace('/dashboard/my-work');
+    }
+  }, [authLoading, user, router]);
+
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
