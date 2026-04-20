@@ -9,7 +9,7 @@ import {
   Users,
   MessageSquare,
   DollarSign,
-  Zap,
+
   Shield,
   ArrowRight,
   CheckCircle,

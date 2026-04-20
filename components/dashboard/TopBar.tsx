@@ -22,7 +22,7 @@ export function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
   const [showUserMenu, setShowUserMenu]           = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [todayVisits, setTodayVisits]             = useState<TodayVisit[]>([]);
-  const [loadingVisits, setLoadingVisits]         = useState(false);
+  const [, setLoadingVisits]                       = useState(false);
   const [showMobileSearch, setShowMobileSearch]   = useState(false);
   const [searchValue, setSearchValue]             = useState(
     () => searchParams.get('search') || ''

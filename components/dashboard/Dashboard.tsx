@@ -9,7 +9,7 @@ import { StatsCard } from './StatsCard';
 import { VisitReminder } from './VisitReminder';
 import { TodayVisit } from '@/lib/types';
 import { CHART_COLORS, CustomTooltipProps, TooltipPayloadEntry } from '@/lib/utils';
-import { Users, CheckCircle2, TrendingUp, CalendarCheck, Phone, MapPin, Clock } from 'lucide-react';
+import { CalendarCheck, Phone, MapPin } from 'lucide-react';
 
 interface DashboardData {
   summary: {

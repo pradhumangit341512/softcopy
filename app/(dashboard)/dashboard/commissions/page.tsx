@@ -16,7 +16,7 @@ import {
   FileText, Pencil, X, Target,
   Search, Wallet,
 } from 'lucide-react';
-import { Button } from '@/components/common/Button';
+
 import type { LucideIcon } from 'lucide-react';
 import type { CustomTooltipProps } from '@/lib/utils';
 
@@ -124,7 +124,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
 // Main Page
 // ─────────────────────────────────────────
 export default function CommissionsPage() {
-  const { user } = useAuth();
+  useAuth();
   const { addToast } = useToast();
 
   const [commissions, setCommissions]     = useState<Commission[]>([]);

@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
       !process.env.VERCEL &&
       !process.env.VERCEL_ENV;
     if (IS_DEV_LOCAL) {
-      // eslint-disable-next-line no-console
+
       console.log(`\n🔑 [DEV] login OTP for ${email}: ${newOTP}\n`);
     }
 

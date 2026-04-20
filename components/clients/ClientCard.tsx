@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { Button } from '../common/Button';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import type { Client } from '@/lib/types';

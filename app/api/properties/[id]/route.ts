@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth, isValidObjectId, type AuthTokenPayload } from "@/lib/auth";
-import { isTeamMember, assertCompanyOwnership } from "@/lib/authorize";
+import { isTeamMember } from "@/lib/authorize";
 import { updatePropertySchema, parseBody } from "@/lib/validations";
 import { recordAudit } from "@/lib/audit";
 

@@ -122,10 +122,10 @@ function emit(level: Level, bindings: Bindings, message: string) {
 
   if (IS_PROD) {
     if (level === 'error' || level === 'fatal') {
-      // eslint-disable-next-line no-console
+
       console.error(line);
     } else {
-      // eslint-disable-next-line no-console
+
       console.log(line);
     }
     return;
@@ -137,7 +137,6 @@ function emit(level: Level, bindings: Bindings, message: string) {
     level === 'warn'                       ? '\x1b[33m' :
     level === 'info'                       ? '\x1b[36m' :
                                              '\x1b[90m';
-  // eslint-disable-next-line no-console
   const fn = (level === 'error' || level === 'fatal') ? console.error : console.log;
   fn(`${prefix}[${level.toUpperCase()}]\x1b[0m ${message}`, bindings && Object.keys(bindings).length ? bindings : '');
 }

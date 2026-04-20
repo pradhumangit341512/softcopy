@@ -106,7 +106,7 @@ function makeLimiter(preset: Preset): Limiter {
     // Dev only — log once, fall back to in-memory.
     if (!hasWarnedNoUpstash) {
       hasWarnedNoUpstash = true;
-      // eslint-disable-next-line no-console
+
       console.warn('[rate-limit] No Upstash configured — using in-memory fallback (dev only).');
     }
     return memoryLimiter(preset);

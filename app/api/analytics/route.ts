@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { startOfMonth, endOfMonth } from "date-fns";
-import { isValidObjectId, verifyAuth, type AuthTokenPayload } from "@/lib/auth";
+import { isValidObjectId, verifyAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 

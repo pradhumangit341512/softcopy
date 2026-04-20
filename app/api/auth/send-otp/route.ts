@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
     // In dev, ALSO log the OTP to the terminal as a backup — so even if the
     // browser request is silently swallowed, the dev can still copy the code.
     if (IS_DEV_LOCAL) {
-      // eslint-disable-next-line no-console
+
       console.log(`\n🔑 [DEV] OTP for ${email}: ${otp} (expires in 10 min)\n`);
     }
 

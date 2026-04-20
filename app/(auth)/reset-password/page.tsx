@@ -4,7 +4,7 @@ import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Alert } from '@/components/common/Alert';
-import { Lock, Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
 import { useToast } from '@/components/common/Toast';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
