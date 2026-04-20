@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import {
   verifyAuth,
   isValidObjectId,
-  type AuthTokenPayload,
 } from "@/lib/auth";
 import { createClientSchema, parseBody } from "@/lib/validations";
 import { isTeamMember, isAdminRole } from "@/lib/authorize";

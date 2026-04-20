@@ -5,7 +5,7 @@ import { isValidObjectId, verifyAuth, type AuthTokenPayload } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-type AuthPayload = AuthTokenPayload;
+// type AuthPayload = AuthTokenPayload;
 
 // Empty analytics response for dev bypass or missing company
 function emptyAnalytics() {

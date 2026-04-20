@@ -70,7 +70,6 @@ export function MemberDetailPanel({
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
 
     Promise.all([
       fetch(`/api/clients?createdBy=${memberId}&limit=50`, { credentials: 'include' })

@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import {
   verifyAuth,
   hashPassword,
-  type AuthTokenPayload,
 } from "@/lib/auth";
 import { requireAdmin } from "@/lib/authorize";
 import { createUserSchema, parseBody } from "@/lib/validations";

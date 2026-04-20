@@ -3,10 +3,8 @@ import { db } from "@/lib/db";
 import {
   verifyAuth,
   isValidObjectId,
-  type AuthTokenPayload,
 } from "@/lib/auth";
 import { createPropertySchema, parseBody } from "@/lib/validations";
-import { isTeamMember } from "@/lib/authorize";
 
 export const runtime = "nodejs";
 

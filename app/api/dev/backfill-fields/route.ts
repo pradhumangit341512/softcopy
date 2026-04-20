@@ -17,7 +17,7 @@
  * POST → runs the backfill (sets deletedAt: null on missing docs, etc.)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 

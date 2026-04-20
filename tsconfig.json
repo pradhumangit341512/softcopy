@@ -38,6 +38,8 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scripts/load-test.ts",
+    "scripts/load-test-prod.ts"
   ]
 }

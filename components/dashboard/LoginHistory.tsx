@@ -49,8 +49,6 @@ export function LoginHistory({ memberId }: Props) {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    setError(null);
 
     fetch(`/api/team-performance/${memberId}/sessions`, { credentials: 'include' })
       .then((r) => {
