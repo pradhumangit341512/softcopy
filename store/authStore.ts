@@ -98,7 +98,15 @@ export const useAuthStore = create<AuthState>()(
             });
 
             if (!response.ok) {
-              // 401 = not logged in or token expired — clear stale state
+              // Detect if another device kicked us out
+              try {
+                const body = await response.json();
+                if (body?.code === 'AUTH_SESSION_REPLACED') {
+                  if (typeof window !== 'undefined') {
+                    sessionStorage.setItem('session_replaced', '1');
+                  }
+                }
+              } catch {}
               useAuthStore.persist.clearStorage();
               set({ ...initialState, hasFetched: true });
               return;

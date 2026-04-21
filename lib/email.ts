@@ -155,6 +155,126 @@ export async function sendOTPEmail(
   console.log(`✅ OTP sent via Gmail to ${toEmail}`);
 }
 
+// ==================== NEW LOGIN ALERT ====================
+
+function buildLoginAlertHTML(name: string, device: string, ip: string, time: string): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body style="margin:0;padding:0;background:#f4f6fb;font-family:Arial,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td align="center" style="padding:40px 16px;">
+            <table width="480" cellpadding="0" cellspacing="0"
+              style="background:#fff;border-radius:12px;
+              box-shadow:0 2px 12px rgba(0,0,0,0.08);overflow:hidden;">
+              <tr>
+                <td style="background:#dc2626;padding:28px 32px;">
+                  <p style="margin:0;color:#fff;font-size:22px;font-weight:700;">BrokerCRM</p>
+                  <p style="margin:4px 0 0;color:#fecaca;font-size:13px;">Security Alert</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:32px;">
+                  <p style="margin:0 0 8px;color:#374151;font-size:15px;">Hi ${escapeHtml(name)},</p>
+                  <p style="margin:0 0 20px;color:#6b7280;font-size:14px;">
+                    We detected a new login to your account. If this was you, no action is needed.
+                  </p>
+                  <table width="100%" cellpadding="0" cellspacing="0"
+                    style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;">
+                    <tr>
+                      <td style="padding:20px 24px;">
+                        <p style="margin:0 0 10px;color:#991b1b;font-size:13px;font-weight:600;">Login Details</p>
+                        <p style="margin:0 0 6px;color:#374151;font-size:13px;">
+                          <strong>Device:</strong> ${escapeHtml(device)}
+                        </p>
+                        <p style="margin:0 0 6px;color:#374151;font-size:13px;">
+                          <strong>IP Address:</strong> ${escapeHtml(ip)}
+                        </p>
+                        <p style="margin:0;color:#374151;font-size:13px;">
+                          <strong>Time:</strong> ${escapeHtml(time)}
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                  <p style="margin:20px 0 0;color:#dc2626;font-size:13px;font-weight:600;">
+                    If this wasn't you, change your password immediately and use "Log out other sessions" in Settings &gt; Security.
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
+                  <p style="margin:0;color:#9ca3af;font-size:11px;text-align:center;">
+                    &copy; ${new Date().getFullYear()} BrokerCRM. All rights reserved.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendLoginAlertEmail(
+  toEmail: string,
+  name: string,
+  device: string,
+  ip: string
+): Promise<void> {
+  const subject = 'New login to your account — BrokerCRM';
+  const time = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+  const html = buildLoginAlertHTML(name, device, ip, time);
+
+  const resend = getResend();
+  let resendError: Error | null = null;
+  if (!resend) {
+    resendError = new Error('RESEND_API_KEY not configured');
+  } else try {
+    const resendPromise = resend.emails.send({
+      from: FROM_RESEND,
+      to: toEmail,
+      subject,
+      html,
+    });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Resend timeout')), 5000)
+    );
+    const result = await Promise.race([resendPromise, timeoutPromise]) as { error?: Error };
+    resendError = result?.error || null;
+  } catch (err: unknown) {
+    resendError = err instanceof Error ? err : new Error(String(err));
+  }
+
+  if (!resendError) {
+    console.log(`✅ Login alert sent via Resend to ${toEmail}`);
+    return;
+  }
+
+  console.warn(`⚠️  Resend failed (${resendError.message}) — falling back to Gmail for login alert to ${toEmail}`);
+
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('\n========================================');
+      console.log(`DEV FALLBACK — Login alert for ${toEmail}: ${device} from ${ip}`);
+      console.log('========================================\n');
+      return;
+    }
+    throw new Error('Email delivery failed — configure GMAIL_USER and GMAIL_APP_PASSWORD');
+  }
+
+  await gmailTransporter.sendMail({
+    from: `"BrokerCRM" <${FROM_GMAIL}>`,
+    to: toEmail,
+    subject,
+    html,
+  });
+  console.log(`✅ Login alert sent via Gmail to ${toEmail}`);
+}
+
 // ==================== EMAIL VERIFICATION LINK ====================
 
 /**

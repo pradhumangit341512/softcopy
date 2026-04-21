@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyAuth } from "@/lib/auth";
+import { verifyToken, getTokenFromRequest } from "@/lib/auth";
 import { ErrorCode, apiError, newRequestId } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { apiLimiter, getClientIp, rateLimited } from "@/lib/rate-limit";
@@ -13,29 +13,50 @@ export async function GET(req: NextRequest) {
   const log = logger.child({ route: "/api/auth/me", requestId, ip });
 
   try {
-    // Generous per-IP cap to stop trivially scripted scraping/probing.
     const limit = await apiLimiter.check(120, `me:ip:${ip}`);
     if (!limit.success) {
       return rateLimited('Too many requests', limit.retryAfter);
     }
 
-    const decoded = await verifyAuth(req);
-    if (!decoded) {
+    const token = getTokenFromRequest(req);
+    if (!token) {
       return apiError(ErrorCode.AUTH_UNAUTHORIZED, "Not authenticated", { requestId });
     }
 
+    const payload = await verifyToken(token);
+    if (!payload) {
+      return apiError(ErrorCode.AUTH_UNAUTHORIZED, "Not authenticated", { requestId });
+    }
+
+    // Check user status + tokenVersion against DB
     const user = await db.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: payload.userId },
       include: { company: true },
     });
 
     if (!user) {
-      log.warn({ userId: decoded.userId }, "Token valid but user missing (possibly deleted)");
+      log.warn({ userId: payload.userId }, "Token valid but user missing (possibly deleted)");
       return apiError(ErrorCode.RESOURCE_NOT_FOUND, "User not found", { requestId });
     }
 
     if (user.status !== "active") {
       return apiError(ErrorCode.AUTH_ACCOUNT_INACTIVE, "Account is inactive", { requestId });
+    }
+
+    if (user.company && user.company.status === 'suspended') {
+      return apiError(ErrorCode.AUTH_ACCOUNT_INACTIVE, "Account is suspended", { requestId });
+    }
+
+    // Detect session replacement: JWT is valid but tokenVersion doesn't match
+    // → someone logged in from another device, which bumped tokenVersion
+    const claimedTv = typeof payload.tv === 'number' ? payload.tv : 0;
+    if (user.tokenVersion !== claimedTv) {
+      log.info({ userId: user.id, claimedTv, currentTv: user.tokenVersion }, "Session replaced by another login");
+      return apiError(
+        ErrorCode.AUTH_SESSION_REPLACED,
+        "You were signed out because your account was accessed from another device.",
+        { requestId }
+      );
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

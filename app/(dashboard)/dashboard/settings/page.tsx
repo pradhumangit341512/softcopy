@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Camera, User, Lock, Settings, LogOut, Eye, EyeOff, Shield, Phone, Mail, Pencil, X, Check } from 'lucide-react';
+import { Camera, User, Lock, Settings, LogOut, Eye, EyeOff, Shield, Phone, Mail, Pencil, X, Check, Monitor, Smartphone, Globe, AlertTriangle, Loader2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/common/Toast';
@@ -75,6 +75,14 @@ const PasswordInput = ({
   );
 };
 
+interface Session {
+  id: string;
+  loginAt: string;
+  ipAddress: string | null;
+  device: string;
+  isCurrent: boolean;
+}
+
 export default function SettingsPage() {
   const { user, logout } = useAuth();
   const { addToast } = useToast();
@@ -86,6 +94,11 @@ export default function SettingsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [logoutConfirm, setLogoutConfirm] = useState(false);
 
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [revokeConfirm, setRevokeConfirm] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+
   const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '', newPassword: '', confirmPassword: '',
@@ -96,6 +109,44 @@ export default function SettingsPage() {
       setFormData({ name: user.name || '', email: user.email || '', phone: user.phone || '' });
     }
   }, [user]);
+
+  // ── Fetch active sessions when Security tab is active ──
+  const fetchSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await fetch('/api/auth/sessions', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data.sessions ?? []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'security') fetchSessions();
+  }, [activeTab]);
+
+  const handleRevokeOthers = async () => {
+    setRevoking(true);
+    try {
+      const res = await fetch('/api/auth/sessions', {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error();
+      addToast({ type: 'success', message: 'All other sessions have been logged out' });
+      setRevokeConfirm(false);
+      fetchSessions();
+    } catch {
+      addToast({ type: 'error', message: 'Failed to revoke sessions' });
+    } finally {
+      setRevoking(false);
+    }
+  };
 
   // ── Profile update ──
   const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -295,62 +346,198 @@ export default function SettingsPage() {
 
         {/* ── SECURITY TAB ── */}
         {activeTab === 'security' && (
-          <div className="p-5 sm:p-6">
-            <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-100">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                <Shield size={18} className="text-blue-500" />
+          <div className="p-5 sm:p-6 space-y-6">
+
+            {/* ── Active Sessions ── */}
+            <div>
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                  <Monitor size={18} className="text-emerald-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-800">Active Sessions</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Devices currently logged into your account
+                  </p>
+                </div>
+                {sessions.length > 1 && (
+                  <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+                    {sessions.length} active
+                  </span>
+                )}
               </div>
+
+              {sessionsLoading ? (
+                <div className="flex items-center justify-center py-8 text-gray-400">
+                  <Loader2 size={20} className="animate-spin" />
+                  <span className="ml-2 text-sm">Loading sessions...</span>
+                </div>
+              ) : sessions.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">No active sessions found</p>
+              ) : (
+                <div className="space-y-2">
+                  {sessions.map((s) => (
+                    <div
+                      key={s.id}
+                      className={`flex items-center gap-3 p-3 rounded-xl border transition-colors
+                        ${s.isCurrent
+                          ? 'border-emerald-200 bg-emerald-50/50'
+                          : 'border-gray-100 bg-gray-50/50'
+                        }`}
+                    >
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0
+                        ${s.isCurrent ? 'bg-emerald-100' : 'bg-gray-100'}`}>
+                        {s.device.includes('Mobile') || s.device.includes('Android') || s.device.includes('iOS')
+                          ? <Smartphone size={15} className={s.isCurrent ? 'text-emerald-600' : 'text-gray-400'} />
+                          : <Monitor size={15} className={s.isCurrent ? 'text-emerald-600' : 'text-gray-400'} />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{s.device}</p>
+                          {s.isCurrent && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                              THIS DEVICE
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          {s.ipAddress && (
+                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                              <Globe size={10} /> {s.ipAddress}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">
+                            {new Date(s.loginAt).toLocaleDateString('en-IN', {
+                              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Logout Other Sessions ── */}
+              {sessions.filter((s) => !s.isCurrent).length > 0 && (
+                <div className="mt-4">
+                  {!revokeConfirm ? (
+                    <button
+                      onClick={() => setRevokeConfirm(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold
+                        text-red-600 bg-red-50 hover:bg-red-100 border border-red-100
+                        rounded-xl transition-colors"
+                    >
+                      <LogOut size={14} /> Log out all other sessions
+                    </button>
+                  ) : (
+                    <div className="bg-red-50 border border-red-100 rounded-xl p-4 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle size={16} className="text-red-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-red-700">
+                            Revoke {sessions.filter((s) => !s.isCurrent).length} other session{sessions.filter((s) => !s.isCurrent).length > 1 ? 's' : ''}?
+                          </p>
+                          <p className="text-xs text-red-500 mt-1">
+                            All other devices will be logged out immediately. They&apos;ll need to sign in again.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleRevokeOthers}
+                          disabled={revoking}
+                          className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold
+                            text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors
+                            disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {revoking ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />}
+                          {revoking ? 'Revoking...' : 'Yes, log them out'}
+                        </button>
+                        <button
+                          onClick={() => setRevokeConfirm(false)}
+                          className="px-4 py-2 text-sm font-medium text-gray-600
+                            bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Email Alert Info ── */}
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 border border-blue-100">
+              <Mail size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-gray-800">Change Password</p>
-                <p className="text-xs text-gray-400 mt-0.5">Keep your account secure</p>
+                <p className="text-sm font-semibold text-blue-800">Login email alerts are active</p>
+                <p className="text-xs text-blue-600 mt-0.5">
+                  You&apos;ll receive an email at <strong>{user?.email}</strong> whenever
+                  someone logs in from a new device or location.
+                </p>
               </div>
             </div>
 
-            <form onSubmit={handlePasswordChange} className="space-y-4">
-              <PasswordInput
-                label="Current Password"
-                value={passwordForm.currentPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                required
-              />
-              <PasswordInput
-                label="New Password"
-                value={passwordForm.newPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                required
-              />
-              <PasswordInput
-                label="Confirm New Password"
-                value={passwordForm.confirmPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                required
-              />
-
-              {/* Password match indicator */}
-              {passwordForm.confirmPassword && (
-                <p className={`text-xs font-medium flex items-center gap-1.5
-                  ${passwordForm.newPassword === passwordForm.confirmPassword
-                    ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {passwordForm.newPassword === passwordForm.confirmPassword
-                    ? <><Check size={12} /> Passwords match</>
-                    : <><X size={12} /> Passwords don't match</>
-                  }
-                </p>
-              )}
-
-              <div className="pt-1">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold
-                    text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors
-                    disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <Lock size={14} />
-                  {loading ? 'Updating...' : 'Update Password'}
-                </button>
+            {/* ── Change Password ── */}
+            <div>
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <Shield size={18} className="text-blue-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Change Password</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Keep your account secure</p>
+                </div>
               </div>
-            </form>
+
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <PasswordInput
+                  label="Current Password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  required
+                />
+                <PasswordInput
+                  label="New Password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  required
+                />
+                <PasswordInput
+                  label="Confirm New Password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  required
+                />
+
+                {passwordForm.confirmPassword && (
+                  <p className={`text-xs font-medium flex items-center gap-1.5
+                    ${passwordForm.newPassword === passwordForm.confirmPassword
+                      ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {passwordForm.newPassword === passwordForm.confirmPassword
+                      ? <><Check size={12} /> Passwords match</>
+                      : <><X size={12} /> Passwords don&apos;t match</>
+                    }
+                  </p>
+                )}
+
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold
+                      text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors
+                      disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <Lock size={14} />
+                    {loading ? 'Updating...' : 'Update Password'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 

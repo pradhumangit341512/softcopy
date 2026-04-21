@@ -16,7 +16,7 @@
 import { useState, useRef, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, CheckCircle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, CheckCircle, AlertTriangle } from 'lucide-react';
 
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/common/Toast';
@@ -27,7 +27,7 @@ import { api, ApiError } from '@/lib/fetch';
 
 type LoginResponse =
   | { message: string; user: unknown; redirectTo: string }
-  | { requireOTP: true; message: string; reason?: 'new-device' | 'admin-2fa' };
+  | { requireOTP: true; message: string; reason?: 'new-device' | 'admin-2fa' | 'mandatory-otp' };
 
 export default function LoginPage() {
   return (
@@ -47,6 +47,15 @@ function LoginForm() {
   const justVerified = searchParams.get('verified') === '1';
   const verificationFailed = searchParams.get('verified') === '0';
 
+  // Check if user was kicked by another login
+  const [sessionReplaced, setSessionReplaced] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && sessionStorage.getItem('session_replaced') === '1') {
+      setSessionReplaced(true);
+      sessionStorage.removeItem('session_replaced');
+    }
+  }, []);
+
   const initialError =
     urlError === 'subscription_expired' ? 'Your subscription has expired. Please renew to continue.' :
     urlError === 'session_expired'      ? 'Your session expired. Please sign in again.' :
@@ -56,7 +65,7 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [otpReason, setOtpReason] = useState<'new-device' | 'admin-2fa' | null>(null);
+  const [otpReason, setOtpReason] = useState<'new-device' | 'admin-2fa' | 'mandatory-otp' | null>(null);
 
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; otp?: string }>({});
@@ -175,12 +184,25 @@ function LoginForm() {
         {otpReason ? 'One more step' : 'Welcome back'}
       </h2>
       <p className="text-gray-500 mb-6 text-sm">
-        {otpReason === 'admin-2fa'
-          ? 'As an admin, we require a verification code on every login.'
-          : otpReason === 'new-device'
+        {otpReason
           ? `We sent a 6-digit code to ${email}. Enter it below to sign in.`
           : 'Sign in to your BrokerCRM account'}
       </p>
+
+      {sessionReplaced && (
+        <div className="mb-4 flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+          <AlertTriangle size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              Signed out — another device logged in
+            </p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              Your account was accessed from another device. Only one active session is allowed.
+              If this wasn&apos;t you, change your password immediately after signing in.
+            </p>
+          </div>
+        </div>
+      )}
 
       {justVerified && (
         <Alert
@@ -257,9 +279,7 @@ function LoginForm() {
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex gap-2">
               <ShieldCheck size={18} className="text-blue-500 shrink-0 mt-0.5" />
               <p className="text-xs text-blue-700">
-                {otpReason === 'admin-2fa'
-                  ? 'Admin accounts require a fresh code on every sign-in.'
-                  : "We don't recognize this device. Enter the code we just emailed to continue."}
+                A verification code is required on every sign-in to keep your account secure.
               </p>
             </div>
 

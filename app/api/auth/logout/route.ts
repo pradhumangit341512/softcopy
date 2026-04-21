@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       // Close ALL open sessions for this user (handles multi-device + orphans)
       const now = new Date();
       const openSessions = await db.userSession.findMany({
-        where: { userId: payload.userId, logoutAt: null },
+        where: { userId: payload.userId, logoutAt: { isSet: false } },
         select: { id: true, loginAt: true },
       });
       if (openSessions.length > 0) {

@@ -16,6 +16,7 @@ export const ErrorCode = {
   AUTH_TOKEN_INVALID:        'AUTH_TOKEN_INVALID',
   AUTH_ACCOUNT_INACTIVE:     'AUTH_ACCOUNT_INACTIVE',
   AUTH_SUBSCRIPTION_EXPIRED: 'AUTH_SUBSCRIPTION_EXPIRED',
+  AUTH_SESSION_REPLACED:     'AUTH_SESSION_REPLACED',
 
   // ---- OTP ----
   OTP_INVALID:     'OTP_INVALID',
@@ -107,6 +108,9 @@ function statusForCode(code: ErrorCodeValue): number {
 
     case ErrorCode.AUTH_ACCOUNT_INACTIVE:
       return 403;
+
+    case ErrorCode.AUTH_SESSION_REPLACED:
+      return 401;
 
     case ErrorCode.AUTH_SUBSCRIPTION_EXPIRED:
       return 402;
