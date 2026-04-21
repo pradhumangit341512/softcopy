@@ -161,7 +161,39 @@ export const createCommissionSchema = z
   })
   .strict();
 
-export const updateCommissionSchema = createCommissionSchema.partial().strip();
+/**
+ * Partial update on commission metadata. `paidStatus` is intentionally
+ * stripped out — it's derived from the CommissionPayment ledger, so
+ * toggling it directly would desync the running total. Use the
+ * `/api/commissions/:id/payments` routes instead.
+ */
+export const updateCommissionSchema = createCommissionSchema.partial().omit({
+  paidStatus: true,
+}).strip();
+
+/**
+ * One payment recorded against a commission. Amount must be positive;
+ * the route layer additionally caps it so paidAmount never exceeds
+ * commissionAmount.
+ */
+export const createCommissionPaymentSchema = z
+  .object({
+    amount: z.coerce.number().positive('Amount must be greater than 0'),
+    paidOn: z
+      .union([z.string(), z.date()])
+      .transform((v) => new Date(v))
+      .refine((d) => !isNaN(d.getTime()), 'Invalid date'),
+    method: z
+      .enum(['cash', 'upi', 'bank_transfer', 'cheque', 'other'])
+      .optional()
+      .nullable()
+      .transform((v) => v || null),
+    reference: optionalString,
+    notes: optionalString,
+  })
+  .strict();
+
+export type CreateCommissionPaymentInput = z.infer<typeof createCommissionPaymentSchema>;
 
 // ==================== PROPERTY ====================
 
@@ -216,7 +248,13 @@ export const createUserSchema = z
   })
   .strict();
 
-/** Admin updating another user in the same company. */
+/**
+ * Admin/superadmin updating another user in the same company.
+ *
+ * `password` is accepted but the route layer further restricts WHO may set it
+ * on WHICH target — only superadmin may reset admin passwords, admins may only
+ * reset team-member passwords. Email is similarly gated at the route layer.
+ */
 export const updateUserByAdminSchema = z
   .object({
     name: z.string().trim().min(2).optional(),
@@ -224,10 +262,15 @@ export const updateUserByAdminSchema = z
     phone: phoneSchema.optional(),
     role: z.enum(['admin', 'user']).optional(),
     status: z.enum(['active', 'inactive']).optional(),
+    password: passwordSchema.optional(),
   })
   .strict();
 
-/** User updating their own profile — cannot change role or status. */
+/**
+ * User updating their own profile. Email and password are deliberately absent:
+ * email changes go through an admin/superadmin, password changes go through
+ * the OTP-gated /api/auth/reset-password flow.
+ */
 export const updateSelfSchema = z
   .object({
     name: z.string().trim().min(2).optional(),

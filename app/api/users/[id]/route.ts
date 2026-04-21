@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyAuth, type AuthTokenPayload } from "@/lib/auth";
+import { verifyAuth, hashPassword, type AuthTokenPayload } from "@/lib/auth";
 import { requireAdmin } from "@/lib/authorize";
 import {
   updateUserByAdminSchema,
@@ -74,11 +74,42 @@ export async function PUT(
     const parsed = await parseBody(req, updateUserByAdminSchema);
     if (!parsed.ok) return parsed.response;
 
+    const callerIsSuperadmin = payload.role === 'superadmin';
+    const targetIsAdmin = target.role === 'admin' || target.role === 'superadmin';
+
+    // Sensitive-field gates:
+    //   - password: superadmin may set on anyone; admin may set only on
+    //     team members (role=user). Admin→admin or admin→superadmin is
+    //     blocked — that admin must use the OTP-gated self-reset flow.
+    //   - email: superadmin may change anyone; admin may change team
+    //     members only. Admin→admin email changes route through superadmin.
+    if (parsed.data.password !== undefined) {
+      if (!callerIsSuperadmin && targetIsAdmin) {
+        return NextResponse.json(
+          { error: "Only superadmin can reset an admin's password. Admins can request a reset via the Forgot Password flow." },
+          { status: 403 }
+        );
+      }
+    }
+    if (parsed.data.email !== undefined) {
+      if (!callerIsSuperadmin && targetIsAdmin) {
+        return NextResponse.json(
+          { error: "Only superadmin can change an admin's email." },
+          { status: 403 }
+        );
+      }
+    }
+
     try {
-      // When deactivating a user, bump tokenVersion so their active
-      // sessions die immediately (verifyAuth checks this per-request).
-      // When reactivating, no bump needed — they'll log in fresh.
-      const updateData = { ...parsed.data } as Record<string, unknown>;
+      // Build the update payload. Password is hashed and — when changed —
+      // bumps tokenVersion so the target's existing sessions die immediately.
+      // Deactivation likewise bumps tokenVersion.
+      const { password, ...rest } = parsed.data;
+      const updateData: Record<string, unknown> = { ...rest };
+      if (password !== undefined) {
+        updateData.password = await hashPassword(password);
+        updateData.tokenVersion = { increment: 1 };
+      }
       if (parsed.data.status === 'inactive') {
         updateData.tokenVersion = { increment: 1 };
       }
@@ -92,13 +123,24 @@ export async function PUT(
         },
       });
 
+      const action = password !== undefined
+        ? 'user.password_reset'
+        : parsed.data.status === 'inactive'
+          ? 'user.deactivate'
+          : parsed.data.status === 'active'
+            ? 'user.activate'
+            : 'user.update';
+
       await recordAudit({
         companyId: payload.companyId,
         userId: payload.userId,
-        action: parsed.data.status ? `user.${parsed.data.status === 'inactive' ? 'deactivate' : 'activate'}` : 'user.update',
+        action,
         resource: "User",
         resourceId: id,
-        metadata: { fields: Object.keys(parsed.data) },
+        metadata: {
+          // Log which fields changed but never the password value.
+          fields: Object.keys(parsed.data).map((k) => (k === 'password' ? 'password' : k)),
+        },
         req,
       });
 

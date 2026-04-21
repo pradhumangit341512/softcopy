@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Users, Mail, Phone, Trash2, Shield, X, UserCheck, UserX, Pencil } from 'lucide-react';
+import { Plus, Users, Mail, Phone, Trash2, Shield, X, UserCheck, UserX, Pencil, KeyRound } from 'lucide-react';
 
 import { Loader } from '@/components/common/Loader';
 import { Alert } from '@/components/common/Alert';
@@ -59,6 +59,11 @@ export default function TeamPage() {
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: '' as string });
   const [editSubmitting, setEditSubmitting] = useState(false);
+
+  // Reset-password modal state
+  const [resetTarget, setResetTarget] = useState<TeamMember | null>(null);
+  const [resetPwd, setResetPwd] = useState({ password: '', confirm: '' });
+  const [resetSubmitting, setResetSubmitting] = useState(false);
 
   const fetchMembers = useCallback(async () => {
     setLoading(true);
@@ -188,17 +193,85 @@ export default function TeamPage() {
     setEditForm({ name: member.name, email: member.email, phone: member.phone, role: member.role });
   };
 
-  /** Save edited member details */
+  /**
+   * Can the current user reset THIS member's password?
+   *   - superadmin → anyone
+   *   - admin     → team members only (role='user')
+   *   - never on yourself (use Settings → Change Password)
+   */
+  const canResetPassword = (member: TeamMember): boolean => {
+    if (!user || member.id === user.id) return false;
+    if (user.role === 'superadmin') return true;
+    if (user.role === 'admin' && member.role === 'user') return true;
+    return false;
+  };
+
+  /**
+   * Can the current user change THIS member's email?
+   *   - superadmin → anyone
+   *   - admin     → team members only (role='user')
+   */
+  const canEditEmail = (member: TeamMember): boolean => {
+    if (!user) return false;
+    if (user.role === 'superadmin') return true;
+    if (user.role === 'admin' && member.role === 'user') return true;
+    return false;
+  };
+
+  /** Submit password reset for another user. */
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    if (resetPwd.password !== resetPwd.confirm) {
+      addToast({ type: 'error', message: 'Passwords do not match' });
+      return;
+    }
+    setResetSubmitting(true);
+    try {
+      const res = await fetch(`/api/users/${resetTarget.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ password: resetPwd.password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+      addToast({
+        type: 'success',
+        message: `Password reset for ${resetTarget.name}. They'll need to sign in again.`,
+      });
+      setResetTarget(null);
+      setResetPwd({ password: '', confirm: '' });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to reset password',
+      });
+    } finally {
+      setResetSubmitting(false);
+    }
+  };
+
+  /** Save edited member details. Email is dropped when the caller can't change it. */
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMember) return;
     setEditSubmitting(true);
     try {
+      const payload: Record<string, string> = {
+        name: editForm.name,
+        phone: editForm.phone,
+        role: editForm.role,
+      };
+      if (canEditEmail(editingMember)) {
+        payload.email = editForm.email;
+      }
+
       const res = await fetch(`/api/users/${editingMember.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -367,6 +440,20 @@ export default function TeamPage() {
                       Edit
                     </button>
 
+                    {/* Reset Password — only where permission rules allow */}
+                    {canResetPassword(member) && (
+                      <button
+                        onClick={() => { setResetTarget(member); setResetPwd({ password: '', confirm: '' }); }}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium
+                          rounded-lg border border-purple-200 bg-purple-50 text-purple-700
+                          hover:bg-purple-100 active:bg-purple-200 transition-colors"
+                      >
+                        <KeyRound size={14} />
+                        <span className="hidden sm:inline">Reset Password</span>
+                        <span className="sm:hidden">Password</span>
+                      </button>
+                    )}
+
                     {/* Activate/Deactivate/Delete — only for OTHER members */}
                     {!isSelf && (
                       <>
@@ -518,12 +605,24 @@ export default function TeamPage() {
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
               />
-              <Input
-                label="Email"
-                type="email"
-                value={editForm.email}
-                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              />
+              {canEditEmail(editingMember) ? (
+                <Input
+                  label="Email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                />
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <p className="px-4 py-2.5 text-sm text-gray-600 bg-gray-50 rounded-xl border border-gray-200">
+                    {editForm.email}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Only a superadmin can change another admin&apos;s email.
+                  </p>
+                </div>
+              )}
               <Input
                 label="Phone"
                 type="tel"
@@ -553,6 +652,73 @@ export default function TeamPage() {
                   {editSubmitting ? 'Saving...' : 'Save Changes'}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setEditingMember(null)} className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RESET PASSWORD MODAL */}
+      {resetTarget && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center
+          justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <KeyRound size={18} className="text-purple-500" />
+                Reset password — {resetTarget.name}
+              </h2>
+              <button
+                onClick={() => setResetTarget(null)}
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleResetPassword} className="p-5 space-y-4">
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 space-y-1">
+                <p className="font-semibold">Heads-up</p>
+                <p>
+                  Setting a new password will sign {resetTarget.name} out of every active session.
+                  They&apos;ll need to sign in again with the new password.
+                </p>
+              </div>
+              <Input
+                label="New Password"
+                type="password"
+                placeholder="Min 6 chars, with upper, lower & number"
+                value={resetPwd.password}
+                onChange={(e) => setResetPwd({ ...resetPwd, password: e.target.value })}
+                required
+              />
+              <Input
+                label="Confirm New Password"
+                type="password"
+                value={resetPwd.confirm}
+                onChange={(e) => setResetPwd({ ...resetPwd, confirm: e.target.value })}
+                required
+              />
+              {resetPwd.confirm && resetPwd.password !== resetPwd.confirm && (
+                <p className="text-xs text-red-500 font-medium">Passwords don&apos;t match</p>
+              )}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="submit"
+                  loading={resetSubmitting}
+                  disabled={!resetPwd.password || resetPwd.password !== resetPwd.confirm}
+                  className="flex-1"
+                >
+                  {resetSubmitting ? 'Saving...' : 'Set New Password'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setResetTarget(null)}
+                  className="flex-1"
+                >
                   Cancel
                 </Button>
               </div>

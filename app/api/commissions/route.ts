@@ -130,6 +130,8 @@ export async function POST(req: NextRequest) {
     }
 
     const commissionAmount = (data.dealAmount * data.commissionPercentage) / 100;
+    const startsPaid = data.paidStatus === "Paid";
+    const now = new Date();
 
     const newCommission = await db.commission.create({
       data: {
@@ -139,9 +141,13 @@ export async function POST(req: NextRequest) {
         dealAmount: data.dealAmount,
         commissionPercentage: data.commissionPercentage,
         commissionAmount,
-        paidStatus: data.paidStatus,
+        // Keep paidAmount, paidStatus, and the ledger in lock-step. If the
+        // user ticks "Paid" on creation we record a single ledger entry for
+        // the full amount so history/reporting stay complete.
+        paidAmount: startsPaid ? commissionAmount : 0,
+        paidStatus: startsPaid ? "Paid" : "Pending",
         paymentReference: data.paymentReference,
-        paymentDate: data.paidStatus === "Paid" ? new Date() : null,
+        paymentDate: startsPaid ? now : null,
         deletedAt: null,
       },
       include: {
@@ -149,6 +155,22 @@ export async function POST(req: NextRequest) {
         user: { select: { name: true } },
       },
     });
+
+    if (startsPaid) {
+      await db.commissionPayment.create({
+        data: {
+          commissionId: newCommission.id,
+          companyId: payload.companyId,
+          amount: commissionAmount,
+          paidOn: now,
+          method: null,
+          reference: data.paymentReference ?? null,
+          notes: 'Recorded at commission creation — marked Paid upfront.',
+          recordedBy: payload.userId,
+          deletedAt: null,
+        },
+      });
+    }
 
     return NextResponse.json({ commission: newCommission }, { status: 201 });
   } catch (error) {

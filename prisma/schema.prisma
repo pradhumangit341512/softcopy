@@ -40,6 +40,7 @@ model Company {
   users              User[]
   clients            Client[]
   commissions        Commission[]
+  commissionPayments CommissionPayment[]
   otps               OTP[]
   invoices           Invoice[]
   monthlyBudgets     MonthlyBudget[]
@@ -74,9 +75,10 @@ model User {
   clients      Client[]
   commissions  Commission[]
   properties   Property[]   @relation("PropertyCreator")
-  verificationTokens VerificationToken[]
-  trustedDevices     TrustedDevice[]
-  sessions           UserSession[]
+  verificationTokens      VerificationToken[]
+  trustedDevices          TrustedDevice[]
+  sessions                UserSession[]
+  commissionPaymentsMade  CommissionPayment[] @relation("CommissionPaymentRecorder")
   @@index([role])
   @@index([companyId, role, status])
   @@index([deletedAt])
@@ -185,15 +187,25 @@ model Commission {
   dealAmount           Float
   commissionPercentage Float
   commissionAmount     Float
+  // Denormalized running total of all non-deleted CommissionPayment.amount
+  // rows for this commission. Kept in sync by the /payments endpoints so
+  // list views and totals don't have to aggregate on every read.
+  paidAmount           Float     @default(0)
+  // Derived from paidAmount vs commissionAmount:
+  //   paidAmount <= 0                  → "Pending"
+  //   0 < paidAmount < commissionAmount → "Partial"
+  //   paidAmount >= commissionAmount   → "Paid"
   paidStatus           String    @default("Pending")
+  // Populated only when paidStatus flips to "Paid" (final payment recorded).
   paymentDate          DateTime?
   paymentReference     String?
   deletedAt            DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
-  client               Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user                 User?     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client               Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user                 User?               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company              Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payments             CommissionPayment[]
   @@index([companyId])
   @@index([userId])
   @@index([clientId])
@@ -203,6 +215,33 @@ model Commission {
   @@index([companyId, paidStatus, createdAt])
   @@index([companyId, createdAt])
   @@index([companyId, deletedAt, createdAt])
+}
+
+// Ledger of individual payments recorded against a Commission. A commission
+// starts with zero payments ("Pending"); each row here increments the parent
+// Commission.paidAmount. When paidAmount >= commissionAmount the parent flips
+// to "Paid"; anything in between is "Partial". Deleting a payment (soft)
+// reverses its effect on paidAmount.
+model CommissionPayment {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+  commissionId   String     @db.ObjectId
+  companyId      String     @db.ObjectId
+  amount         Float
+  paidOn         DateTime
+  method         String?    // cash | upi | bank_transfer | cheque | other
+  reference      String?    // txn id, cheque no, UPI ref
+  notes          String?
+  recordedBy     String     @db.ObjectId
+  deletedAt      DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  commission     Commission @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+  company        Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recorder       User       @relation("CommissionPaymentRecorder", fields: [recordedBy], references: [id], onDelete: Restrict)
+  @@index([commissionId, deletedAt])
+  @@index([companyId, paidOn])
+  @@index([recordedBy])
+  @@map("commission_payments")
 }
 
 model OTP {

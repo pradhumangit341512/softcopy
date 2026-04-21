@@ -101,8 +101,11 @@ export default function SettingsPage() {
 
   const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
   const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '', newPassword: '', confirmPassword: '',
+    otp: '', newPassword: '', confirmPassword: '',
   });
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [sendingOtp, setSendingOtp] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -130,6 +133,41 @@ export default function SettingsPage() {
     if (activeTab === 'security') fetchSessions();
   }, [activeTab]);
 
+  // Countdown timer for OTP resend cooldown
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const t = setTimeout(() => setOtpCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [otpCooldown]);
+
+  /** Request an OTP to be emailed for password reset. */
+  const handleSendOtp = async () => {
+    if (!user?.email) return;
+    setSendingOtp(true);
+    try {
+      const res = await fetch('/api/auth/send-email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: user.email, purpose: 'reset-password' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to send code');
+      }
+      setOtpSent(true);
+      setOtpCooldown(30);
+      addToast({ type: 'success', message: `Code sent to ${user.email}` });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to send code',
+      });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
   const handleRevokeOthers = async () => {
     setRevoking(true);
     try {
@@ -149,6 +187,8 @@ export default function SettingsPage() {
   };
 
   // ── Profile update ──
+  // Email is intentionally excluded — the self-update schema rejects it and
+  // only superadmin can change an admin's email.
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -157,21 +197,31 @@ export default function SettingsPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ name: formData.name, phone: formData.phone }),
       });
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to update profile');
+      }
       addToast({ type: 'success', message: 'Profile updated successfully!' });
       setIsEditing(false);
-    } catch {
-      addToast({ type: 'error', message: 'Failed to update profile' });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to update profile',
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Password change ──
+  // ── Password change (OTP-gated) ──
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!otpSent) {
+      addToast({ type: 'error', message: 'Request a code first' });
+      return;
+    }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       addToast({ type: 'error', message: 'Passwords do not match' });
       return;
@@ -184,15 +234,25 @@ export default function SettingsPage() {
         credentials: 'include',
         body: JSON.stringify({
           email: user?.email,
+          otp: passwordForm.otp,
           newPassword: passwordForm.newPassword,
           confirmPassword: passwordForm.confirmPassword,
         }),
       });
-      if (!response.ok) throw new Error();
-      addToast({ type: 'success', message: 'Password changed successfully!' });
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch {
-      addToast({ type: 'error', message: 'Failed to change password' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to change password');
+      }
+      addToast({ type: 'success', message: 'Password changed. Please sign in again.' });
+      setPasswordForm({ otp: '', newPassword: '', confirmPassword: '' });
+      setOtpSent(false);
+      // tokenVersion was bumped — this session will be rejected on next request.
+      setTimeout(() => logout(), 1500);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to change password',
+      });
     } finally {
       setLoading(false);
     }
@@ -295,23 +355,17 @@ export default function SettingsPage() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
-                {isAdmin ? (
-                  <Input
-                    label="Email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    required
-                  />
-                ) : (
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-gray-700">Email</label>
-                    <p className="px-4 py-2.5 text-sm text-gray-600 bg-gray-50 rounded-xl border border-gray-200">
-                      {formData.email}
-                    </p>
-                    <p className="text-xs text-gray-400">Contact admin to change email</p>
-                  </div>
-                )}
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <p className="px-4 py-2.5 text-sm text-gray-600 bg-gray-50 rounded-xl border border-gray-200">
+                    {formData.email}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {user?.role === 'superadmin'
+                      ? 'Email is locked for superadmin accounts.'
+                      : 'Contact superadmin to change your email.'}
+                  </p>
+                </div>
                 <Input
                   label="Phone"
                   type="tel"
@@ -494,48 +548,92 @@ export default function SettingsPage() {
               </div>
 
               <form onSubmit={handlePasswordChange} className="space-y-4">
-                <PasswordInput
-                  label="Current Password"
-                  value={passwordForm.currentPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                  required
-                />
-                <PasswordInput
-                  label="New Password"
-                  value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                  required
-                />
-                <PasswordInput
-                  label="Confirm New Password"
-                  value={passwordForm.confirmPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                  required
-                />
-
-                {passwordForm.confirmPassword && (
-                  <p className={`text-xs font-medium flex items-center gap-1.5
-                    ${passwordForm.newPassword === passwordForm.confirmPassword
-                      ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {passwordForm.newPassword === passwordForm.confirmPassword
-                      ? <><Check size={12} /> Passwords match</>
-                      : <><X size={12} /> Passwords don&apos;t match</>
-                    }
-                  </p>
-                )}
-
-                <div className="pt-1">
+                {/* Step 1: email a one-time code */}
+                <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Mail size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-gray-600">
+                      For your safety, we&apos;ll email a 6-digit code to{' '}
+                      <strong className="text-gray-800">{user?.email}</strong>.
+                      Enter it below to confirm your identity, then set a new password.
+                    </p>
+                  </div>
                   <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold
-                      text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors
-                      disabled:opacity-60 disabled:cursor-not-allowed"
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={sendingOtp || otpCooldown > 0}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold
+                      text-blue-600 bg-white border border-blue-200 hover:bg-blue-50 rounded-lg
+                      transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <Lock size={14} />
-                    {loading ? 'Updating...' : 'Update Password'}
+                    {sendingOtp ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />}
+                    {otpCooldown > 0
+                      ? `Resend in ${otpCooldown}s`
+                      : otpSent
+                        ? 'Resend code'
+                        : 'Email me a code'}
                   </button>
                 </div>
+
+                {/* Step 2: OTP + new password (only shown after code requested) */}
+                {otpSent && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700">Verification code</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={passwordForm.otp}
+                        onChange={(e) =>
+                          setPasswordForm({ ...passwordForm, otp: e.target.value.replace(/\D/g, '') })
+                        }
+                        required
+                        placeholder="6-digit code"
+                        className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl
+                          tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20
+                          focus:border-blue-400 transition-all bg-white"
+                      />
+                    </div>
+
+                    <PasswordInput
+                      label="New Password"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                      required
+                    />
+                    <PasswordInput
+                      label="Confirm New Password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                      required
+                    />
+
+                    {passwordForm.confirmPassword && (
+                      <p className={`text-xs font-medium flex items-center gap-1.5
+                        ${passwordForm.newPassword === passwordForm.confirmPassword
+                          ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {passwordForm.newPassword === passwordForm.confirmPassword
+                          ? <><Check size={12} /> Passwords match</>
+                          : <><X size={12} /> Passwords don&apos;t match</>
+                        }
+                      </p>
+                    )}
+
+                    <div className="pt-1">
+                      <button
+                        type="submit"
+                        disabled={loading || passwordForm.otp.length < 4}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold
+                          text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors
+                          disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <Lock size={14} />
+                        {loading ? 'Updating...' : 'Update Password'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </form>
             </div>
           </div>

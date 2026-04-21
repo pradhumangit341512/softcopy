@@ -41,6 +41,9 @@ export async function PUT(
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
+    // paidStatus is deliberately NOT handled here — it's computed from the
+    // CommissionPayment ledger. Callers mark a commission paid by POSTing to
+    // /api/commissions/:id/payments with an amount.
     const updateData: Record<string, unknown> = {};
     if (data.salesPersonName !== undefined) updateData.salesPersonName = data.salesPersonName;
     if (data.paymentReference !== undefined) updateData.paymentReference = data.paymentReference;
@@ -51,10 +54,6 @@ export async function PUT(
       const pct = data.commissionPercentage ?? existing.commissionPercentage;
       updateData.commissionAmount = (deal * pct) / 100;
     }
-    if (data.paidStatus !== undefined) {
-      updateData.paidStatus = data.paidStatus;
-      if (data.paidStatus === "Paid") updateData.paymentDate = new Date();
-    }
 
     // Atomic guard: only updates if the row is still in the same company
     // and not soft-deleted — kills the TOCTOU window.
@@ -64,6 +63,32 @@ export async function PUT(
     });
     if (result.count === 0) {
       return NextResponse.json({ error: "Commission not found" }, { status: 404 });
+    }
+
+    // If commissionAmount changed, the existing paidAmount may now cross a
+    // threshold (e.g. a deal was renegotiated upward, flipping Paid→Partial).
+    // Recompute paidStatus so it stays consistent with the ledger.
+    if (updateData.commissionAmount !== undefined) {
+      const fresh = await db.commission.findUnique({
+        where: { id },
+        select: { commissionAmount: true, paidAmount: true },
+      });
+      if (fresh) {
+        const EPS = 0.005;
+        const nextStatus =
+          fresh.paidAmount <= 0
+            ? 'Pending'
+            : fresh.paidAmount + EPS >= fresh.commissionAmount
+              ? 'Paid'
+              : 'Partial';
+        await db.commission.update({
+          where: { id },
+          data: {
+            paidStatus: nextStatus,
+            paymentDate: nextStatus === 'Paid' ? new Date() : null,
+          },
+        });
+      }
     }
 
     const updated = await db.commission.findUnique({

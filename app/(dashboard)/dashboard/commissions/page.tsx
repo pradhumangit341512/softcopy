@@ -14,7 +14,7 @@ import {
   IndianRupee, Clock, CheckCircle2, TrendingUp,
   ChevronRight, Plus, FileSpreadsheet,
   FileText, Pencil, X, Target,
-  Search, Wallet,
+  Search, Wallet, Wallet2, History, Trash2, Loader2,
 } from 'lucide-react';
 
 import type { LucideIcon } from 'lucide-react';
@@ -32,9 +32,22 @@ interface Commission {
   dealAmount: number;
   commissionPercentage: number;
   commissionAmount: number;
-  paidStatus: string;
+  /** Running total from the payment ledger. 0 = Pending, < full = Partial, >= full = Paid. */
+  paidAmount: number;
+  paidStatus: string; // 'Pending' | 'Partial' | 'Paid'
   createdAt: string;
   paymentReference?: string;
+}
+
+interface CommissionPaymentRow {
+  id: string;
+  amount: number;
+  paidOn: string;
+  method: string | null;
+  reference: string | null;
+  notes: string | null;
+  createdAt: string;
+  recorder?: { id: string; name: string } | null;
 }
 
 interface Client { id: string; clientName: string; }
@@ -45,7 +58,15 @@ interface MonthlyBudget {
   targetAmount: number;
 }
 
-type FilterType = 'all' | 'Pending' | 'Paid';
+type FilterType = 'all' | 'Pending' | 'Partial' | 'Paid';
+
+const PAYMENT_METHODS: { value: string; label: string }[] = [
+  { value: 'cash',          label: 'Cash' },
+  { value: 'upi',           label: 'UPI' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'cheque',        label: 'Cheque' },
+  { value: 'other',         label: 'Other' },
+];
 
 // ─────────────────────────────────────────
 // Helpers
@@ -97,12 +118,18 @@ const StatCard = ({
   );
 };
 
+const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
+  Paid:    { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  Partial: { bg: 'bg-orange-50',  text: 'text-orange-700',  dot: 'bg-orange-500'  },
+  Pending: { bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-500'   },
+};
+
 const StatusBadge = ({ status }: { status: string }) => {
-  const isPaid = status === 'Paid';
+  const s = STATUS_STYLES[status] ?? STATUS_STYLES.Pending;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
-      ${isPaid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+      ${s.bg} ${s.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
       {status}
     </span>
   );
@@ -142,7 +169,7 @@ export default function CommissionsPage() {
   const [editingBudget, setEditingBudget] = useState(false);
   const [savingBudget, setSavingBudget]   = useState(false);
 
-  type ModalMode = 'add' | 'edit' | 'markPaid' | null;
+  type ModalMode = 'add' | 'edit' | 'recordPayment' | 'history' | null;
   const [modalMode, setModalMode]         = useState<ModalMode>(null);
   const [selectedCommission, setSelected] = useState<Commission | null>(null);
   const [submitting, setSubmitting]       = useState(false);
@@ -152,7 +179,27 @@ export default function CommissionsPage() {
     commissionPercentage: '5', paidStatus: 'Pending', paymentReference: '',
   };
   const [form, setForm] = useState(emptyForm);
-  const closeModal = () => { setModalMode(null); setSelected(null); setForm(emptyForm); };
+
+  const emptyPaymentForm = {
+    amount: '',
+    paidOn: new Date().toISOString().slice(0, 10),
+    method: 'cash',
+    reference: '',
+    notes: '',
+  };
+  const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
+
+  // Payment history cache — loaded on demand when user opens the history modal.
+  const [history, setHistory]                 = useState<CommissionPaymentRow[]>([]);
+  const [historyLoading, setHistoryLoading]   = useState(false);
+
+  const closeModal = () => {
+    setModalMode(null);
+    setSelected(null);
+    setForm(emptyForm);
+    setPaymentForm(emptyPaymentForm);
+    setHistory([]);
+  };
 
   // ─── Fetch ───
   const fetchCommissions = useCallback(async () => {
@@ -258,6 +305,8 @@ export default function CommissionsPage() {
     setModalMode('edit');
   };
 
+  // paidStatus is intentionally not sent — it's derived from the payment
+  // ledger. Use the Record Payment modal to change payment state.
   const handleEdit = async () => {
     if (!selectedCommission) return;
     setSubmitting(true);
@@ -269,7 +318,6 @@ export default function CommissionsPage() {
           salesPersonName: form.salesPersonName?.trim() || null,
           dealAmount: Number(form.dealAmount),
           commissionPercentage: Number(form.commissionPercentage),
-          paidStatus: form.paidStatus,
           paymentReference: form.paymentReference || undefined,
         }),
       });
@@ -284,24 +332,92 @@ export default function CommissionsPage() {
     }
   };
 
-  // ─── Mark Paid ───
-  const handleMarkPaid = async () => {
+  // ─── Record a (partial or full) payment ───
+  const handleRecordPayment = async () => {
     if (!selectedCommission) return;
+    const amt = Number(paymentForm.amount);
+    if (!amt || amt <= 0) {
+      addToast({ type: 'error', message: 'Enter a valid amount' });
+      return;
+    }
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/commissions/${selectedCommission.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`/api/commissions/${selectedCommission.id}/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ paidStatus: 'Paid', paymentReference: form.paymentReference }),
+        body: JSON.stringify({
+          amount: amt,
+          paidOn: paymentForm.paidOn,
+          method: paymentForm.method || null,
+          reference: paymentForm.reference?.trim() || null,
+          notes: paymentForm.notes?.trim() || null,
+        }),
       });
-      if (!res.ok) throw new Error('Failed');
-      addToast({ type: 'success', message: 'Commission marked as paid' });
-      closeModal(); fetchCommissions();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to record payment');
+
+      const isPaid = data.commission?.paidStatus === 'Paid';
+      addToast({
+        type: 'success',
+        message: isPaid
+          ? 'Commission is now fully paid.'
+          : `Payment of ${fmt(amt)} recorded. Remaining: ${fmt(
+              (data.commission?.commissionAmount ?? 0) - (data.commission?.paidAmount ?? 0)
+            )}`,
+      });
+      closeModal();
+      fetchCommissions();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to mark as paid';
+      const msg = err instanceof Error ? err.message : 'Failed to record payment';
       addToast({ type: 'error', message: msg });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /** Load the payment history for the currently-selected commission. */
+  const loadHistory = async (commissionId: string) => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/commissions/${commissionId}/payments`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to load payment history');
+      const data = await res.json();
+      setHistory(data.payments || []);
+    } catch (err: unknown) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to load payment history',
+      });
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  /** Remove a previously-recorded payment (soft delete). */
+  const deletePayment = async (paymentId: string) => {
+    if (!selectedCommission) return;
+    if (!confirm('Remove this payment? The running total will be recalculated.')) return;
+    try {
+      const res = await fetch(
+        `/api/commissions/${selectedCommission.id}/payments/${paymentId}`,
+        { method: 'DELETE', credentials: 'include' }
+      );
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Failed to remove payment');
+      }
+      addToast({ type: 'success', message: 'Payment removed' });
+      await loadHistory(selectedCommission.id);
+      fetchCommissions();
+    } catch (err: unknown) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to remove payment',
+      });
     }
   };
 
@@ -411,8 +527,29 @@ export default function CommissionsPage() {
   ];
 
   const FILTERS: { key: FilterType; label: string }[] = [
-    { key: 'all', label: 'All' }, { key: 'Pending', label: 'Pending' }, { key: 'Paid', label: 'Paid' },
+    { key: 'all',     label: 'All'     },
+    { key: 'Pending', label: 'Pending' },
+    { key: 'Partial', label: 'Partial' },
+    { key: 'Paid',    label: 'Paid'    },
   ];
+
+  /** Convenience: open the Record Payment modal for a commission. */
+  const openRecordPayment = (c: Commission) => {
+    setSelected(c);
+    const remaining = Math.max(0, c.commissionAmount - (c.paidAmount ?? 0));
+    setPaymentForm({
+      ...emptyPaymentForm,
+      amount: remaining > 0 ? String(remaining) : '',
+    });
+    setModalMode('recordPayment');
+  };
+
+  /** Convenience: open the Payment History modal and load rows. */
+  const openHistory = (c: Commission) => {
+    setSelected(c);
+    setModalMode('history');
+    loadHistory(c.id);
+  };
 
   const computedCommission = form.dealAmount && form.commissionPercentage
     ? (Number(form.dealAmount) * Number(form.commissionPercentage)) / 100 : 0;
@@ -617,88 +754,129 @@ export default function CommissionsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {commissions.map(c => (
-                    <tr key={c.id} className="hover:bg-gray-50/60 transition-colors">
-                      <td className="px-4 py-3.5 text-sm font-semibold text-gray-800">{c.client.clientName}</td>
-                      <td className="px-4 py-3.5 text-sm text-gray-600">{getSalesPerson(c)}</td>
-                      <td className="px-4 py-3.5 text-sm text-right text-gray-700">{fmt(c.dealAmount)}</td>
-                      <td className="px-4 py-3.5 text-sm text-right text-gray-700">{c.commissionPercentage}%</td>
-                      <td className="px-4 py-3.5 text-sm text-right font-bold text-gray-900">{fmt(c.commissionAmount)}</td>
-                      <td className="px-4 py-3.5 text-center"><StatusBadge status={c.paidStatus} /></td>
-                      <td className="px-4 py-3.5 text-xs text-gray-400">
-                        {new Date(c.createdAt).toLocaleDateString('en-IN')}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button onClick={() => openEdit(c)}
-                            className="w-7 h-7 rounded-lg border border-gray-200 bg-white
-                              flex items-center justify-center text-gray-400 hover:text-blue-600
-                              hover:border-blue-200 transition-colors">
-                            <Pencil size={12} />
-                          </button>
-                          {c.paidStatus === 'Pending' && (
-                            <button onClick={() => { setSelected(c); setModalMode('markPaid'); }}
-                              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700
-                                border border-emerald-200 bg-emerald-50 hover:bg-emerald-100
-                                px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap">
-                              Mark Paid
-                            </button>
+                  {commissions.map(c => {
+                    const paid = c.paidAmount ?? 0;
+                    const remaining = Math.max(0, c.commissionAmount - paid);
+                    const isFullyPaid = c.paidStatus === 'Paid';
+                    return (
+                      <tr key={c.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-4 py-3.5 text-sm font-semibold text-gray-800">{c.client.clientName}</td>
+                        <td className="px-4 py-3.5 text-sm text-gray-600">{getSalesPerson(c)}</td>
+                        <td className="px-4 py-3.5 text-sm text-right text-gray-700">{fmt(c.dealAmount)}</td>
+                        <td className="px-4 py-3.5 text-sm text-right text-gray-700">{c.commissionPercentage}%</td>
+                        <td className="px-4 py-3.5 text-sm text-right font-bold text-gray-900">
+                          <div>{fmt(c.commissionAmount)}</div>
+                          {paid > 0 && !isFullyPaid && (
+                            <div className="text-xs font-medium text-orange-600 mt-0.5">
+                              Paid {fmt(paid)} · {fmt(remaining)} left
+                            </div>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3.5 text-center"><StatusBadge status={c.paidStatus} /></td>
+                        <td className="px-4 py-3.5 text-xs text-gray-400">
+                          {new Date(c.createdAt).toLocaleDateString('en-IN')}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <button onClick={() => openEdit(c)}
+                              title="Edit commission"
+                              className="w-7 h-7 rounded-lg border border-gray-200 bg-white
+                                flex items-center justify-center text-gray-400 hover:text-blue-600
+                                hover:border-blue-200 transition-colors">
+                              <Pencil size={12} />
+                            </button>
+                            <button onClick={() => openHistory(c)}
+                              title="Payment history"
+                              className="w-7 h-7 rounded-lg border border-gray-200 bg-white
+                                flex items-center justify-center text-gray-400 hover:text-purple-600
+                                hover:border-purple-200 transition-colors">
+                              <History size={12} />
+                            </button>
+                            {!isFullyPaid && (
+                              <button onClick={() => openRecordPayment(c)}
+                                className="text-xs font-semibold text-emerald-600 hover:text-emerald-700
+                                  border border-emerald-200 bg-emerald-50 hover:bg-emerald-100
+                                  px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap">
+                                Record Payment
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile cards */}
             <div className="sm:hidden divide-y divide-gray-100">
-              {commissions.map(c => (
-                <div key={c.id} className="px-4 py-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">{c.client.clientName}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{getSalesPerson(c)}</p>
-                      <p className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleDateString('en-IN')}</p>
+              {commissions.map(c => {
+                const paid = c.paidAmount ?? 0;
+                const remaining = Math.max(0, c.commissionAmount - paid);
+                const isFullyPaid = c.paidStatus === 'Paid';
+                const isPartial   = c.paidStatus === 'Partial';
+                return (
+                  <div key={c.id} className="px-4 py-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{c.client.clientName}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{getSalesPerson(c)}</p>
+                        <p className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleDateString('en-IN')}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <StatusBadge status={c.paidStatus} />
+                        <p className="text-sm font-bold text-gray-900">{fmt(c.commissionAmount)}</p>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <StatusBadge status={c.paidStatus} />
-                      <p className="text-sm font-bold text-gray-900">{fmt(c.commissionAmount)}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-gray-50 rounded-xl p-2.5">
+                        <p className="text-xs text-gray-400">Deal</p>
+                        <p className="text-xs font-bold text-gray-700 mt-0.5">{fmt(c.dealAmount)}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-xl p-2.5">
+                        <p className="text-xs text-gray-400">Rate</p>
+                        <p className="text-xs font-bold text-gray-700 mt-0.5">{c.commissionPercentage}%</p>
+                      </div>
+                      {isPartial ? (
+                        <div className="bg-orange-50 rounded-xl p-2.5">
+                          <p className="text-xs text-orange-500">Remaining</p>
+                          <p className="text-xs font-bold text-orange-700 mt-0.5">{fmt(remaining)}</p>
+                        </div>
+                      ) : (
+                        <div className="bg-emerald-50 rounded-xl p-2.5">
+                          <p className="text-xs text-emerald-500">{isFullyPaid ? 'Paid' : 'Earned'}</p>
+                          <p className="text-xs font-bold text-emerald-700 mt-0.5">
+                            {fmt(isFullyPaid ? paid : c.commissionAmount)}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-gray-50 rounded-xl p-2.5">
-                      <p className="text-xs text-gray-400">Deal</p>
-                      <p className="text-xs font-bold text-gray-700 mt-0.5">{fmt(c.dealAmount)}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-2.5">
-                      <p className="text-xs text-gray-400">Rate</p>
-                      <p className="text-xs font-bold text-gray-700 mt-0.5">{c.commissionPercentage}%</p>
-                    </div>
-                    <div className="bg-emerald-50 rounded-xl p-2.5">
-                      <p className="text-xs text-emerald-500">Earned</p>
-                      <p className="text-xs font-bold text-emerald-700 mt-0.5">{fmt(c.commissionAmount)}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => openEdit(c)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs
-                        font-semibold text-gray-600 border border-gray-200 bg-gray-50
-                        hover:bg-gray-100 rounded-xl transition-colors">
-                      <Pencil size={11} /> Edit
-                    </button>
-                    {c.paidStatus === 'Pending' && (
-                      <button onClick={() => { setSelected(c); setModalMode('markPaid'); }}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs
-                          font-semibold text-emerald-600 border border-emerald-200 bg-emerald-50
-                          hover:bg-emerald-100 rounded-xl transition-colors">
-                        Mark Paid <ChevronRight size={11} />
+                    <div className="flex gap-2">
+                      <button onClick={() => openEdit(c)}
+                        className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs
+                          font-semibold text-gray-600 border border-gray-200 bg-gray-50
+                          hover:bg-gray-100 rounded-xl transition-colors">
+                        <Pencil size={11} /> Edit
                       </button>
-                    )}
+                      <button onClick={() => openHistory(c)}
+                        className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs
+                          font-semibold text-purple-600 border border-purple-200 bg-purple-50
+                          hover:bg-purple-100 rounded-xl transition-colors">
+                        <History size={11} /> History
+                      </button>
+                      {!isFullyPaid && (
+                        <button onClick={() => openRecordPayment(c)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs
+                            font-semibold text-emerald-600 border border-emerald-200 bg-emerald-50
+                            hover:bg-emerald-100 rounded-xl transition-colors">
+                          Record Payment <ChevronRight size={11} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {totalPages > 1 && (
@@ -803,23 +981,41 @@ export default function CommissionsPage() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Payment Status</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {['Pending', 'Paid'].map(s => (
-                    <button key={s} type="button"
-                      onClick={() => setForm({ ...form, paidStatus: s })}
-                      className={`py-2.5 text-sm font-semibold rounded-xl border transition-all
-                        ${form.paidStatus === s
-                          ? s === 'Paid'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                            : 'bg-amber-50 text-amber-700 border-amber-300'
-                          : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
-                      {s}
-                    </button>
-                  ))}
+              {/* Payment status toggle only makes sense when CREATING — after
+                  that, status is derived from the payment ledger. */}
+              {modalMode === 'add' ? (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Already paid?</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Pending', 'Paid'].map(s => (
+                      <button key={s} type="button"
+                        onClick={() => setForm({ ...form, paidStatus: s })}
+                        className={`py-2.5 text-sm font-semibold rounded-xl border transition-all
+                          ${form.paidStatus === s
+                            ? s === 'Paid'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                              : 'bg-amber-50 text-amber-700 border-amber-300'
+                            : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
+                        {s === 'Paid' ? 'Fully paid upfront' : 'Not paid yet'}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Choose &quot;Fully paid upfront&quot; only if the whole commission was settled
+                    when you&apos;re recording it. Partial payments are recorded via the
+                    &quot;Record Payment&quot; button on the commission row.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 flex items-start gap-2">
+                  <Wallet2 size={14} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-gray-500">
+                    Payment status is tracked from the payment ledger. Use{' '}
+                    <strong>Record Payment</strong> on the commission row to log a new
+                    instalment, or <strong>History</strong> to review / remove past entries.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5">
@@ -850,57 +1046,270 @@ export default function CommissionsPage() {
         </div>
       )}
 
-      {/* MARK AS PAID MODAL */}
-      {modalMode === 'markPaid' && selectedCommission && (
+      {/* RECORD PAYMENT MODAL */}
+      {modalMode === 'recordPayment' && selectedCommission && (() => {
+        const paid      = selectedCommission.paidAmount ?? 0;
+        const remaining = Math.max(0, selectedCommission.commissionAmount - paid);
+        const entered   = Number(paymentForm.amount) || 0;
+        const willBeFull = entered + 0.005 >= remaining && entered > 0;
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center
+            justify-center p-3 sm:p-6">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Record Payment</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {selectedCommission.client.clientName} · {getSalesPerson(selectedCommission)}
+                  </p>
+                </div>
+                <button onClick={closeModal}
+                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center
+                    justify-center text-gray-500 transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="px-5 py-5 space-y-4">
+                {/* Balance summary */}
+                <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-xs text-gray-400">Total</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">{fmt(selectedCommission.commissionAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-emerald-500">Paid so far</p>
+                    <p className="text-sm font-bold text-emerald-700 mt-0.5">{fmt(paid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-orange-500">Remaining</p>
+                    <p className="text-sm font-bold text-orange-700 mt-0.5">{fmt(remaining)}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Amount received (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
+                    <input type="number" min="0" step="0.01" max={remaining}
+                      value={paymentForm.amount}
+                      onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                      placeholder="0"
+                      className="w-full pl-7 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                        focus:outline-none focus:ring-2 focus:ring-blue-500/20
+                        focus:border-blue-400 text-gray-800" />
+                  </div>
+                  <div className="flex gap-1.5 mt-2">
+                    <button type="button"
+                      onClick={() => setPaymentForm({ ...paymentForm, amount: String(remaining) })}
+                      className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100
+                        px-2 py-1 rounded-lg transition-colors">
+                      Full remaining
+                    </button>
+                    <button type="button"
+                      onClick={() => setPaymentForm({ ...paymentForm, amount: String(Math.round(remaining / 2)) })}
+                      className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100
+                        px-2 py-1 rounded-lg transition-colors">
+                      Half
+                    </button>
+                  </div>
+                  {willBeFull && (
+                    <p className="text-xs text-emerald-600 font-medium mt-2 flex items-center gap-1">
+                      <CheckCircle2 size={12} /> This payment will fully settle the commission.
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                      Paid on <span className="text-red-500">*</span>
+                    </label>
+                    <input type="date"
+                      value={paymentForm.paidOn}
+                      onChange={e => setPaymentForm({ ...paymentForm, paidOn: e.target.value })}
+                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                        focus:outline-none focus:ring-2 focus:ring-blue-500/20
+                        focus:border-blue-400 text-gray-800" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Method</label>
+                    <select
+                      value={paymentForm.method}
+                      onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}
+                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                        focus:outline-none focus:ring-2 focus:ring-blue-500/20
+                        focus:border-blue-400 bg-white text-gray-800">
+                      {PAYMENT_METHODS.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Reference <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                  </label>
+                  <input type="text"
+                    value={paymentForm.reference}
+                    onChange={e => setPaymentForm({ ...paymentForm, reference: e.target.value })}
+                    placeholder="Cheque no., UPI Ref, Transaction ID…"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                      focus:outline-none focus:ring-2 focus:ring-blue-500/20
+                      focus:border-blue-400 text-gray-800 placeholder:text-gray-400" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                    Notes <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                  </label>
+                  <textarea
+                    value={paymentForm.notes}
+                    onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                    rows={2}
+                    placeholder="Any context about this payment…"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                      focus:outline-none focus:ring-2 focus:ring-blue-500/20
+                      focus:border-blue-400 text-gray-800 placeholder:text-gray-400" />
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
+                <button onClick={closeModal}
+                  className="flex-1 py-2.5 text-sm font-semibold text-gray-600 border
+                    border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={handleRecordPayment}
+                  disabled={submitting || !entered || entered <= 0 || entered > remaining + 0.005}
+                  className="flex-1 py-2.5 text-sm font-semibold text-white bg-emerald-600
+                    hover:bg-emerald-700 rounded-xl transition-colors disabled:opacity-60
+                    disabled:cursor-not-allowed">
+                  {submitting ? 'Saving...' : willBeFull ? 'Settle & mark Paid' : 'Record Payment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* PAYMENT HISTORY MODAL */}
+      {modalMode === 'history' && selectedCommission && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center
           justify-center p-3 sm:p-6">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-base font-bold text-gray-900">Mark as Paid</h3>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <History size={16} className="text-purple-500" />
+                  Payment History
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {selectedCommission.client.clientName} · {fmt(selectedCommission.commissionAmount)} total
+                </p>
+              </div>
               <button onClick={closeModal}
                 className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center
                   justify-center text-gray-500 transition-colors">
                 <X size={16} />
               </button>
             </div>
-            <div className="px-5 py-5 space-y-4">
-              <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Client</span>
-                  <span className="font-semibold text-gray-800">{selectedCommission.client.clientName}</span>
+
+            <div className="px-5 py-4 space-y-3">
+              {/* Running balance */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-[11px] text-gray-400">Total</p>
+                  <p className="text-sm font-bold text-gray-800 mt-0.5">
+                    {fmt(selectedCommission.commissionAmount)}
+                  </p>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Sales Person</span>
-                  <span className="font-semibold text-gray-800">{getSalesPerson(selectedCommission)}</span>
+                <div className="bg-emerald-50 rounded-xl p-3">
+                  <p className="text-[11px] text-emerald-500">Paid</p>
+                  <p className="text-sm font-bold text-emerald-700 mt-0.5">
+                    {fmt(selectedCommission.paidAmount ?? 0)}
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Amount</span>
-                  <span className="text-xl font-bold text-emerald-600">{fmt(selectedCommission.commissionAmount)}</span>
+                <div className="bg-orange-50 rounded-xl p-3">
+                  <p className="text-[11px] text-orange-500">Remaining</p>
+                  <p className="text-sm font-bold text-orange-700 mt-0.5">
+                    {fmt(Math.max(0, selectedCommission.commissionAmount - (selectedCommission.paidAmount ?? 0)))}
+                  </p>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                  Payment Reference <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                </label>
-                <input type="text" value={form.paymentReference}
-                  onChange={e => setForm({ ...form, paymentReference: e.target.value })}
-                  placeholder="Cheque no., UPI Ref, Transaction ID..."
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                    focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                    focus:border-blue-400 text-gray-800" />
-              </div>
+
+              {/* Payment list */}
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-10 text-gray-400">
+                  <Loader2 size={18} className="animate-spin" />
+                  <span className="ml-2 text-sm">Loading payments…</span>
+                </div>
+              ) : history.length === 0 ? (
+                <div className="text-center py-8">
+                  <Wallet2 size={24} className="mx-auto text-gray-300 mb-2" />
+                  <p className="text-sm text-gray-400">No payments recorded yet.</p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+                  {history.map(p => (
+                    <li key={p.id} className="px-3 py-3 flex items-start gap-3 bg-white">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                        <IndianRupee size={14} className="text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-bold text-gray-900">{fmt(p.amount)}</span>
+                          <span className="text-xs text-gray-400">
+                            {new Date(p.paidOn).toLocaleDateString('en-IN', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
+                          {p.method && (
+                            <span className="capitalize">
+                              {PAYMENT_METHODS.find(m => m.value === p.method)?.label ?? p.method}
+                            </span>
+                          )}
+                          {p.reference && <span>Ref: {p.reference}</span>}
+                          {p.recorder?.name && <span>by {p.recorder.name}</span>}
+                        </div>
+                        {p.notes && (
+                          <p className="text-xs text-gray-500 mt-1 italic">&ldquo;{p.notes}&rdquo;</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => deletePayment(p.id)}
+                        title="Remove this payment"
+                        className="w-7 h-7 rounded-lg border border-gray-200 bg-white
+                          flex items-center justify-center text-gray-400 hover:text-red-600
+                          hover:border-red-200 transition-colors flex-shrink-0"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
+
             <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
               <button onClick={closeModal}
                 className="flex-1 py-2.5 text-sm font-semibold text-gray-600 border
                   border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                Cancel
+                Close
               </button>
-              <button onClick={handleMarkPaid} disabled={submitting}
-                className="flex-1 py-2.5 text-sm font-semibold text-white bg-emerald-600
-                  hover:bg-emerald-700 rounded-xl transition-colors disabled:opacity-60">
-                {submitting ? 'Saving...' : 'Confirm Paid'}
-              </button>
+              {selectedCommission.paidStatus !== 'Paid' && (
+                <button
+                  onClick={() => openRecordPayment(selectedCommission)}
+                  className="flex-1 py-2.5 text-sm font-semibold text-white bg-emerald-600
+                    hover:bg-emerald-700 rounded-xl transition-colors">
+                  + Record Payment
+                </button>
+              )}
             </div>
           </div>
         </div>
