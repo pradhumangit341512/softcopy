@@ -28,6 +28,23 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const skip = (page - 1) * limit;
 
+    // Optional date range — commissions whose createdAt falls inside
+    // [from, to]. Both bounds are inclusive; invalid ISO strings are
+    // silently ignored so a bad URL param never breaks the listing.
+    const fromRaw = searchParams.get("from");
+    const toRaw   = searchParams.get("to");
+    const fromDate = fromRaw ? new Date(fromRaw) : null;
+    const toDate   = toRaw   ? new Date(toRaw)   : null;
+    const dateRange: { gte?: Date; lte?: Date } = {};
+    if (fromDate && !isNaN(fromDate.getTime())) dateRange.gte = fromDate;
+    if (toDate && !isNaN(toDate.getTime())) {
+      // Bump `to` to end-of-day so a filter like "2026-04-01 → 2026-04-01"
+      // actually includes everything created that day.
+      toDate.setHours(23, 59, 59, 999);
+      dateRange.lte = toDate;
+    }
+    const hasDateRange = dateRange.gte !== undefined || dateRange.lte !== undefined;
+
     const where: Record<string, unknown> = {
       companyId: payload.companyId,
       deletedAt: null,
@@ -37,6 +54,7 @@ export async function GET(req: NextRequest) {
       where.client = { createdBy: payload.userId };
     }
     if (paidStatus) where.paidStatus = paidStatus;
+    if (hasDateRange) where.createdAt = dateRange;
     if (search) {
       where.OR = [
         { client: { clientName: { contains: search, mode: "insensitive" } } },
@@ -44,9 +62,10 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    // Totals are company-wide (not affected by paidStatus filter), but still
-    // respect team-member scoping. Uses groupBy to replace the old
-    // "load every row then sum in JS" N+1.
+    // Totals respect team-member scoping AND the date range (so the stat
+    // cards match what's visible in the list), but NOT the paidStatus/search
+    // filters — those narrow the rows a user is looking at, whereas totals
+    // describe the whole period.
     const totalsWhere: Record<string, unknown> = {
       companyId: payload.companyId,
       deletedAt: null,
@@ -54,8 +73,14 @@ export async function GET(req: NextRequest) {
     if (isTeamMember(payload.role)) {
       totalsWhere.client = { createdBy: payload.userId };
     }
+    if (hasDateRange) totalsWhere.createdAt = dateRange;
 
-    const [commissions, total, grouped] = await Promise.all([
+    // Totals come from the ledger-aware fields so Partial rows are split
+    // correctly: the paid portion counts as paid, the unpaid portion as
+    // pending. The previous implementation grouped by paidStatus and
+    // treated a whole Partial commission as either fully paid or fully
+    // pending — wrong for every partial-payment case.
+    const [commissions, total, sums] = await Promise.all([
       db.commission.findMany({
         where,
         skip,
@@ -67,24 +92,22 @@ export async function GET(req: NextRequest) {
         },
       }),
       db.commission.count({ where }),
-      db.commission.groupBy({
-        by: ["paidStatus"],
+      db.commission.aggregate({
         where: totalsWhere,
-        _sum: { commissionAmount: true },
+        _sum: { commissionAmount: true, paidAmount: true },
       }),
     ]);
 
-    const totalCommission = grouped.reduce(
-      (s, row) => s + (row._sum.commissionAmount ?? 0),
-      0
-    );
-    const pendingCommission = grouped
-      .filter((row) => row.paidStatus === "Pending")
-      .reduce((s, row) => s + (row._sum.commissionAmount ?? 0), 0);
+    const totalCommission   = sums._sum.commissionAmount ?? 0;
+    const paidCommission    = sums._sum.paidAmount ?? 0;
+    const pendingCommission = Math.max(0, totalCommission - paidCommission);
 
     return NextResponse.json({
       commissions,
-      totals: { totalCommission, pendingCommission },
+      // `paidCommission` is sent explicitly so the client doesn't have to
+      // derive it (total − pending), which would drift if either value
+      // rounded differently. Keep both keys so older consumers keep working.
+      totals: { totalCommission, pendingCommission, paidCommission },
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (error) {

@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth } from "@/lib/auth";
-import { isTeamMember } from "@/lib/authorize";
+import { requireAdmin } from "@/lib/authorize";
 import { updateCommissionSchema, parseBody } from "@/lib/validations";
 import { recordAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
 // ── PUT: Update commission ──
+// Editing a commission's financial metadata (deal amount, commission %,
+// salesperson attribution) is admin-only. Team members may create their
+// own commissions and record payments against them, but they cannot
+// rewrite what was recorded at deal-close. This prevents a team member
+// from quietly inflating a deal after the fact.
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,24 +22,17 @@ export async function PUT(
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
+
     const { id } = await params;
 
-    // Load with relation for team-member ownership check.
     const existing = await db.commission.findFirst({
       where: { id, companyId: payload.companyId, deletedAt: null },
       include: { client: { select: { createdBy: true } } },
     });
     if (!existing) {
       return NextResponse.json({ error: "Commission not found" }, { status: 404 });
-    }
-    if (
-      isTeamMember(payload.role) &&
-      existing.client?.createdBy !== payload.userId
-    ) {
-      return NextResponse.json(
-        { error: "Forbidden — not your commission" },
-        { status: 403 }
-      );
     }
 
     const parsed = await parseBody(req, updateCommissionSchema);
@@ -107,6 +105,9 @@ export async function PUT(
 }
 
 // ── DELETE: Soft remove commission ──
+// Admin-only: removing a commission wipes the deal from every report, so
+// it needs higher authority than day-to-day logging. Team members cannot
+// retract their own entries.
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -116,23 +117,16 @@ export async function DELETE(
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
+
     const { id } = await params;
 
     const existing = await db.commission.findFirst({
       where: { id, companyId: payload.companyId, deletedAt: null },
-      include: { client: { select: { createdBy: true } } },
     });
     if (!existing) {
       return NextResponse.json({ error: "Commission not found" }, { status: 404 });
-    }
-    if (
-      isTeamMember(payload.role) &&
-      existing.client?.createdBy !== payload.userId
-    ) {
-      return NextResponse.json(
-        { error: "Forbidden — not your commission" },
-        { status: 403 }
-      );
     }
 
     const result = await db.commission.updateMany({

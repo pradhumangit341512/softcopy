@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyAuth } from '@/lib/auth';
-import { isTeamMember } from '@/lib/authorize';
+import { requireAdmin } from '@/lib/authorize';
 import { recordAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
@@ -40,7 +40,13 @@ async function recomputeCommissionTotals(commissionId: string) {
   });
 }
 
-/** DELETE /api/commissions/:id/payments/:paymentId — soft-delete a payment. */
+/**
+ * DELETE /api/commissions/:id/payments/:paymentId — soft-delete a payment.
+ *
+ * Admin-only: reversing a recorded payment changes the running totals and
+ * audit trail, so only admin/superadmin can do it. Team members can record
+ * new payments but cannot undo past ones.
+ */
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; paymentId: string }> }
@@ -49,24 +55,16 @@ export async function DELETE(
     const payload = await verifyAuth(req);
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
+
     const { id, paymentId } = await params;
 
     const payment = await db.commissionPayment.findFirst({
       where: { id: paymentId, commissionId: id, companyId: payload.companyId, deletedAt: null },
-      include: {
-        commission: {
-          include: { client: { select: { createdBy: true } } },
-        },
-      },
     });
     if (!payment) {
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
-    }
-    if (
-      isTeamMember(payload.role) &&
-      payment.commission?.client?.createdBy !== payload.userId
-    ) {
-      return NextResponse.json({ error: 'Forbidden — not your commission' }, { status: 403 });
     }
 
     await db.commissionPayment.update({
