@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Poppins } from 'next/font/google';
 import './globals.css';
 import { ToastProvider } from '@/components/common/Toast';
+import { Analytics } from '@vercel/analytics/next';
 
 // Import fonts
 const inter = Inter({
@@ -107,6 +108,7 @@ export default function RootLayout({
         </ToastProvider>
 
         {/* Analytics Tracking */}
+        <Analytics />
         <noscript>
           <div>
             JavaScript is required to use this application. Please enable JavaScript
