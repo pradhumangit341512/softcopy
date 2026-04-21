@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, Poppins } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/react';
 import './globals.css';
 import { ToastProvider } from '@/components/common/Toast';
 
@@ -106,7 +107,9 @@ export default function RootLayout({
           {children}
         </ToastProvider>
 
-        {/* Analytics Tracking */}
+        {/* Vercel Analytics */}
+        <Analytics />
+
         <noscript>
           <div>
             JavaScript is required to use this application. Please enable JavaScript

@@ -1,38 +1,27 @@
 /**
- * POST /api/auth/login  — consolidated auth entrypoint for Option A flow.
+ * POST /api/auth/login  — consolidated auth entrypoint.
  *
- * Three possible paths, all keyed off { email, password, otp? }:
+ * Single-session enforcement: only ONE active session per account at a time.
+ * When a new login succeeds, all previous sessions are terminated instantly
+ * (tokenVersion bump + session close + trusted-device revocation).
  *
- *   A. TRUSTED DEVICE (no OTP needed):
- *      User has a valid `trusted_device` cookie AND their role does not
- *      force OTP (admin/superadmin always force OTP). We validate the
- *      password, issue the JWT, return `{ user, redirectTo }`.
- *
- *   B. FIRST STEP, OTP REQUIRED:
- *      Device is untrusted (no cookie, expired, revoked, or role-forced).
- *      We validate password + send OTP to the user's email, return
- *      `{ requireOTP: true }`. Frontend shows the OTP input.
- *
- *   C. SECOND STEP, VERIFYING OTP:
- *      Body contains `otp`. We re-validate password, verify OTP, issue JWT,
- *      AND remember this device so next login skips OTP.
+ * OTP is ALWAYS required — no trusted-device bypass. Every login goes through:
+ *   1. Email + password → server validates, sends OTP → { requireOTP: true }
+ *   2. Email + password + OTP → server verifies all three → JWT issued
  *
  * Security:
- *   - Emailed-unverified accounts are blocked with AUTH_EMAIL_NOT_VERIFIED
- *     (they must click the signup link before they can log in).
- *   - Subscription expiry enforced here for clearer error messages than
- *     the middleware would provide.
+ *   - Emailed-unverified accounts are blocked with AUTH_EMAIL_NOT_VERIFIED.
+ *   - Subscription expiry enforced here for clearer error messages.
  *   - Constant-time bcrypt against shield hash for missing users.
- *   - OTP attempt counter increments atomically BEFORE compare (via
- *     verifyEmailOtp helper).
- *   - Admin / superadmin bypasses the trusted-device shortcut.
+ *   - OTP attempt counter increments atomically BEFORE compare.
+ *   - Single-session: old JWTs are instantly invalidated via tokenVersion bump.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { generateToken, getEnumerationShieldHash } from '@/lib/auth';
-import { sendOTPEmail } from '@/lib/email';
+import { sendOTPEmail, sendLoginAlertEmail } from '@/lib/email';
 import {
   generateOTP, hashOTP, verifyEmailOtp,
   OTP_EXPIRY_MS, RESEND_COOLDOWN,
@@ -42,13 +31,6 @@ import { authLimiter, getClientIp, rateLimited } from '@/lib/rate-limit';
 import { ErrorCode, apiError, newRequestId } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { recordAudit } from '@/lib/audit';
-import {
-  isDeviceTrusted,
-  rememberDevice,
-  setDeviceCookie,
-  getDeviceCookie,
-  roleRequiresOtp,
-} from '@/lib/trusted-device';
 
 export const runtime = 'nodejs';
 
@@ -64,6 +46,24 @@ function redirectPathFor(role: string): string {
   if (role === 'superadmin') return '/superadmin';
   if (role === 'admin') return '/admin/dashboard';
   return '/team/dashboard';
+}
+
+function parseUserAgent(ua: string): string {
+  if (!ua) return 'Unknown device';
+  let browser = 'Unknown browser';
+  if (ua.includes('Edg/')) browser = 'Edge';
+  else if (ua.includes('Chrome/')) browser = 'Chrome';
+  else if (ua.includes('Firefox/')) browser = 'Firefox';
+  else if (ua.includes('Safari/') && !ua.includes('Chrome')) browser = 'Safari';
+
+  let os = 'Unknown OS';
+  if (ua.includes('Windows')) os = 'Windows';
+  else if (ua.includes('Mac OS')) os = 'macOS';
+  else if (ua.includes('Linux')) os = 'Linux';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+
+  return `${browser} on ${os}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -121,7 +121,6 @@ export async function POST(req: NextRequest) {
         { requestId }
       );
     }
-    // Suspended companies cannot log in. Superadmin (no companyId) bypasses.
     if (user.company && user.company.status === 'suspended' && user.role !== 'superadmin') {
       return apiError(
         ErrorCode.AUTH_ACCOUNT_INACTIVE,
@@ -137,21 +136,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Decide: does this login require OTP? ──
-    const deviceToken = getDeviceCookie(req);
-    const deviceTrusted = !roleRequiresOtp(user.role) && await isDeviceTrusted(user.id, deviceToken);
-
     // ═════════════════════════════════════════════
-    // PATH A — Trusted device, no OTP needed → issue JWT immediately
-    // ═════════════════════════════════════════════
-    if (deviceTrusted) {
-      const response = await completeLogin(user, req, requestId);
-      log.info({ userId: user.id, path: 'trusted-device' }, 'login success');
-      return response;
-    }
-
-    // ═════════════════════════════════════════════
-    // PATH C — OTP provided → verify + issue JWT + remember device
+    // OTP PROVIDED → verify + issue JWT (single session)
     // ═════════════════════════════════════════════
     if (otp) {
       const record = await db.emailOTP.findFirst({
@@ -181,36 +167,26 @@ export async function POST(req: NextRequest) {
 
       await db.emailOTP.delete({ where: { id: record.id } });
 
-      // Issue JWT + remember this device (unless role forces OTP every time)
       const response = await completeLogin(user, req, requestId);
-      if (!roleRequiresOtp(user.role)) {
-        const rawDeviceToken = await rememberDevice(user.id, {
-          userAgent: req.headers.get('user-agent') || undefined,
-          ipAddress: ip,
-        });
-        setDeviceCookie(response, rawDeviceToken);
-      }
-
-      log.info({ userId: user.id, path: 'otp-verified' }, 'login success');
+      log.info({ userId: user.id, path: 'otp-verified' }, 'login success (single session enforced)');
       return response;
     }
 
     // ═════════════════════════════════════════════
-    // PATH B — No OTP yet → generate + send, return requireOTP
+    // NO OTP → generate + send, return requireOTP
     // ═════════════════════════════════════════════
     const lastOTP = await db.emailOTP.findFirst({
       where: { email, purpose: 'login' },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Cooldown: silently return the same requireOTP response if a code was sent <60s ago.
     if (lastOTP && Date.now() - new Date(lastOTP.createdAt).getTime() < RESEND_COOLDOWN) {
       log.info({ userId: user.id, path: 'otp-cooldown' }, 'login cooldown hit');
       return NextResponse.json(
         {
           requireOTP: true,
           message: 'A code was already sent. Please check your email.',
-          reason: roleRequiresOtp(user.role) ? 'admin-2fa' : 'new-device',
+          reason: 'mandatory-otp',
         },
         { status: 200, headers: { 'X-Request-Id': requestId } }
       );
@@ -249,7 +225,6 @@ export async function POST(req: NextRequest) {
       !process.env.VERCEL &&
       !process.env.VERCEL_ENV;
     if (IS_DEV_LOCAL) {
-
       console.log(`\n🔑 [DEV] login OTP for ${email}: ${newOTP}\n`);
     }
 
@@ -257,7 +232,7 @@ export async function POST(req: NextRequest) {
       {
         requireOTP: true,
         message: "We've sent a verification code to your email.",
-        reason: roleRequiresOtp(user.role) ? 'admin-2fa' : 'new-device',
+        reason: 'mandatory-otp',
       },
       { status: 200, headers: { 'X-Request-Id': requestId } }
     );
@@ -268,9 +243,8 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Issue the auth JWT cookie + audit + compose the user-facing response.
- * Caller is responsible for also setting the trusted-device cookie if
- * this login qualifies.
+ * Single-session login: terminates all previous sessions, bumps tokenVersion,
+ * issues a fresh JWT with the new version. Only ONE device can be active.
  */
 async function completeLogin(
   user: Awaited<ReturnType<typeof db.user.findUnique>> & { company?: { subscriptionExpiry: Date; status: string } | null },
@@ -280,7 +254,44 @@ async function completeLogin(
   if (!user) throw new Error('completeLogin called with null user');
 
   const companyId = user.companyId ?? '';
+  const loginIp = getClientIp(req);
+  const loginUa = req.headers.get('user-agent') ?? '';
+  const now = new Date();
 
+  // ── 1. Terminate all previous sessions ──
+  // Bump tokenVersion → every existing JWT instantly fails verification
+  const updated = await db.user.update({
+    where: { id: user.id },
+    data: { tokenVersion: { increment: 1 } },
+    select: { tokenVersion: true },
+  });
+
+  // Close all open UserSession records
+  const openSessions = await db.userSession.findMany({
+    where: { userId: user.id, logoutAt: { isSet: false } },
+    select: { id: true, loginAt: true },
+  });
+  if (openSessions.length > 0) {
+    await Promise.all(
+      openSessions.map((s) =>
+        db.userSession.update({
+          where: { id: s.id },
+          data: {
+            logoutAt: now,
+            duration: Math.round((now.getTime() - s.loginAt.getTime()) / 60000),
+          },
+        }).catch(() => {})
+      )
+    );
+  }
+
+  // Revoke all trusted devices
+  await db.trustedDevice.updateMany({
+    where: { userId: user.id, revokedAt: null },
+    data: { revokedAt: now },
+  }).catch(() => {});
+
+  // ── 2. Issue fresh JWT with new tokenVersion ──
   const token = await generateToken(
     user.id,
     companyId,
@@ -288,9 +299,22 @@ async function completeLogin(
     user.email,
     {
       subscriptionExpiry: user.company?.subscriptionExpiry ?? null,
-      tokenVersion: user.tokenVersion,
+      tokenVersion: updated.tokenVersion,
     }
   );
+
+  // ── 3. Create the ONE active session ──
+  if (companyId) {
+    await db.userSession.create({
+      data: {
+        userId: user.id,
+        companyId,
+        loginAt: now,
+        ipAddress: loginIp,
+        userAgent: loginUa || undefined,
+      },
+    }).catch((err) => console.error('Session tracking failed:', err));
+  }
 
   await recordAudit({
     companyId,
@@ -298,21 +322,15 @@ async function completeLogin(
     action: 'auth.login',
     resource: 'User',
     resourceId: user.id,
+    metadata: { singleSession: true, previousSessions: openSessions.length },
     req,
   });
 
-  // Track login session for team-performance analytics
-  if (companyId) {
-    db.userSession.create({
-      data: {
-        userId: user.id,
-        companyId,
-        loginAt: new Date(),
-        ipAddress: getClientIp(req),
-        userAgent: req.headers.get('user-agent') ?? undefined,
-      },
-    }).catch((err) => console.error('Session tracking failed:', err));
-  }
+  // ── 4. Login alert email (fire-and-forget) ──
+  const device = parseUserAgent(loginUa);
+  sendLoginAlertEmail(user.email, user.name, device, loginIp).catch((err) =>
+    console.error('Login alert email failed:', err)
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { password: _pw, ...safeUser } = user;

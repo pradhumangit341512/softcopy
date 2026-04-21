@@ -25,7 +25,7 @@ export async function POST() {
 
     // 2. Close orphaned sessions (open for > 24h — user didn't log out)
     const orphanedSessions = await db.userSession.findMany({
-      where: { logoutAt: null, loginAt: { lt: oneDayAgo } },
+      where: { logoutAt: { isSet: false }, loginAt: { lt: oneDayAgo } },
       select: { id: true, loginAt: true },
     });
 

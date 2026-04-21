@@ -26,10 +26,14 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
 
-    const status = searchParams.get("status");
-    const search = searchParams.get("search");
-    const dateFrom = searchParams.get("dateFrom");
-    const dateTo = searchParams.get("dateTo");
+    const status     = searchParams.get("status");
+    const source     = searchParams.get("source");
+    const search     = searchParams.get("search");
+    const dateFrom   = searchParams.get("dateFrom");
+    const dateTo     = searchParams.get("dateTo");
+    const followUp   = searchParams.get("followUp");
+    const budgetMin  = searchParams.get("budgetMin");
+    const budgetMax  = searchParams.get("budgetMax");
     const page = Math.max(1, Number(searchParams.get("page") || 1));
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 10)));
     const skip = (page - 1) * limit;
@@ -48,7 +52,39 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (status) where.status = status;
+    // Multi-select status (comma-separated: "New,Interested")
+    if (status) {
+      const statuses = status.split(',').filter(Boolean);
+      if (statuses.length === 1) where.status = statuses[0];
+      else if (statuses.length > 1) where.status = { in: statuses };
+    }
+
+    // Multi-select source
+    if (source) {
+      const sources = source.split(',').filter(Boolean);
+      if (sources.length === 1) where.source = sources[0];
+      else if (sources.length > 1) where.source = { in: sources };
+    }
+
+    // Budget range
+    if (budgetMin || budgetMax) {
+      const budget: { gte?: number; lte?: number } = {};
+      if (budgetMin) budget.gte = Number(budgetMin);
+      if (budgetMax) budget.lte = Number(budgetMax);
+      where.budget = budget;
+    }
+
+    // Follow-up filter
+    if (followUp === 'overdue') {
+      where.followUpDate = { lt: new Date() };
+      where.status = where.status ?? { notIn: ['DealDone', 'Rejected'] };
+    } else if (followUp === 'today') {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+      where.followUpDate = { gte: todayStart, lte: todayEnd };
+    } else if (followUp === 'none') {
+      where.followUpDate = null;
+    }
 
     if (search) {
       where.OR = [
