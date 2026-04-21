@@ -28,6 +28,7 @@ const publicApiPaths = [
   '/api/cron/cleanup-otp',
   '/api/cron/cleanup-expired',
   '/api/cron/cleanup-sessions',
+  '/api/cron/weekly-report',
   '/api/dev/verify-user',
   '/api/dev/restore-data',
   '/api/dev/backfill-fields',

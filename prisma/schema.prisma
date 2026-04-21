@@ -322,6 +322,37 @@ model PaymentRecord {
   @@map("payment_records")
 }
 
+model Notification {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  companyId  String   @db.ObjectId
+  type       String   // 'OVERDUE' | 'DUE_TODAY' | 'VISIT_TODAY' | 'NEW_ASSIGNMENT'
+  clientId   String?  @db.ObjectId
+  title      String
+  message    String
+  severity   String   // 'red' | 'yellow' | 'green'
+  isRead     Boolean  @default(false)
+  dateKey    String   // 'YYYY-MM-DD' for idempotency
+  createdAt  DateTime @default(now())
+  @@unique([userId, clientId, type, dateKey])
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model EmailLog {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  recipientUserId String   @db.ObjectId
+  recipientEmail  String
+  emailType       String   // 'weekly_report'
+  status          String   // 'sent' | 'failed'
+  error           String?
+  sentAt          DateTime @default(now())
+  @@index([recipientUserId, sentAt])
+  @@index([emailType, sentAt])
+  @@map("email_logs")
+}
+
 model AuditLog {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   companyId  String   @db.ObjectId

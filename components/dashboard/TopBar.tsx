@@ -4,8 +4,7 @@ import { Menu, Bell, LogOut, User, Search, ChevronDown, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { NotificationDropdown } from '../notifications/NotificationDropdown';
-import { TodayVisit } from '@/lib/types';
+import { NotificationPanel } from '../notifications/NotificationPanel';
 
 interface TopBarProps {
   user: { name?: string; email?: string; role?: string } | null;
@@ -21,8 +20,7 @@ export function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
 
   const [showUserMenu, setShowUserMenu]           = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [todayVisits, setTodayVisits]             = useState<TodayVisit[]>([]);
-  const [, setLoadingVisits]                       = useState(false);
+  const [unreadCount, setUnreadCount]             = useState(0);
   const [showMobileSearch, setShowMobileSearch]   = useState(false);
   const [searchValue, setSearchValue]             = useState(
     () => searchParams.get('search') || ''
@@ -50,12 +48,17 @@ export function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
     if (showMobileSearch) mobileInputRef.current?.focus();
   }, [showMobileSearch]);
 
-  // Clear search when leaving /clients
+  // Clear search when leaving /clients — use ref to avoid synchronous setState
+  const prevPathRef = useRef(pathname);
   useEffect(() => {
-    if (!pathname.includes('/clients')) {
-      setSearchValue('');
-      setShowMobileSearch(false);
+    if (prevPathRef.current?.includes('/clients') && !pathname.includes('/clients')) {
+      // Schedule state update asynchronously to avoid React 19 cascading render warning
+      queueMicrotask(() => {
+        setSearchValue('');
+        setShowMobileSearch(false);
+      });
     }
+    prevPathRef.current = pathname;
   }, [pathname]);
 
   // Debounced push to URL
@@ -97,24 +100,17 @@ export function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
     }
   };
 
-  const fetchTodayVisits = async () => {
-    try {
-      setLoadingVisits(true);
-      const res  = await fetch('/api/analytics', { credentials: 'include' });
-      const data = await res.json();
-      setTodayVisits(data.todayVisits || []);
-    } catch (err) {
-      console.error('Failed to fetch visits', err);
-    } finally {
-      setLoadingVisits(false);
-    }
-  };
+  // Fetch unread count on mount
+  useEffect(() => {
+    fetch('/api/notifications', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => setUnreadCount(d.unreadCount ?? 0))
+      .catch(() => {});
+  }, []);
 
   const handleBellClick = () => {
-    const next = !showNotifications;
-    setShowNotifications(next);
+    setShowNotifications((v) => !v);
     setShowUserMenu(false);
-    if (next) fetchTodayVisits();
   };
 
   const initials = user?.name
@@ -188,15 +184,17 @@ export function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
                 hover:bg-gray-50 transition-colors"
             >
               <Bell size={17} />
-              {todayVisits.length > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500
-                  rounded-full ring-2 ring-white" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1
+                  bg-red-500 text-white text-[10px] font-bold rounded-full
+                  flex items-center justify-center ring-2 ring-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
               )}
             </button>
             {showNotifications && (
-              <NotificationDropdown
-                visits={todayVisits}
-                onClose={() => setShowNotifications(false)}
+              <NotificationPanel
+                onClose={() => { setShowNotifications(false); setUnreadCount(0); }}
               />
             )}
           </div>

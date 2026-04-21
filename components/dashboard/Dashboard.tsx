@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { StatsCard } from './StatsCard';
 import { VisitReminder } from './VisitReminder';
+import { FollowUpBanner } from './FollowUpBanner';
 import { TodayVisit } from '@/lib/types';
 import { CHART_COLORS, CustomTooltipProps, TooltipPayloadEntry } from '@/lib/utils';
 import { CalendarCheck, Phone, MapPin } from 'lucide-react';
@@ -81,6 +82,9 @@ export function Dashboard() {
 
   return (
     <div className="space-y-5">
+
+      {/* ── FOLLOW-UP BANNER ── */}
+      <FollowUpBanner />
 
       {/* ── STATS ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
