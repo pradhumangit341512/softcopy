@@ -130,8 +130,23 @@ export async function POST(req: NextRequest) {
     }
 
     const commissionAmount = (data.dealAmount * data.commissionPercentage) / 100;
-    const startsPaid = data.paidStatus === "Paid";
     const now = new Date();
+
+    // Normalise the optional initial-payment block. Amount is clamped to
+    // commissionAmount so a caller typo can't leave paidAmount > total.
+    const initial = data.initialPayment;
+    const initialAmount = initial
+      ? Math.min(initial.amount, commissionAmount)
+      : 0;
+
+    // Derive status from what was paid at creation time.
+    const EPS = 0.005;
+    const paidStatus =
+      initialAmount <= 0
+        ? 'Pending'
+        : initialAmount + EPS >= commissionAmount
+          ? 'Paid'
+          : 'Partial';
 
     const newCommission = await db.commission.create({
       data: {
@@ -141,13 +156,10 @@ export async function POST(req: NextRequest) {
         dealAmount: data.dealAmount,
         commissionPercentage: data.commissionPercentage,
         commissionAmount,
-        // Keep paidAmount, paidStatus, and the ledger in lock-step. If the
-        // user ticks "Paid" on creation we record a single ledger entry for
-        // the full amount so history/reporting stay complete.
-        paidAmount: startsPaid ? commissionAmount : 0,
-        paidStatus: startsPaid ? "Paid" : "Pending",
+        paidAmount: initialAmount,
+        paidStatus,
         paymentReference: data.paymentReference,
-        paymentDate: startsPaid ? now : null,
+        paymentDate: paidStatus === 'Paid' ? (initial?.paidOn ?? now) : null,
         deletedAt: null,
       },
       include: {
@@ -156,20 +168,29 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (startsPaid) {
-      await db.commissionPayment.create({
-        data: {
-          commissionId: newCommission.id,
-          companyId: payload.companyId,
-          amount: commissionAmount,
-          paidOn: now,
-          method: null,
-          reference: data.paymentReference ?? null,
-          notes: 'Recorded at commission creation — marked Paid upfront.',
-          recordedBy: payload.userId,
-          deletedAt: null,
-        },
-      });
+    // If the caller recorded an initial payment, write a matching ledger
+    // row so the History modal and running totals stay consistent. Failing
+    // this shouldn't roll back the commission itself — the worst case is
+    // a paidAmount that briefly doesn't have a ledger row, which the next
+    // payment action reconciles. Still, log hard failures so we notice.
+    if (initial && initialAmount > 0) {
+      try {
+        await db.commissionPayment.create({
+          data: {
+            commissionId: newCommission.id,
+            companyId: payload.companyId,
+            amount: initialAmount,
+            paidOn: initial.paidOn,
+            method: initial.method ?? null,
+            reference: initial.reference ?? data.paymentReference ?? null,
+            notes: initial.notes ?? null,
+            recordedBy: payload.userId,
+            deletedAt: null,
+          },
+        });
+      } catch (err) {
+        console.error('Initial commission payment create failed:', err);
+      }
     }
 
     return NextResponse.json({ commission: newCommission }, { status: 201 });

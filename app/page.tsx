@@ -464,16 +464,16 @@ export default function Home() {
               <a href="#security" onClick={closeMenu}>Security</a>
               <a href="#pricing" onClick={closeMenu}>Pricing</a>
               <a href="#contact" onClick={closeMenu}>Onboarding</a>
-              <Link href="/login" className="btn btn--primary nav__cta-mobile" onClick={closeMenu}>
-                Subscriber sign-in <span aria-hidden>→</span>
-              </Link>
             </div>
 
+            {/* Single CTA for every breakpoint. The "Invite-only" pill is
+                hidden on small screens via the `.nav__hint` media query,
+                but the sign-in button stays pinned next to the hamburger. */}
             <div className="nav__actions">
               <span className="nav__hint" aria-hidden>
                 <span className="nav__hint-dot" /> Invite-only
               </span>
-              <Link href="/login" className="btn btn--primary nav__cta">
+              <Link href="/login" className="btn btn--primary nav__cta" onClick={closeMenu}>
                 Subscriber sign-in <span aria-hidden>→</span>
               </Link>
             </div>
@@ -1324,7 +1324,6 @@ export default function Home() {
         }
         .b360 .nav__links a { transition: color 0.2s; }
         .b360 .nav__links a:hover { color: var(--blue); }
-        .b360 .nav__cta-mobile { display: none; }
 
         .b360 .nav__actions { display: flex; align-items: center; gap: 14px; }
         .b360 .nav__hint {
@@ -2600,12 +2599,11 @@ export default function Home() {
             font-size: 16px;
             color: var(--ink);
           }
-          .b360 .nav__cta-mobile {
-            display: inline-flex;
-            margin-top: 18px;
-            align-self: flex-start;
-          }
-          .b360 .nav__actions { display: none; }
+          /* Keep the primary CTA pinned next to the hamburger on mobile —
+             the invite-only pill is already hidden at ≤1200px, so only the
+             sign-in button and hamburger share the right-side cluster. */
+          .b360 .nav__actions { display: flex; gap: 8px; }
+          .b360 .nav__cta { padding: 8px 14px; font-size: 13px; }
           .b360 .hamburger { display: inline-flex; }
 
           .b360 .hero { padding: 128px 24px 72px; }

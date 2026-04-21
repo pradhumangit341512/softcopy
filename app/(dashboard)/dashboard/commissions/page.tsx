@@ -174,9 +174,18 @@ export default function CommissionsPage() {
   const [selectedCommission, setSelected] = useState<Commission | null>(null);
   const [submitting, setSubmitting]       = useState(false);
 
+  // All fields for the Add/Edit Commission modal — now includes an
+  // OPTIONAL initial-payment block so brokers can log "I closed the deal
+  // AND received ₹X on the spot" in a single submission. Fields prefixed
+  // `initial*` are only sent to the API when `initialAmount > 0`.
   const emptyForm = {
     clientId: '', salesPersonName: '', dealAmount: '',
-    commissionPercentage: '5', paidStatus: 'Pending', paymentReference: '',
+    commissionPercentage: '5', paymentReference: '',
+    initialAmount: '',
+    initialPaidOn: new Date().toISOString().slice(0, 10),
+    initialMethod: 'cash',
+    initialReference: '',
+    initialNotes: '',
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -266,25 +275,62 @@ export default function CommissionsPage() {
   };
 
   // ─── Add ───
+  // Submits commission meta + (optionally) the first payment as a single
+  // request. The server creates the commission and the matching ledger
+  // row atomically, so the running total / status badge reflect reality
+  // the moment the modal closes.
   const handleAdd = async () => {
     if (!form.clientId) { addToast({ type: 'error', message: 'Client is required' }); return; }
     if (!form.dealAmount) { addToast({ type: 'error', message: 'Deal Amount is required' }); return; }
+
+    const deal = Number(form.dealAmount);
+    const pct  = Number(form.commissionPercentage);
+    const commissionAmount = (deal * pct) / 100;
+    const initialAmount    = Number(form.initialAmount) || 0;
+
+    if (initialAmount < 0) {
+      addToast({ type: 'error', message: 'Initial payment cannot be negative' });
+      return;
+    }
+    if (initialAmount > commissionAmount + 0.005) {
+      addToast({
+        type: 'error',
+        message: `Initial payment can't exceed the commission (${fmt(commissionAmount)}).`,
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const body: Record<string, unknown> = {
+        clientId: form.clientId,
+        salesPersonName: form.salesPersonName?.trim() || null,
+        dealAmount: deal,
+        commissionPercentage: pct,
+        paymentReference: form.paymentReference || undefined,
+      };
+      if (initialAmount > 0) {
+        body.initialPayment = {
+          amount: initialAmount,
+          paidOn: form.initialPaidOn,
+          method: form.initialMethod || null,
+          reference: form.initialReference?.trim() || undefined,
+          notes: form.initialNotes?.trim() || undefined,
+        };
+      }
+
       const res = await fetch('/api/commissions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          clientId: form.clientId,
-          salesPersonName: form.salesPersonName?.trim() || null,
-          dealAmount: Number(form.dealAmount),
-          commissionPercentage: Number(form.commissionPercentage),
-          paidStatus: form.paidStatus,
-          paymentReference: form.paymentReference || undefined,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
-      addToast({ type: 'success', message: 'Commission added successfully' });
+      addToast({
+        type: 'success',
+        message: initialAmount > 0
+          ? `Commission added. ${fmt(initialAmount)} recorded as first payment.`
+          : 'Commission added successfully',
+      });
       closeModal(); fetchCommissions();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to add commission';
@@ -295,12 +341,18 @@ export default function CommissionsPage() {
   };
 
   // ─── Edit ───
+  // Edit mode edits only the commission's meta (deal amount, %, ref,
+  // salesperson). Payments are managed exclusively from the History
+  // modal, so the initial-payment fields stay blank/empty here.
   const openEdit = (c: Commission) => {
     setSelected(c);
     setForm({
-      clientId: c.clientId, salesPersonName: c.salesPersonName || '',
-      dealAmount: String(c.dealAmount), commissionPercentage: String(c.commissionPercentage),
-      paidStatus: c.paidStatus, paymentReference: c.paymentReference || '',
+      ...emptyForm,
+      clientId: c.clientId,
+      salesPersonName: c.salesPersonName || '',
+      dealAmount: String(c.dealAmount),
+      commissionPercentage: String(c.commissionPercentage),
+      paymentReference: c.paymentReference || '',
     });
     setModalMode('edit');
   };
@@ -981,32 +1033,150 @@ export default function CommissionsPage() {
                 </div>
               )}
 
-              {/* Payment status toggle only makes sense when CREATING — after
-                  that, status is derived from the payment ledger. */}
-              {modalMode === 'add' ? (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Already paid?</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['Pending', 'Paid'].map(s => (
-                      <button key={s} type="button"
-                        onClick={() => setForm({ ...form, paidStatus: s })}
-                        className={`py-2.5 text-sm font-semibold rounded-xl border transition-all
-                          ${form.paidStatus === s
-                            ? s === 'Paid'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                              : 'bg-amber-50 text-amber-700 border-amber-300'
-                            : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
-                        {s === 'Paid' ? 'Fully paid upfront' : 'Not paid yet'}
-                      </button>
-                    ))}
+              {/* Payment status is derived from the ledger, not an input. In
+                  ADD mode we let the broker optionally log the first payment
+                  right here so "closed deal + received token money" is one
+                  submit. In EDIT mode we hide this — payments are managed
+                  via the History modal, one source of truth per concern. */}
+              {modalMode === 'add' ? (() => {
+                const initialAmt = Number(form.initialAmount) || 0;
+                const half       = Math.max(0, Math.round(computedCommission / 2));
+                const willBeFull = initialAmt + 0.005 >= computedCommission && initialAmt > 0 && computedCommission > 0;
+                const overMax    = computedCommission > 0 && initialAmt > computedCommission + 0.005;
+
+                return (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Wallet2 size={14} className="text-emerald-500" />
+                        <h4 className="text-sm font-semibold text-gray-800">
+                          Initial payment{' '}
+                          <span className="text-xs text-gray-400 font-normal">(optional)</span>
+                        </h4>
+                      </div>
+                      {initialAmt > 0 && (
+                        <button type="button"
+                          onClick={() => setForm({ ...form, initialAmount: '' })}
+                          className="text-[11px] font-semibold text-gray-500 hover:text-gray-700
+                            bg-white border border-gray-200 hover:bg-gray-50 px-2 py-0.5 rounded-md transition-colors">
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                        Amount received (₹)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
+                        <input type="number" min="0" step="0.01"
+                          value={form.initialAmount}
+                          onChange={e => setForm({ ...form, initialAmount: e.target.value })}
+                          placeholder="0"
+                          className="w-full pl-7 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                            focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                            bg-white text-gray-800" />
+                      </div>
+                      <div className="flex gap-1.5 mt-2 flex-wrap">
+                        <button type="button"
+                          onClick={() => setForm({ ...form, initialAmount: '' })}
+                          className="text-[11px] font-semibold text-gray-600 bg-white border border-gray-200
+                            hover:bg-gray-50 px-2 py-1 rounded-lg transition-colors">
+                          None
+                        </button>
+                        <button type="button"
+                          disabled={computedCommission <= 0}
+                          onClick={() => setForm({ ...form, initialAmount: String(half) })}
+                          className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100
+                            px-2 py-1 rounded-lg transition-colors disabled:opacity-50">
+                          Half ({fmt(half)})
+                        </button>
+                        <button type="button"
+                          disabled={computedCommission <= 0}
+                          onClick={() => setForm({ ...form, initialAmount: String(computedCommission) })}
+                          className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100
+                            px-2 py-1 rounded-lg transition-colors disabled:opacity-50">
+                          Full ({fmt(computedCommission)})
+                        </button>
+                      </div>
+                      {overMax && (
+                        <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
+                          <X size={12} /> Cannot exceed commission amount ({fmt(computedCommission)}).
+                        </p>
+                      )}
+                      {willBeFull && !overMax && (
+                        <p className="text-xs text-emerald-600 font-medium mt-1.5 flex items-center gap-1">
+                          <CheckCircle2 size={12} /> Will be created as fully Paid.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Only show payment meta when an amount has been entered —
+                        avoids cluttering the form for "no advance" case. */}
+                    {initialAmt > 0 && (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Paid on</label>
+                            <input type="date"
+                              value={form.initialPaidOn}
+                              onChange={e => setForm({ ...form, initialPaidOn: e.target.value })}
+                              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                                focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                                bg-white text-gray-800" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Method</label>
+                            <select
+                              value={form.initialMethod}
+                              onChange={e => setForm({ ...form, initialMethod: e.target.value })}
+                              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                                focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                                bg-white text-gray-800">
+                              {PAYMENT_METHODS.map(m => (
+                                <option key={m.value} value={m.value}>{m.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                            Reference <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                          </label>
+                          <input type="text"
+                            value={form.initialReference}
+                            onChange={e => setForm({ ...form, initialReference: e.target.value })}
+                            placeholder="Cheque no., UPI Ref, Transaction ID…"
+                            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                              focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                              text-gray-800 placeholder:text-gray-400" />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                            Notes <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                          </label>
+                          <textarea
+                            value={form.initialNotes}
+                            onChange={e => setForm({ ...form, initialNotes: e.target.value })}
+                            rows={2}
+                            placeholder="Any context about this payment…"
+                            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                              focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                              text-gray-800 placeholder:text-gray-400" />
+                        </div>
+                      </>
+                    )}
+
+                    <p className="text-[11px] text-gray-400 leading-relaxed">
+                      Leave Amount at 0 if nothing&apos;s been collected yet. Later instalments
+                      are recorded via the <strong>Record Payment</strong> button on the row.
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-400 mt-1.5">
-                    Choose &quot;Fully paid upfront&quot; only if the whole commission was settled
-                    when you&apos;re recording it. Partial payments are recorded via the
-                    &quot;Record Payment&quot; button on the commission row.
-                  </p>
-                </div>
-              ) : (
+                );
+              })() : (
                 <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 flex items-start gap-2">
                   <Wallet2 size={14} className="text-gray-400 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-gray-500">
@@ -1036,10 +1206,18 @@ export default function CommissionsPage() {
                   border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
                 Cancel
               </button>
-              <button onClick={modalMode === 'add' ? handleAdd : handleEdit} disabled={submitting}
+              <button
+                onClick={modalMode === 'add' ? handleAdd : handleEdit}
+                disabled={
+                  submitting ||
+                  (modalMode === 'add' &&
+                    computedCommission > 0 &&
+                    Number(form.initialAmount || 0) > computedCommission + 0.005)
+                }
                 className="flex-1 py-2.5 text-sm font-semibold text-white bg-blue-600
-                  hover:bg-blue-700 rounded-xl transition-colors disabled:opacity-60">
-                {submitting ? 'Saving...' : modalMode === 'add' ? 'Add Payment' : 'Save Changes'}
+                  hover:bg-blue-700 rounded-xl transition-colors disabled:opacity-60
+                  disabled:cursor-not-allowed">
+                {submitting ? 'Saving...' : modalMode === 'add' ? 'Add Commission' : 'Save Changes'}
               </button>
             </div>
           </div>

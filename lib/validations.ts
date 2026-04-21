@@ -150,26 +150,48 @@ export const updateClientByTeamMemberSchema = updateClientSchema.omit({
 
 // ==================== COMMISSION ====================
 
+/**
+ * Commission creation schema. `paidStatus` is derived from the payment
+ * ledger, not an input, so it's absent here. An OPTIONAL `initialPayment`
+ * block lets the caller record the first instalment in the same request
+ * — common when a deal closes with a token advance paid on the spot.
+ */
 export const createCommissionSchema = z
   .object({
     clientId: objectIdSchema,
     salesPersonName: optionalString,
     dealAmount: z.coerce.number().positive('Enter valid deal amount'),
     commissionPercentage: z.coerce.number().min(0).max(100),
-    paidStatus: z.enum(['Pending', 'Paid']).optional().default('Pending'),
     paymentReference: optionalString,
+    initialPayment: z
+      .object({
+        amount: z.coerce.number().positive('Initial payment amount must be > 0'),
+        paidOn: z
+          .union([z.string(), z.date()])
+          .transform((v) => new Date(v))
+          .refine((d) => !isNaN(d.getTime()), 'Invalid date'),
+        method: z
+          .enum(['cash', 'upi', 'bank_transfer', 'cheque', 'other'])
+          .optional()
+          .nullable()
+          .transform((v) => v || null),
+        reference: optionalString,
+        notes: optionalString,
+      })
+      .optional(),
   })
   .strict();
 
 /**
- * Partial update on commission metadata. `paidStatus` is intentionally
- * stripped out — it's derived from the CommissionPayment ledger, so
- * toggling it directly would desync the running total. Use the
- * `/api/commissions/:id/payments` routes instead.
+ * Partial update on commission metadata. `initialPayment` and any
+ * payment-status fields are omitted — payments are managed exclusively
+ * via the `/api/commissions/:id/payments` routes so the running total
+ * stays in sync with the ledger.
  */
-export const updateCommissionSchema = createCommissionSchema.partial().omit({
-  paidStatus: true,
-}).strip();
+export const updateCommissionSchema = createCommissionSchema
+  .partial()
+  .omit({ initialPayment: true })
+  .strip();
 
 /**
  * One payment recorded against a commission. Amount must be positive;
