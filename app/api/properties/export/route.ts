@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth, isValidObjectId } from "@/lib/auth";
+import { isAdminRole } from "@/lib/authorize";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -21,6 +22,13 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams;
     const status = searchParams.get("status") || "";
     const propertyType = searchParams.get("propertyType") || "";
+    const bhkType = searchParams.get("bhkType") || "";
+    const listingType = searchParams.get("listingType") || "";
+    const priceMin = searchParams.get("priceMin") || "";
+    const priceMax = searchParams.get("priceMax") || "";
+    const vacateFrom = searchParams.get("vacateFrom") || "";
+    const vacateTo = searchParams.get("vacateTo") || "";
+    const createdBy = searchParams.get("createdBy") || "";
     const search = searchParams.get("search") || "";
 
     const where: Record<string, unknown> = {};
@@ -28,13 +36,41 @@ export async function GET(req: NextRequest) {
       where.companyId = payload.companyId;
     }
 
-    // Role-based filtering: team members only export their own properties
     if (payload.role === 'user') {
       where.createdBy = payload.userId;
     }
 
     if (status) where.status = status;
     if (propertyType) where.propertyType = propertyType;
+    if (bhkType) where.bhkType = bhkType;
+
+    if (listingType === 'rent') {
+      where.askingRent = { not: null, gt: 0 };
+    } else if (listingType === 'sale') {
+      where.sellingPrice = { not: null, gt: 0 };
+    }
+
+    if (priceMin || priceMax) {
+      const priceFilter: Record<string, number> = {};
+      if (priceMin) priceFilter.gte = Number(priceMin);
+      if (priceMax) priceFilter.lte = Number(priceMax);
+      if (listingType === 'sale') {
+        where.sellingPrice = { ...((where.sellingPrice as object) || {}), ...priceFilter };
+      } else {
+        where.askingRent = { ...((where.askingRent as object) || {}), ...priceFilter };
+      }
+    }
+
+    if (vacateFrom || vacateTo) {
+      const vacateFilter: Record<string, Date> = {};
+      if (vacateFrom) vacateFilter.gte = new Date(vacateFrom);
+      if (vacateTo) vacateFilter.lte = new Date(vacateTo);
+      where.vacateDate = vacateFilter;
+    }
+
+    if (createdBy && isAdminRole(payload.role) && isValidObjectId(createdBy)) {
+      where.createdBy = createdBy;
+    }
 
     if (search) {
       where.OR = [

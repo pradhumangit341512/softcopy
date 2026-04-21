@@ -7,7 +7,7 @@ import { Plus, Building2, SlidersHorizontal, X, Download } from 'lucide-react';
 
 import { Loader } from '@/components/common/Loader';
 import { PropertyTable } from '@/components/properties/PropertyTable';
-import { PropertyFilters } from '@/components/properties/PropertyFilters';
+import { PropertyFilters, type PropertyFilterValues } from '@/components/properties/PropertyFilters';
 import { useAuth } from '@/hooks/useAuth';
 import { Alert } from '@/components/common/Alert';
 import { Pagination } from '@/components/common/Pagination';
@@ -15,18 +15,34 @@ import { Button } from '@/components/common/Button';
 
 import type { Property } from '@/lib/types';
 
+const EMPTY_FILTERS: PropertyFilterValues = {
+  status: '',
+  propertyType: '',
+  bhkType: '',
+  listingType: '',
+  priceMin: '',
+  priceMax: '',
+  vacateFrom: '',
+  vacateTo: '',
+  createdBy: '',
+  search: '',
+};
+
+const FILTER_KEYS = Object.keys(EMPTY_FILTERS) as (keyof PropertyFilterValues)[];
+
 export default function PropertiesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
 
-  // Admin-only page — team members don't see properties
   useEffect(() => {
     if (authLoading || !user) return;
     if (user.role === 'user') {
       router.replace('/dashboard/my-work');
     }
   }, [authLoading, user, router]);
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,32 +51,50 @@ export default function PropertiesPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([]);
 
-  // Read from URL
-  const searchFromUrl = searchParams.get('search') || '';
-  const statusFromUrl = searchParams.get('status') || '';
-  const propertyTypeFromUrl = searchParams.get('propertyType') || '';
+  // Read all filters from URL
+  const filtersFromUrl: PropertyFilterValues = {
+    status: searchParams.get('status') || '',
+    propertyType: searchParams.get('propertyType') || '',
+    bhkType: searchParams.get('bhkType') || '',
+    listingType: searchParams.get('listingType') || '',
+    priceMin: searchParams.get('priceMin') || '',
+    priceMax: searchParams.get('priceMax') || '',
+    vacateFrom: searchParams.get('vacateFrom') || '',
+    vacateTo: searchParams.get('vacateTo') || '',
+    createdBy: searchParams.get('createdBy') || '',
+    search: searchParams.get('search') || '',
+  };
   const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
 
-  const [filters, setFilters] = useState({
-    status: statusFromUrl,
-    propertyType: propertyTypeFromUrl,
-    search: searchFromUrl,
-  });
+  const [filters, setFilters] = useState<PropertyFilterValues>(filtersFromUrl);
 
   useEffect(() => {
-    setFilters({
-      status: statusFromUrl,
-      propertyType: propertyTypeFromUrl,
-      search: searchFromUrl,
-    });
-  }, [searchFromUrl, statusFromUrl, propertyTypeFromUrl]);
+    setFilters(filtersFromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
 
-  const handleFilterChange = (newFilters: typeof filters) => {
+  // Fetch team members for "Added By" filter (admin only)
+  useEffect(() => {
+    if (!isAdmin || !user?.companyId) return;
+    fetch('/api/users?role=all&limit=100', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.users) {
+          setTeamMembers(
+            data.users.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, [isAdmin, user?.companyId]);
+
+  const handleFilterChange = (newFilters: PropertyFilterValues) => {
     const params = new URLSearchParams();
-    if (newFilters.search) params.set('search', newFilters.search);
-    if (newFilters.status) params.set('status', newFilters.status);
-    if (newFilters.propertyType) params.set('propertyType', newFilters.propertyType);
+    for (const key of FILTER_KEYS) {
+      if (newFilters[key]) params.set(key, newFilters[key]);
+    }
     params.set('page', '1');
     router.push(`/dashboard/properties?${params.toString()}`);
   };
@@ -71,19 +105,21 @@ export default function PropertiesPage() {
     router.push(`/dashboard/properties?${params.toString()}`);
   };
 
-  const activeFilterCount = [statusFromUrl, propertyTypeFromUrl].filter(Boolean).length;
+  const activeFilterCount = FILTER_KEYS.filter(
+    (k) => k !== 'search' && filtersFromUrl[k]
+  ).length;
 
   const fetchProperties = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
-        ...(searchFromUrl && { search: searchFromUrl }),
-        ...(statusFromUrl && { status: statusFromUrl }),
-        ...(propertyTypeFromUrl && { propertyType: propertyTypeFromUrl }),
-        page: String(pageFromUrl),
-      });
+      const params = new URLSearchParams();
+      for (const key of FILTER_KEYS) {
+        if (filtersFromUrl[key]) params.set(key, filtersFromUrl[key]);
+      }
+      params.set('page', String(pageFromUrl));
+
       const response = await fetch(`/api/properties?${params}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch properties');
       const data = await response.json();
@@ -96,7 +132,8 @@ export default function PropertiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, searchFromUrl, statusFromUrl, propertyTypeFromUrl, pageFromUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, searchParams.toString(), pageFromUrl]);
 
   useEffect(() => {
     if (authLoading || !user?.id) return;
@@ -124,9 +161,9 @@ export default function PropertiesPage() {
     setExporting(true);
     try {
       const params = new URLSearchParams();
-      if (searchFromUrl) params.set('search', searchFromUrl);
-      if (statusFromUrl) params.set('status', statusFromUrl);
-      if (propertyTypeFromUrl) params.set('propertyType', propertyTypeFromUrl);
+      for (const key of FILTER_KEYS) {
+        if (filtersFromUrl[key]) params.set(key, filtersFromUrl[key]);
+      }
 
       const res = await fetch(`/api/properties/export?${params}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Export failed');
@@ -236,6 +273,8 @@ export default function PropertiesPage() {
           <PropertyFilters
             filters={filters}
             onFilterChange={(f) => { handleFilterChange(f); setShowFilters(false); }}
+            teamMembers={teamMembers}
+            isAdmin={isAdmin}
           />
         </div>
       </div>
@@ -260,11 +299,11 @@ export default function PropertiesPage() {
             </h3>
           </div>
 
-          {searchFromUrl && (
+          {filtersFromUrl.search && (
             <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50
               border border-blue-100 px-2.5 py-1 rounded-full font-medium">
               <span className="truncate max-w-[120px] sm:max-w-[200px]">
-                &quot;{searchFromUrl}&quot;
+                &quot;{filtersFromUrl.search}&quot;
               </span>
               <Button
                 onClick={() => {
@@ -292,9 +331,9 @@ export default function PropertiesPage() {
             </div>
             <div className="text-center">
               <p className="text-gray-500 text-sm font-medium">
-                {searchFromUrl ? `No results for "${searchFromUrl}"` : 'No properties yet'}
+                {filtersFromUrl.search ? `No results for "${filtersFromUrl.search}"` : 'No properties yet'}
               </p>
-              {(statusFromUrl || propertyTypeFromUrl) && (
+              {activeFilterCount > 0 && (
                 <button
                   onClick={() => router.push('/dashboard/properties')}
                   className="mt-1 text-xs text-blue-600 hover:underline"
@@ -303,7 +342,7 @@ export default function PropertiesPage() {
                 </button>
               )}
             </div>
-            {!searchFromUrl && !statusFromUrl && (
+            {!filtersFromUrl.search && activeFilterCount === 0 && (
               <Link href="/dashboard/properties/add">
                 <button className="text-xs text-blue-600 hover:underline font-semibold">
                   + Add your first property
@@ -314,13 +353,11 @@ export default function PropertiesPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <div className="min-w-[700px]">
-                <PropertyTable
-                  properties={properties}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              </div>
+              <PropertyTable
+                properties={properties}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
             </div>
 
             {totalPages > 1 && (

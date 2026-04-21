@@ -87,10 +87,7 @@ export async function PUT(
     if (body.propertyVisited !== undefined) updateData.propertyVisited = body.propertyVisited === true || body.propertyVisited === 'true';
     if (body.visitStatus !== undefined) updateData.visitStatus = body.visitStatus;
 
-    // Status and visitStatus — admin only (team members cannot change these)
-    if (!isTeamMember(payload.role)) {
-      if (body.status !== undefined) updateData.status = body.status;
-    }
+    if (body.status !== undefined) updateData.status = body.status;
 
     // Admin can reassign the client to another team member
     if (body.assignedTo && isAdminRole(payload.role) && isValidObjectId(body.assignedTo as string)) {

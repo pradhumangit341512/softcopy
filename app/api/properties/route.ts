@@ -4,6 +4,7 @@ import {
   verifyAuth,
   isValidObjectId,
 } from "@/lib/auth";
+import { isAdminRole } from "@/lib/authorize";
 import { createPropertySchema, parseBody } from "@/lib/validations";
 
 export const runtime = "nodejs";
@@ -27,6 +28,13 @@ export async function GET(req: NextRequest) {
 
     const status = searchParams.get("status");
     const propertyType = searchParams.get("propertyType");
+    const bhkType = searchParams.get("bhkType");
+    const listingType = searchParams.get("listingType");
+    const priceMin = searchParams.get("priceMin");
+    const priceMax = searchParams.get("priceMax");
+    const vacateFrom = searchParams.get("vacateFrom");
+    const vacateTo = searchParams.get("vacateTo");
+    const createdBy = searchParams.get("createdBy");
     const search = searchParams.get("search");
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
@@ -39,13 +47,42 @@ export async function GET(req: NextRequest) {
       deletedAt: null,
     };
 
-    // Properties are SHARED INVENTORY across the broker company — every
-    // team member sees every property so they can pitch them to their
-    // own clients. Clients (in /api/clients) stay personal-book.
-    // Per product decision: team-member createdBy filter intentionally OMITTED here.
-
     if (status) where.status = status;
     if (propertyType) where.propertyType = propertyType;
+    if (bhkType) where.bhkType = bhkType;
+
+    // Listing type: filter by rent-only, sale-only, or both
+    if (listingType === 'rent') {
+      where.askingRent = { not: null, gt: 0 };
+    } else if (listingType === 'sale') {
+      where.sellingPrice = { not: null, gt: 0 };
+    }
+
+    // Price range: applies to rent or sale depending on listingType
+    if (priceMin || priceMax) {
+      const priceFilter: Record<string, number> = {};
+      if (priceMin) priceFilter.gte = Number(priceMin);
+      if (priceMax) priceFilter.lte = Number(priceMax);
+
+      if (listingType === 'sale') {
+        where.sellingPrice = { ...((where.sellingPrice as object) || {}), ...priceFilter };
+      } else {
+        where.askingRent = { ...((where.askingRent as object) || {}), ...priceFilter };
+      }
+    }
+
+    // Vacate date range
+    if (vacateFrom || vacateTo) {
+      const vacateFilter: Record<string, Date> = {};
+      if (vacateFrom) vacateFilter.gte = new Date(vacateFrom);
+      if (vacateTo) vacateFilter.lte = new Date(vacateTo);
+      where.vacateDate = vacateFilter;
+    }
+
+    // Added by (admin only)
+    if (createdBy && isAdminRole(payload.role) && isValidObjectId(createdBy)) {
+      where.createdBy = createdBy;
+    }
 
     if (search) {
       where.OR = [
