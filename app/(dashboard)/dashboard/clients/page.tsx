@@ -33,36 +33,52 @@ export default function ClientsPage() {
   const [showImportModal, setShowImportModal] = useState(false);
 
   // ── Read everything from URL (single source of truth) ──
-  const searchFromUrl  = searchParams.get('search')   || '';
-  const statusFromUrl  = searchParams.get('status')   || '';
-  const dateFromUrl    = searchParams.get('dateFrom')  || '';
-  const dateToUrl      = searchParams.get('dateTo')    || '';
-  const pageFromUrl    = parseInt(searchParams.get('page') || '1', 10);
+  const searchFromUrl    = searchParams.get('search')    || '';
+  const statusFromUrl    = searchParams.get('status')    || '';
+  const sourceFromUrl    = searchParams.get('source')    || '';
+  const dateFromUrl      = searchParams.get('dateFrom')  || '';
+  const dateToUrl        = searchParams.get('dateTo')    || '';
+  const followUpFromUrl  = searchParams.get('followUp')  || '';
+  const budgetMinFromUrl = searchParams.get('budgetMin') || '';
+  const budgetMaxFromUrl = searchParams.get('budgetMax') || '';
+  const pageFromUrl      = parseInt(searchParams.get('page') || '1', 10);
 
   // Local state for filter UI — synced from URL
   const [filters, setFilters] = useState({
-    status:   statusFromUrl,
-    search:   searchFromUrl,
-    dateFrom: dateFromUrl,
-    dateTo:   dateToUrl,
+    status:    statusFromUrl,
+    source:    sourceFromUrl,
+    search:    searchFromUrl,
+    dateFrom:  dateFromUrl,
+    dateTo:    dateToUrl,
+    followUp:  followUpFromUrl,
+    budgetMin: budgetMinFromUrl,
+    budgetMax: budgetMaxFromUrl,
   });
 
   useEffect(() => {
     setFilters({
-      status:   statusFromUrl,
-      search:   searchFromUrl,
-      dateFrom: dateFromUrl,
-      dateTo:   dateToUrl,
+      status:    statusFromUrl,
+      source:    sourceFromUrl,
+      search:    searchFromUrl,
+      dateFrom:  dateFromUrl,
+      dateTo:    dateToUrl,
+      followUp:  followUpFromUrl,
+      budgetMin: budgetMinFromUrl,
+      budgetMax: budgetMaxFromUrl,
     });
-  }, [searchFromUrl, statusFromUrl, dateFromUrl, dateToUrl]);
+  }, [searchFromUrl, statusFromUrl, sourceFromUrl, dateFromUrl, dateToUrl, followUpFromUrl, budgetMinFromUrl, budgetMaxFromUrl]);
 
   // Push filter changes to URL
   const handleFilterChange = (newFilters: typeof filters) => {
     const params = new URLSearchParams();
-    if (newFilters.search)   params.set('search',   newFilters.search);
-    if (newFilters.status)   params.set('status',   newFilters.status);
-    if (newFilters.dateFrom) params.set('dateFrom', newFilters.dateFrom);
-    if (newFilters.dateTo)   params.set('dateTo',   newFilters.dateTo);
+    if (newFilters.search)    params.set('search',    newFilters.search);
+    if (newFilters.status)    params.set('status',    newFilters.status);
+    if (newFilters.source)    params.set('source',    newFilters.source);
+    if (newFilters.dateFrom)  params.set('dateFrom',  newFilters.dateFrom);
+    if (newFilters.dateTo)    params.set('dateTo',    newFilters.dateTo);
+    if (newFilters.followUp)  params.set('followUp',  newFilters.followUp);
+    if (newFilters.budgetMin) params.set('budgetMin', newFilters.budgetMin);
+    if (newFilters.budgetMax) params.set('budgetMax', newFilters.budgetMax);
     params.set('page', '1');
     router.push(`/dashboard/clients?${params.toString()}`);
   };
