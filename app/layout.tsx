@@ -68,7 +68,7 @@ export const metadata: Metadata = {
   // The landing page fills in its own full OG block. We keep a minimal
   // fallback here for authenticated pages (which are noindex anyway).
   icons: {
-    icon: '/favicon.ico',
+    icon: '/favicon.svg',
     apple: '/apple-touch-icon.png',
   },
 };
@@ -90,7 +90,7 @@ export default function RootLayout({
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.svg" />
         {/* next/font/google self-hosts the font files and emits its own
             preconnect/preload hints automatically — manual ones aren't needed. */}
 

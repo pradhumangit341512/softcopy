@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export function LandingNav() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -36,9 +37,19 @@ export function LandingNav() {
     <header role="banner">
       <nav className="nav" aria-label="Primary navigation">
         <div className="nav__inner">
-          <a href="#top" className="brand" onClick={closeMenu} aria-label="Broker365 home">
-            <span className="brand__mark">B365</span>
-            <span className="brand__wordmark">Broker365</span>
+          {/* Single-image lockup from /public/logo.svg — the SVG already
+              contains both the icon and the "Broker365" wordmark, so no
+              separate mark+wordmark spans are needed. `priority` because
+              this logo is inside the fixed nav and visible on first paint. */}
+          <a href="#top" className="brand brand--logo" onClick={closeMenu} aria-label="Broker365 home">
+            <Image
+              src="/logo.svg"
+              alt="Broker365"
+              width={720}
+              height={160}
+              priority
+              className="brand__image"
+            />
           </a>
 
           {menuOpen && (
@@ -56,6 +67,16 @@ export function LandingNav() {
             <a href="#security" onClick={closeMenu}>Security</a>
             <a href="#pricing" onClick={closeMenu}>Pricing</a>
             <a href="#contact" onClick={closeMenu}>Onboarding</a>
+            {/* Mobile-only CTA — visible only inside the open dropdown.
+                CSS hides it on desktop, where the button in .nav__actions
+                is used instead. */}
+            <Link
+              href="/login"
+              className="btn btn--primary nav__cta-mobile"
+              onClick={closeMenu}
+            >
+              Subscriber sign-in <span aria-hidden>→</span>
+            </Link>
           </div>
 
           <div className="nav__actions">

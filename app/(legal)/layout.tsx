@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import '../landing.css';
 
 /**
@@ -12,9 +13,15 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       <header role="banner">
         <nav className="nav" aria-label="Primary navigation">
           <div className="nav__inner">
-            <Link href="/" className="brand" aria-label="Broker365 home">
-              <span className="brand__mark">B365</span>
-              <span className="brand__wordmark">Broker365</span>
+            <Link href="/" className="brand brand--logo" aria-label="Broker365 home">
+              <Image
+                src="/logo.svg"
+                alt="Broker365"
+                width={720}
+                height={160}
+                priority
+                className="brand__image"
+              />
             </Link>
             <div className="nav__actions">
               <Link href="/" className="btn btn--ghost">← Back to home</Link>

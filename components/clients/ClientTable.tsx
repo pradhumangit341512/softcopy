@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Edit2, Trash2, Phone, MessageCircle, FileText, X } from 'lucide-react';
+import { Edit2, Trash2, Phone, FileText, X } from 'lucide-react';
 import { Badge } from '@/components/common/Badge';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Button } from '@/components/common/Button';
+import { WhatsAppButton } from '@/components/common/WhatsAppButton';
 
 import type { Client } from '@/lib/types';
 
@@ -16,11 +17,6 @@ interface ClientTableProps {
 
 function cleanPhone(phone: string): string {
   return phone.replace(/[\s\-()]/g, '');
-}
-
-function whatsappUrl(phone: string): string {
-  const clean = cleanPhone(phone).replace(/^\+/, '');
-  return `https://wa.me/${clean}`;
 }
 
 /** Table component for displaying a list of clients with inline actions */
@@ -132,17 +128,11 @@ export function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
                       <Phone size={12} className="text-blue-500 group-hover:text-blue-700" />
                       {client.phone}
                     </a>
-                    <a
-                      href={whatsappUrl(client.phone)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-6 h-6 rounded-full bg-green-50 border border-green-200
-                        flex items-center justify-center text-green-600 hover:bg-green-100
-                        transition-colors shrink-0"
-                      title="Open WhatsApp"
-                    >
-                      <MessageCircle size={11} />
-                    </a>
+                    <WhatsAppButton
+                      phone={client.phone}
+                      message={`Hi ${client.clientName.split(' ')[0]}, following up on your enquiry.`}
+                      ariaLabel={`WhatsApp ${client.clientName}`}
+                    />
                   </div>
                   {client.email && (
                     <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[160px]">
@@ -247,14 +237,12 @@ export function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
                             >
                               <Phone size={11} /> Call
                             </a>
-                            <a
-                              href={whatsappUrl(client.phone)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium"
-                            >
-                              <MessageCircle size={11} /> WhatsApp
-                            </a>
+                            <WhatsAppButton
+                              phone={client.phone}
+                              variant="inline"
+                              message={`Hi ${client.clientName.split(' ')[0]}, following up on your enquiry.`}
+                              ariaLabel={`WhatsApp ${client.clientName}`}
+                            />
                             <button
                               onClick={() => { setOpenNoteId(null); onEdit(client.id); }}
                               className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 font-medium ml-auto"

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button } from '../common/Button';
+import { WhatsAppButton } from '../common/WhatsAppButton';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import type { Client } from '@/lib/types';
 
@@ -121,6 +122,12 @@ export function ClientCard({
           >
             {client.phone}
           </a>
+          <WhatsAppButton
+            phone={client.phone}
+            message={`Hi ${client.clientName.split(' ')[0]}, following up on your enquiry.`}
+            ariaLabel={`WhatsApp ${client.clientName}`}
+            className="ml-auto"
+          />
         </div>
         <div className="flex items-center gap-2 text-sm">
           <span className="text-gray-600 w-20">✉️</span>

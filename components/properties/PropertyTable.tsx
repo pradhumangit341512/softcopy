@@ -1,11 +1,16 @@
 'use client';
 
-import { Edit2, Trash2 } from 'lucide-react';
+import { Edit2, Trash2, Phone } from 'lucide-react';
 import { Badge } from '@/components/common/Badge';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Button } from '@/components/common/Button';
+import { WhatsAppButton } from '@/components/common/WhatsAppButton';
 
 import type { Property } from '@/lib/types';
+
+function cleanPhone(phone: string): string {
+  return phone.replace(/[\s\-()]/g, '');
+}
 
 interface PropertyTableProps {
   properties: Property[];
@@ -98,9 +103,23 @@ export function PropertyTable({ properties, onEdit, onDelete }: PropertyTablePro
               </td>
 
               <td className="px-3 py-2.5">
-                <p className="text-gray-800 text-xs">{property.ownerPhone}</p>
+                <div className="flex items-center gap-1.5">
+                  <a
+                    href={`tel:${cleanPhone(property.ownerPhone)}`}
+                    className="inline-flex items-center gap-1 text-gray-800 hover:text-blue-700 text-xs font-medium"
+                    title="Click to call"
+                  >
+                    <Phone size={11} className="text-blue-500" />
+                    {property.ownerPhone}
+                  </a>
+                  <WhatsAppButton
+                    phone={property.ownerPhone}
+                    message={`Hi ${property.ownerName.split(' ')[0]}, enquiring about ${property.propertyName}.`}
+                    ariaLabel={`WhatsApp ${property.ownerName}`}
+                  />
+                </div>
                 {property.ownerEmail && (
-                  <p className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[130px]">
+                  <p className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[160px]">
                     {property.ownerEmail}
                   </p>
                 )}

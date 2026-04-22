@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -582,9 +583,14 @@ export default async function LandingPage() {
       <footer className="foot" role="contentinfo">
         <div className="foot__grid">
           <div className="foot__brand">
-            <div className="brand">
-              <span className="brand__mark">B365</span>
-              <span className="brand__wordmark">Broker365</span>
+            <div className="brand brand--logo">
+              <Image
+                src="/logo.svg"
+                alt="Broker365"
+                width={720}
+                height={160}
+                className="brand__image"
+              />
             </div>
             <p>The broker CRM that helps you actually close. Built in India, for India.</p>
           </div>

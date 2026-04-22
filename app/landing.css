@@ -34,6 +34,14 @@ html { scroll-behavior: smooth; }
 .skip-link:focus { top: 12px; outline: 2px solid #5b8dff; outline-offset: 2px; }
 
 .b360 {
+  /* Actual rendered navbar height. Kept as a custom property so the
+     mobile menu dropdown can anchor right below the nav at every
+     breakpoint without the logo-size and the dropdown top-inset
+     drifting apart. Each media query below that changes the nav
+     padding or logo height also updates this value. */
+  /* Desktop: 16px padding + 52px logo + 16px padding + 1px border. */
+  --nav-h: 85px;
+
   --bg: #f7f8fb;
   --bg-alt: #ffffff;
   --ink: #0b1020;
@@ -157,6 +165,57 @@ html { scroll-behavior: smooth; }
   gap: 32px;
 }
 .b360 .brand { display: inline-flex; align-items: center; gap: 10px; }
+
+/* ─── SVG logo lockup (/public/logo.svg) ──────────────────────────
+   The `.brand--logo` modifier is applied when the brand wraps a
+   single `<Image>` of the horizontal lockup instead of the old
+   "B365 + Broker365" text pair. Height scales per breakpoint so the
+   lockup stays readable on a phone footer without dwarfing the navbar.
+
+   Base sizes tuned so the lockup feels prominent on desktop while
+   still fitting alongside the CTA + hamburger on a 360px phone.
+   The aspect ratio is 4.5:1, so width at each step is: height × 4.5.
+   e.g. 44px tall → 198px wide. That comfortably fits 360–1024px nav
+   widths once the CTA has collapsed. */
+.b360 .brand--logo { gap: 0; }
+.b360 .brand__image {
+  height: 52px;
+  width: auto;
+  /* The lockup is 720×160 (4.5:1). next/image renders width+height we
+     passed in, but `height: auto` on the element lets CSS resize freely
+     while preserving aspect ratio — override both. */
+  max-height: 52px;
+  display: block;
+}
+
+/* Footer has more vertical room, so the lockup runs bigger there. */
+.b360 .foot__brand .brand__image { height: 64px; max-height: 64px; }
+
+/* Laptop-ish viewports: tighten slightly so the nav doesn't feel heavy
+   next to the links. */
+@media (max-width: 1200px) {
+  .b360 .brand__image { height: 48px; max-height: 48px; }
+  .b360 .foot__brand .brand__image { height: 60px; max-height: 60px; }
+}
+
+/* Tablets — since the CTA now drops out of the top bar on mobile
+   (<=980px), the logo has free range of the navbar width. */
+@media (max-width: 980px) {
+  .b360 .brand__image { height: 44px; max-height: 44px; }
+  .b360 .foot__brand .brand__image { height: 54px; max-height: 54px; }
+}
+
+/* Phones. */
+@media (max-width: 560px) {
+  .b360 .brand__image { height: 40px; max-height: 40px; }
+  .b360 .foot__brand .brand__image { height: 48px; max-height: 48px; }
+}
+
+/* Tiny phones (Galaxy Fold closed, old iPhone SE). */
+@media (max-width: 380px) {
+  .b360 .brand__image { height: 34px; max-height: 34px; }
+  .b360 .foot__brand .brand__image { height: 42px; max-height: 42px; }
+}
 .b360 .brand__mark {
   display: inline-grid;
   place-items: center;
@@ -187,6 +246,10 @@ html { scroll-behavior: smooth; }
 }
 .b360 .nav__links a { transition: color 0.2s; }
 .b360 .nav__links a:hover { color: var(--blue); }
+
+/* Desktop: the in-menu sign-in link stays hidden. It's only visible in
+   the open mobile dropdown (see the ≤980 media query below). */
+.b360 .nav__cta-mobile { display: none; }
 
 .b360 .nav__actions { display: flex; align-items: center; gap: 14px; }
 .b360 .nav__hint {
@@ -1337,6 +1400,8 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 1200px) {
+  /* Laptop navbar: 16px padding + 48px logo + 16px padding + 1px border. */
+  .b360 { --nav-h: 81px; }
   .b360 .nav__inner { padding: 16px 24px; gap: 24px; }
   .b360 .nav__links { gap: 26px; }
   .b360 .nav__hint { display: none; }
@@ -1362,9 +1427,12 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 980px) {
+  /* Tablet navbar: 16px padding + 44px logo + 16px padding + 1px border. */
+  .b360 { --nav-h: 77px; }
+
   .b360 .nav__backdrop {
     position: fixed;
-    inset: 67px 0 0 0;
+    inset: var(--nav-h) 0 0 0;
     background: rgba(11, 16, 32, 0.35);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
@@ -1381,7 +1449,7 @@ html { scroll-behavior: smooth; }
 
   .b360 .nav__links {
     position: fixed;
-    top: 67px; left: 0; right: 0;
+    top: var(--nav-h); left: 0; right: 0;
     z-index: 95;
     flex-direction: column;
     gap: 0;
@@ -1393,8 +1461,8 @@ html { scroll-behavior: smooth; }
     opacity: 0;
     pointer-events: none;
     transition: transform 0.22s ease-out, opacity 0.22s ease-out;
-    max-height: calc(100vh - 67px);
-    max-height: calc(100dvh - 67px);
+    max-height: calc(100vh - var(--nav-h));
+    max-height: calc(100dvh - var(--nav-h));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -1409,9 +1477,21 @@ html { scroll-behavior: smooth; }
     font-size: 16px;
     color: var(--ink);
   }
-  .b360 .nav__actions { display: flex; gap: 8px; }
-  .b360 .nav__cta { padding: 8px 14px; font-size: 13px; }
+  /* Mobile / tablet: the "Subscriber sign-in" button comes out of the
+     top bar so the logo reads bigger and the hamburger gets room to
+     breathe. The same CTA is rendered at the bottom of the dropdown
+     menu (see `.nav__cta-mobile`) so it's still one tap away. */
+  .b360 .nav__actions { display: none; }
   .b360 .hamburger { display: inline-flex; }
+
+  /* In-menu sign-in button shown when the dropdown opens. */
+  .b360 .nav__cta-mobile {
+    display: inline-flex;
+    margin-top: 18px;
+    align-self: flex-start;
+    padding: 10px 18px;
+    font-size: 14px;
+  }
 
   .b360 .hero { padding: 128px 24px 72px; }
   .b360 .hero__meta { gap: 16px; }
@@ -1487,6 +1567,8 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 560px) {
+  /* Phone navbar: 14px padding + 40px logo + 14px padding + 1px border. */
+  .b360 { --nav-h: 69px; }
   .b360 .nav__inner { padding: 14px 20px; gap: 16px; }
   .b360 .brand__wordmark { display: none; }
 
@@ -1547,6 +1629,8 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 380px) {
+  /* Tiny-phone navbar: 12px padding + 34px logo + 12px padding + 1px border. */
+  .b360 { --nav-h: 59px; }
   .b360 .nav__inner { padding: 12px 16px; }
   .b360 .brand__mark { width: 30px; height: 30px; font-size: 11px; }
   .b360 .hamburger { width: 38px; height: 38px; }

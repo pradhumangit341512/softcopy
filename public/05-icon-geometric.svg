@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Broker365 geometric logo">
+  <defs>
+    <linearGradient id="b365-geo-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f7f8fb"/>
+      <stop offset="100%" stop-color="#eef2ff"/>
+    </linearGradient>
+    <linearGradient id="b365-geo-shape1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a3bd1"/>
+      <stop offset="100%" stop-color="#2d5cff"/>
+    </linearGradient>
+    <linearGradient id="b365-geo-shape2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2d5cff"/>
+      <stop offset="100%" stop-color="#5b8dff"/>
+    </linearGradient>
+    <linearGradient id="b365-geo-shape3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff6a3d"/>
+      <stop offset="100%" stop-color="#ff8a62"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#b365-geo-bg)"/>
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="none" stroke="rgba(11,16,32,0.06)" stroke-width="2"/>
+
+  <!-- Architectural "building-up" geometry — 3 stacked rectangles forming an abstract B -->
+  <g transform="translate(256 256)">
+    <!-- Tall pillar -->
+    <rect x="-100" y="-120" width="42" height="240" rx="6" fill="url(#b365-geo-shape1)"/>
+    <!-- Mid square -->
+    <rect x="-50" y="-60" width="90" height="50" rx="6" fill="url(#b365-geo-shape2)"/>
+    <!-- Bottom extension -->
+    <rect x="-50" y="8" width="130" height="50" rx="6" fill="url(#b365-geo-shape2)"/>
+    <!-- Coral accent (the 'closing' moment) -->
+    <rect x="48" y="-60" width="50" height="50" rx="6" fill="url(#b365-geo-shape3)"/>
+    <!-- Small dot -->
+    <circle cx="96" cy="32" r="14" fill="#0b1020"/>
+  </g>
+</svg>

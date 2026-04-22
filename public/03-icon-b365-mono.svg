@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Broker365 B365 monogram">
+  <defs>
+    <linearGradient id="b365-mono-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a3bd1"/>
+      <stop offset="50%" stop-color="#2d5cff"/>
+      <stop offset="100%" stop-color="#5b8dff"/>
+    </linearGradient>
+    <linearGradient id="b365-mono-shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#b365-mono-bg)"/>
+  <rect x="32" y="32" width="448" height="240" rx="96" fill="url(#b365-mono-shine)"/>
+
+  <!-- B·365 monogram, premium SaaS typographic approach -->
+  <g transform="translate(256 256)">
+    <text x="0" y="32" text-anchor="middle"
+          font-family="Fraunces, Georgia, serif"
+          font-weight="600" font-size="220"
+          fill="#ffffff" letter-spacing="-10">B365</text>
+    <!-- Subtle tick mark under the wordmark — "deal closed" -->
+    <rect x="-96" y="70" width="192" height="4" rx="2" fill="#c5f54a"/>
+  </g>
+</svg>
