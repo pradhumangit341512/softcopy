@@ -640,7 +640,7 @@ export default async function LandingPage() {
           bottom-right at 22px/22px fits the Material guideline 56px tap.
       */}
       <a
-        href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '919999999999'}?text=${encodeURIComponent("Hi Broker365 — I'd like to know more about onboarding my brokerage.")}`}
+        href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '919116346573'}?text=${encodeURIComponent("Hi Broker365 — I'd like to know more about onboarding my brokerage.")}`}
         target="_blank"
         rel="noopener noreferrer"
         className="wa-fab"
