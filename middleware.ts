@@ -13,7 +13,7 @@ const JWT_ALGS = ['HS256'] as const;
 // Public-signup pivot (April 2026): /signup is gone. Only YOU (superadmin)
 // create accounts via /superadmin/companies/new. /forgot-password stays — it
 // only works for emails that already exist in the DB.
-const publicPaths = ['/login', '/forgot-password', '/reset-password', '/'];
+const publicPaths = ['/login', '/forgot-password', '/reset-password', '/', '/privacy', '/terms'];
 
 const publicApiPaths = [
   '/api/auth/login',
@@ -24,6 +24,7 @@ const publicApiPaths = [
   '/api/auth/send-email-otp',
   '/api/auth/verify-email-otp',
   '/api/auth/reset-password',
+  '/api/onboarding-enquiry',
   '/api/webhooks/razorpay',
   '/api/cron/cleanup-otp',
   '/api/cron/cleanup-expired',

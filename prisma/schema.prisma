@@ -392,6 +392,35 @@ model EmailLog {
   @@map("email_logs")
 }
 
+// Marketing-site onboarding enquiries. Populated by the public
+// /api/onboarding-enquiry endpoint (no auth). Replaces the old client-side
+// mailto: flow which silently dropped leads whenever the user had no mail
+// client configured. We persist to the DB AND fire an email — either
+// channel alone was unreliable.
+model OnboardingEnquiry {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  name       String
+  company    String
+  email      String
+  phone      String?
+  city       String?
+  teamSize   String?  // '1' | '2-5' | '6-15' | '16+'
+  plan       String?  // 'Solo' | 'Team' | 'Enterprise'
+  message    String?
+  source     String?  @default("landing") // 'landing' | 'ads' | ...
+  ipAddress  String?
+  userAgent  String?
+  handled    Boolean  @default(false)
+  handledBy  String?  @db.ObjectId  // superadmin user id who responded
+  handledAt  DateTime?
+  notes      String?  // internal notes from whoever replied
+  createdAt  DateTime @default(now())
+  @@index([handled, createdAt])
+  @@index([email])
+  @@index([createdAt])
+  @@map("onboarding_enquiries")
+}
+
 model AuditLog {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   companyId  String   @db.ObjectId

@@ -464,7 +464,7 @@ export const SUBSCRIPTION_PLANS: Record<
   [SubscriptionType.PRO]: {
     type: SubscriptionType.PRO,
     name: 'Pro',
-    price: 4999,
+    price: 2999,
     currency: 'INR',
     features: [
       'Unlimited Clients',
@@ -481,11 +481,11 @@ export const SUBSCRIPTION_PLANS: Record<
   [SubscriptionType.ENTERPRISE]: {
     type: SubscriptionType.ENTERPRISE,
     name: 'Enterprise',
-    price: 9999,
+    price: 4999,
     currency: 'INR',
     features: [
       'Everything in Pro',
-      'Unlimited Users',
+      '25 Users',
       'WhatsApp Automation',
       'Custom Integrations',
       'Dedicated Support',

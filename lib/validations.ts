@@ -304,6 +304,39 @@ export const updateSelfSchema = z
 // Legacy alias — keep so existing imports don't break; prefer the split schemas.
 export const updateUserSchema = updateUserByAdminSchema;
 
+// ==================== ONBOARDING ENQUIRY (public) ====================
+
+/**
+ * Shape of the public landing-page "Request onboarding" form. Validates
+ * strictly enough to keep junk out of the DB but leans permissive on the
+ * optional fields — a visitor shouldn't be blocked because they formatted
+ * their phone number differently.
+ */
+export const onboardingEnquirySchema = z.object({
+  name:     z.string().trim().min(2, 'Name is required').max(120),
+  company:  z.string().trim().min(1, 'Company is required').max(200),
+  email:    emailSchema,
+  phone:    z.string().trim().max(40).optional().nullable().transform((v) => v || null),
+  city:     z.string().trim().max(80).optional().nullable().transform((v) => v || null),
+  teamSize: z
+    .enum(['1', '2-5', '6-15', '16+'])
+    .optional()
+    .nullable()
+    .transform((v) => v || null),
+  plan:     z
+    .enum(['Solo', 'Team', 'Enterprise'])
+    .optional()
+    .nullable()
+    .transform((v) => v || null),
+  message:  z.string().trim().max(2000).optional().nullable().transform((v) => v || null),
+  consent:  z.literal(true, { message: 'Consent is required.' }),
+  // Bot honeypot — must be empty. Any non-empty value means an automated
+  // form filler hit us, so we silently accept + drop the submission.
+  hp:       z.string().max(0).optional().default(''),
+}).strict();
+
+export type OnboardingEnquiryInput = z.infer<typeof onboardingEnquirySchema>;
+
 // ==================== SUPERADMIN ====================
 
 /**

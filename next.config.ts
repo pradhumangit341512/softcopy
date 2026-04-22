@@ -20,19 +20,43 @@ import { withSentryConfig } from "@sentry/nextjs";
  */
 const isDev = process.env.NODE_ENV !== "production";
 
+// Preview deployments on Vercel auto-inject the vercel.live feedback /
+// comments widget. It pulls scripts from `vercel.live`, WebSocket-talks to
+// Pusher, and renders in an iframe. Production builds do not inject it,
+// so we only relax the CSP on previews to avoid widening the attack
+// surface of the live site.
+const isVercelPreview = process.env.VERCEL_ENV === "preview";
+const vercelLiveScript  = isVercelPreview ? " https://vercel.live" : "";
+const vercelLiveConnect = isVercelPreview
+  ? " https://vercel.live wss://ws-us3.pusher.com"
+  : "";
+const vercelLiveFrame   = isVercelPreview ? " https://vercel.live" : "";
+
 const cspDirectives = [
   "default-src 'self'",
   // 'unsafe-eval' is required by Next.js HMR in dev. Razorpay's checkout
   // SDK runs inside an iframe at checkout.razorpay.com, NOT on our origin,
   // so it doesn't need eval here. Strip it in prod.
+  //
+  // Note on the occasional `content.js ... 'unsafe-eval'` violation seen
+  // in DevTools: that comes from a browser extension installed by the
+  // visitor, not from our code. We deliberately do NOT allow 'unsafe-eval'
+  // in prod just to silence extensions — that would weaken the policy for
+  // every real user. Chrome reports it as a warning; it is not an outage.
   isDev
-    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com`
-    : `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com`,
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com${vercelLiveScript}`
+    : `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com${vercelLiveScript}`,
+  // script-src-elem defaults to script-src when unspecified, but some
+  // browsers (Firefox) treat that more strictly. Pin it explicitly so the
+  // feedback loader on Vercel previews isn't blocked in those engines.
+  isDev
+    ? `script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com${vercelLiveScript}`
+    : `script-src-elem 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com${vercelLiveScript}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: https: blob:",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://*.upstash.io https://api.resend.com https://fonts.googleapis.com https://fonts.gstatic.com https://www.google-analytics.com",
-  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+  `connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://*.upstash.io https://api.resend.com https://fonts.googleapis.com https://fonts.gstatic.com https://www.google-analytics.com${vercelLiveConnect}`,
+  `frame-src https://api.razorpay.com https://checkout.razorpay.com${vercelLiveFrame}`,
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'self'",

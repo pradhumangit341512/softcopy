@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
-import { Inter, Poppins } from 'next/font/google';
+import { Inter, Poppins, Fraunces, Manrope, JetBrains_Mono } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/react';
 import './globals.css';
+import './landing.css';
 import { ToastProvider } from '@/components/common/Toast';
 
-// Import fonts
+// App fonts
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
@@ -16,42 +17,56 @@ const poppins = Poppins({
   variable: '--font-poppins',
 });
 
-// Metadata
+// Landing-page fonts — self-hosted by next/font/google (zero CLS, no external
+// DNS/TLS round-trip on first paint, and the font CSS ships inline in the
+// initial HTML so the landing page never shows an unstyled flash.
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  style: ['normal', 'italic'],
+  variable: '--font-fraunces',
+  display: 'swap',
+});
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-manrope',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
+
+// Root-level metadata. Per-page files (notably app/page.tsx) override the
+// title/description/OG fields for their own surface — the values here act
+// as fallbacks for any authenticated page that doesn't declare its own.
+// Keep this in sync with the landing page's brand so dashboard tabs read
+// "… · Broker365" instead of the old placeholder.
 export const metadata: Metadata = {
-  title: 'Real Estate CRM - Manage Your Property Business',
+  metadataBase: new URL('https://broker365.in'),
+  title: {
+    default: 'Broker365 CRM',
+    template: '%s · Broker365',
+  },
   description:
-    'Complete CRM solution for real estate builders and brokers. Manage clients, track visits, follow-ups, and commissions.',
+    'Broker365 — invite-only CRM for Indian real estate brokerages. Leads, inventory, pipeline, commissions, WhatsApp automation, and team analytics.',
   keywords: [
-    'real estate',
-    'CRM',
-    'property management',
-    'sales tracking',
+    'real estate CRM India',
+    'broker CRM',
+    'property management software',
+    'lead management',
     'commission tracking',
+    'Broker365',
   ],
-  authors: [{ name: 'Real Estate CRM' }],
-  creator: 'Real Estate CRM Team',
-  openGraph: {
-    type: 'website',
-    locale: 'en_US',
-    url: 'https://realestate-crm.com',
-    title: 'Real Estate CRM',
-    description: 'Complete CRM solution for real estate professionals',
-    siteName: 'Real Estate CRM',
-    images: [
-      {
-        url: 'https://realestate-crm.com/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Real Estate CRM',
-      },
-    ],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Real Estate CRM',
-    description: 'Complete CRM solution for real estate professionals',
-    images: ['https://realestate-crm.com/og-image.png'],
-  },
+  authors: [{ name: 'Broker365' }],
+  creator: 'Broker365',
+  // The landing page fills in its own full OG block. We keep a minimal
+  // fallback here for authenticated pages (which are noindex anyway).
   icons: {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
@@ -100,22 +115,18 @@ export default function RootLayout({
         )}
       </head>
 
-      <body  suppressHydrationWarning={true}  className={`${inter.variable} ${poppins.variable} font-sans bg-white text-gray-900 antialiased`}>
+      <body
+        suppressHydrationWarning={true}
+        className={`${inter.variable} ${poppins.variable} ${fraunces.variable} ${manrope.variable} ${jetbrainsMono.variable} font-sans bg-white text-gray-900 antialiased`}
+      >
         {/* Toast Provider Wrapper */}
         <ToastProvider>
           {/* Main Content */}
           {children}
         </ToastProvider>
 
-        {/* Vercel Analytics */}
+        {/* Vercel Analytics — traffic + Core Web Vitals, no cookies. */}
         <Analytics />
-
-        <noscript>
-          <div>
-            JavaScript is required to use this application. Please enable JavaScript
-            in your browser settings.
-          </div>
-        </noscript>
       </body>
     </html>
   );
