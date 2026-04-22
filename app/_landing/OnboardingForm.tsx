@@ -126,7 +126,7 @@ export function OnboardingForm() {
         const data = await res.json().catch(() => ({}));
         throw new Error(
           data.error ||
-            'We could not record your enquiry right now. Please email hello@broker365.in instead.'
+            'We could not record your enquiry right now. Please email broker365.support@gmail.com instead.'
         );
       }
 

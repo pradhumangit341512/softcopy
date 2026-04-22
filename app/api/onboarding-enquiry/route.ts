@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('[onboarding-enquiry] failure:', error);
     return NextResponse.json(
-      { error: 'We could not record your enquiry. Please email hello@broker365.in instead.' },
+      { error: 'We could not record your enquiry. Please email broker365.support@gmail.com instead.' },
       { status: 500 }
     );
   }
