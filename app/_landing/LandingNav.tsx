@@ -67,9 +67,12 @@ export function LandingNav() {
             <a href="#security" onClick={closeMenu}>Security</a>
             <a href="#pricing" onClick={closeMenu}>Pricing</a>
             <a href="#contact" onClick={closeMenu}>Onboarding</a>
-            {/* Mobile-only CTA — visible only inside the open dropdown.
-                CSS hides it on desktop, where the button in .nav__actions
-                is used instead. */}
+            {/* Mobile-only sign-in button. Rendered INSIDE the dropdown
+                panel so there's exactly one CTA in the DOM per breakpoint:
+                  - Desktop  → .nav__cta       (inside .nav__actions)
+                  - Mobile   → .nav__cta-mobile (inside .nav__links)
+                CSS hides the wrong one at each size so visitors never see
+                two sign-in buttons at once. */}
             <Link
               href="/login"
               className="btn btn--primary nav__cta-mobile"
@@ -79,14 +82,14 @@ export function LandingNav() {
             </Link>
           </div>
 
-          {/* <div className="nav__actions">
-            <span className="nav__hint" aria-hidden>
-              <span className="nav__hint-dot" /> Invite-only
-            </span>
+          {/* Desktop / laptop CTA cluster. Just the sign-in button — the
+              old "Invite-only" pill was dropped because published pricing
+              makes the "invite-only" framing misleading to new visitors. */}
+          <div className="nav__actions">
             <Link href="/login" className="btn btn--primary nav__cta" onClick={closeMenu}>
               Subscriber sign-in <span aria-hidden>→</span>
             </Link>
-          </div> */}
+          </div>
 
           <button
             type="button"
