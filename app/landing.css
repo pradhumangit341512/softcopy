@@ -248,10 +248,6 @@ html { scroll-behavior: smooth; }
 .b360 .nav__links a { transition: color 0.2s; }
 .b360 .nav__links a:hover { color: var(--blue); }
 
-/* Desktop: the in-menu sign-in link stays hidden. It's only visible in
-   the open mobile dropdown (see the ≤980 media query below). */
-.b360 .nav__cta-mobile { display: none; }
-
 .b360 .nav__actions { display: flex; align-items: center; gap: 14px; }
 .b360 .nav__hint {
   display: inline-flex;
@@ -1483,28 +1479,17 @@ html { scroll-behavior: smooth; }
     font-size: 16px;
     color: var(--ink);
   }
-  /* Mobile / tablet: the "Subscriber sign-in" button comes out of the
-     top bar so the logo reads bigger and the hamburger gets room to
-     breathe. The same CTA is rendered at the bottom of the dropdown
-     menu (see `.nav__cta-mobile`) so it's still one tap away. */
-  .b360 .nav__actions { display: none; }
-  .b360 .hamburger { display: inline-flex; }
-
-  /* In-menu sign-in button shown when the dropdown opens. Sized like a
-     real primary CTA — full-width, thumb-friendly — so mobile visitors
-     can tap without hunting for a small pill. */
-  .b360 .nav__cta-mobile {
-    display: flex;
-    align-self: stretch;
-    justify-content: center;
-    margin-top: 20px;
-    padding: 14px 22px;
-    font-size: 15px;
-    /* Hit at least 48px tall on a 1x-density screen. Apple/Material
-       both agree 44–48px is the comfort threshold for thumb taps. */
-    min-height: 48px;
-    border-radius: 14px;
+  /* Mobile / tablet: keep the sign-in button in the top bar but scale
+     its padding + font so it fits next to the logo and the hamburger
+     on a ~360px phone. A single button renders in the DOM at every
+     width — no mobile-dropdown clone — so visitors never see two
+     "Subscriber sign-in" labels stacked on top of each other. */
+  .b360 .nav__actions { display: flex; gap: 8px; }
+  .b360 .nav__cta {
+    padding: 8px 14px;
+    font-size: 13px;
   }
+  .b360 .hamburger { display: inline-flex; }
 
   .b360 .hero { padding: 148px 24px 72px; }
   .b360 .hero__meta { gap: 16px; }
@@ -1582,8 +1567,11 @@ html { scroll-behavior: smooth; }
 @media (max-width: 560px) {
   /* Phone navbar: 14px padding + 52px logo + 14px padding + 1px border. */
   .b360 { --nav-h: 81px; }
-  .b360 .nav__inner { padding: 14px 20px; gap: 16px; }
+  .b360 .nav__inner { padding: 14px 20px; gap: 10px; }
   .b360 .brand__wordmark { display: none; }
+  /* Phone CTA: tighter so logo + button + hamburger all fit on 360px. */
+  .b360 .nav__cta { padding: 7px 12px; font-size: 12px; }
+  .b360 .nav__actions { gap: 6px; }
 
   .b360 .hero { padding: 130px 20px 56px; }
   .b360 .hero__sub { font-size: 15.5px; }
@@ -1644,9 +1632,13 @@ html { scroll-behavior: smooth; }
 @media (max-width: 380px) {
   /* Tiny-phone navbar: 12px padding + 44px logo + 12px padding + 1px border. */
   .b360 { --nav-h: 69px; }
-  .b360 .nav__inner { padding: 12px 16px; }
+  .b360 .nav__inner { padding: 12px 12px; gap: 8px; }
   .b360 .brand__mark { width: 30px; height: 30px; font-size: 11px; }
   .b360 .hamburger { width: 38px; height: 38px; }
+  /* Tiny phones: hide the arrow glyph on the CTA and tighten more
+     so the logo isn't squeezed off the left edge at 320px widths. */
+  .b360 .nav__cta { padding: 6px 10px; font-size: 11.5px; }
+  .b360 .nav__cta span[aria-hidden] { display: none; }
 
   .b360 .section { padding: 52px 16px; }
   .b360 .section--alt > * { padding-left: 16px; padding-right: 16px; }
