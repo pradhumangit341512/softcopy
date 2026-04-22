@@ -331,7 +331,10 @@ html { scroll-behavior: smooth; }
 .b360 .btn--lg { padding: 14px 26px; font-size: 15px; }
 
 .b360 .hero {
-  padding: 150px 32px 100px;
+  /* Top padding = nav height (105px desktop) + breathing room. The fixed
+     nav sits above this section, so the hero must start below it or the
+     headline gets clipped. */
+  padding: 170px 32px 100px;
   max-width: 1240px;
   margin: 0 auto;
   text-align: center;
@@ -1407,7 +1410,7 @@ html { scroll-behavior: smooth; }
   .b360 .nav__links { gap: 26px; }
   .b360 .nav__hint { display: none; }
   .b360 .section { padding: 104px 28px; }
-  .b360 .hero { padding: 140px 28px 88px; }
+  .b360 .hero { padding: 160px 28px 88px; }
   .b360 .bento { gap: 14px; }
   .b360 .prices { gap: 14px; }
   .b360 .modules { gap: 14px; }
@@ -1457,7 +1460,9 @@ html { scroll-behavior: smooth; }
     background: #ffffff;
     border-bottom: 1px solid var(--line);
     box-shadow: 0 14px 32px rgba(11, 16, 32, 0.08);
-    padding: 20px 28px 28px;
+    /* Slightly more generous padding so the bigger sign-in button has
+       room to breathe inside the dropdown panel. */
+    padding: 24px 24px 28px;
     transform: translateY(-10px);
     opacity: 0;
     pointer-events: none;
@@ -1501,7 +1506,7 @@ html { scroll-behavior: smooth; }
     border-radius: 14px;
   }
 
-  .b360 .hero { padding: 128px 24px 72px; }
+  .b360 .hero { padding: 148px 24px 72px; }
   .b360 .hero__meta { gap: 16px; }
   .b360 .mock { transform: none; border-radius: 18px; }
   .b360 .mock__side { display: none; }
@@ -1538,7 +1543,7 @@ html { scroll-behavior: smooth; }
   .b360 .section { padding: 72px 22px; }
   .b360 .section--alt > * { padding-left: 22px; padding-right: 22px; }
   .b360 .section__header { margin-bottom: 44px; }
-  .b360 .hero { padding: 118px 22px 64px; }
+  .b360 .hero { padding: 140px 22px 64px; }
   .b360 .hero__sub { font-size: 16.5px; }
   .b360 .hero__meta { gap: 14px; font-size: 11.5px; }
 
@@ -1580,7 +1585,7 @@ html { scroll-behavior: smooth; }
   .b360 .nav__inner { padding: 14px 20px; gap: 16px; }
   .b360 .brand__wordmark { display: none; }
 
-  .b360 .hero { padding: 108px 20px 56px; }
+  .b360 .hero { padding: 130px 20px 56px; }
   .b360 .hero__sub { font-size: 15.5px; }
   .b360 .hero__ctas { flex-direction: column; width: 100%; }
   .b360 .hero__ctas .btn { width: 100%; }
@@ -1645,7 +1650,7 @@ html { scroll-behavior: smooth; }
 
   .b360 .section { padding: 52px 16px; }
   .b360 .section--alt > * { padding-left: 16px; padding-right: 16px; }
-  .b360 .hero { padding: 96px 16px 48px; }
+  .b360 .hero { padding: 112px 16px 48px; }
   .b360 .hero__headline { font-size: clamp(34px, 10vw, 44px); }
   .b360 .hero__sub { font-size: 15px; }
 
