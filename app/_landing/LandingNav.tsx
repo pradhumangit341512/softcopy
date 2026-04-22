@@ -79,14 +79,14 @@ export function LandingNav() {
             </Link>
           </div>
 
-          <div className="nav__actions">
+          {/* <div className="nav__actions">
             <span className="nav__hint" aria-hidden>
               <span className="nav__hint-dot" /> Invite-only
             </span>
             <Link href="/login" className="btn btn--primary nav__cta" onClick={closeMenu}>
               Subscriber sign-in <span aria-hidden>→</span>
             </Link>
-          </div>
+          </div> */}
 
           <button
             type="button"

@@ -14,10 +14,20 @@ export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
-    // Auth: check CRON_SECRET
-    const secret = req.headers.get('x-cron-secret') ?? req.headers.get('authorization');
-    if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET && secret !== `Bearer ${process.env.CRON_SECRET}`) {
-      // On Vercel, cron invocations don't always send custom headers, so also allow no-secret in production cron context
+    // Auth: require a valid CRON_SECRET. Vercel's cron runner sends
+    // `Authorization: Bearer <CRON_SECRET>` when you configure one in
+    // project settings, so we accept either the `x-cron-secret` header
+    // or the Bearer form. The previous version of this check had an
+    // empty `if` body, which meant any anonymous POST would run the
+    // job and spam weekly-report emails.
+    if (process.env.CRON_SECRET) {
+      const secret = req.headers.get('x-cron-secret') ?? req.headers.get('authorization');
+      const ok =
+        secret === process.env.CRON_SECRET ||
+        secret === `Bearer ${process.env.CRON_SECRET}`;
+      if (!ok) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
 
     // Day-of-week check: only run on Monday (IST)
