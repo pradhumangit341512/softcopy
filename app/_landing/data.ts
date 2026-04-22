@@ -235,6 +235,59 @@ export const WORKFLOW_STEPS = [
 ] as const;
 
 /**
+ * Landing-page FAQs. Answers are written short enough to fit an
+ * AI-Overview / featured-snippet card (~55 words max) and are the SOLE
+ * source of truth — the visible <details> accordion, the JSON-LD
+ * FAQPage schema, and /llms.txt all reference these same strings so
+ * Google's "answers must match schema" rule can never be violated
+ * by a copy edit drifting one side out of sync.
+ */
+export interface FAQ { q: string; a: string; }
+
+export const FAQS: FAQ[] = [
+  {
+    q: 'What is Broker365?',
+    a: 'Broker365 is a browser-based CRM built for Indian real-estate brokerages. It keeps leads, property inventory, site visits, pipeline stages, commissions, and team performance in one dashboard — designed around how Indian brokers actually close deals.',
+  },
+  {
+    q: 'How much does Broker365 cost?',
+    a: 'Solo is ₹999 per month for one broker. Team is ₹2,999 per month for up to 15 agents and is the most popular plan. Enterprise is custom-priced for multi-city teams with SSO and custom integrations. All paid plans include unlimited leads and properties.',
+  },
+  {
+    q: 'Is Broker365 only for Indian brokerages?',
+    a: 'Yes. Every feature is tuned for Indian real estate — INR currency, Indian Financial Year accounting (April to March), WhatsApp as a first-class channel, Hindi-English CSV imports from 99acres and MagicBricks, and hosting in Mumbai for local data residency.',
+  },
+  {
+    q: 'Does Broker365 integrate with WhatsApp?',
+    a: 'Yes. Incoming enquiries from WhatsApp Business are captured via webhook into the leads inbox. Follow-up reminders, visit confirmations, and scheduled nudges are delivered over WhatsApp so clients reply where they already chat.',
+  },
+  {
+    q: 'How is Broker365 different from Sell.Do or LeadSquared?',
+    a: 'Sell.Do and LeadSquared are horizontal sales tools that real-estate brokers adapt to. Broker365 is built only for brokerages — co-broking commission splits, BHK-aware inventory filters, site-visit logs, and Indian Financial Year commission reports ship by default, not as add-ons.',
+  },
+  {
+    q: 'How are co-broking commissions handled?',
+    a: 'Each commission row supports a payment ledger — record the deal amount and commission percentage, then log every instalment (cash, UPI, bank, cheque) as it comes in. Partial, fully-paid, and split commissions with co-broker payouts are tracked per deal and per salesperson.',
+  },
+  {
+    q: 'How long does onboarding take?',
+    a: 'Most brokerages are live within 48 hours. Our team schedules a 30-minute walkthrough, migrates your existing leads and inventory from Excel or any portal CSV for free, and hands over credentials for every agent. Training is included.',
+  },
+  {
+    q: 'Can I export my data if I leave?',
+    a: 'Yes. Every module supports one-click Excel and CSV export. If you cancel, we provide a full JSON export of your leads, properties, commissions, and payment history within 24 hours. Your data is yours.',
+  },
+  {
+    q: 'How secure is my brokerage data?',
+    a: 'Every sign-in requires an email OTP, sessions are enforced one-device-per-account, and role-based access scopes field-level writes. Every sensitive mutation is written to a searchable audit log. Data is encrypted at rest on MongoDB Atlas in Mumbai.',
+  },
+  {
+    q: 'Is there a trial or money-back guarantee?',
+    a: 'New brokerages get a 14-day money-back guarantee from their first paid invoice — email us and we refund in full, no questions asked. Beyond that window, partial-month refunds are discretionary.',
+  },
+];
+
+/**
  * JSON-LD structured data for the landing page.
  *
  * The previous copy hard-coded an `aggregateRating` of 4.9 / 38 reviews
@@ -282,44 +335,14 @@ export const LANDING_JSON_LD = {
     },
     {
       '@type': 'FAQPage',
-      mainEntity: [
-        {
-          '@type': 'Question',
-          name: 'Is Broker365 available to anyone?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text:
-              'No. Broker365 is invite-only. Each brokerage is onboarded personally. Submit the onboarding form and our team will reach out within 24 hours.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'What does Broker365 include?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text:
-              'Broker365 includes lead and client management, property inventory with rich filters, site-visit tracking, commissions, a kanban pipeline, team performance analytics, WhatsApp automation, notifications, activity logs, and a superadmin console.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'How is my brokerage data secured?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text:
-              'Single-session enforcement, OTP at every sign-in, role-based access with field-level guards, and a full audit trail for every sensitive mutation.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'What does Broker365 cost?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text:
-              'Solo is ₹999 per month, Team is ₹2,999 per month, and Enterprise is custom-priced per brokerage. All plans include unlimited leads and properties.',
-          },
-        },
-      ],
+      // Entries are sourced from FAQS below so the DOM <details> accordion
+      // and the FAQPage schema answers are word-for-word identical — a
+      // hard Google requirement for FAQPage rich results to stay valid.
+      mainEntity: FAQS.map((f) => ({
+        '@type': 'Question',
+        name: f.q,
+        acceptedAnswer: { '@type': 'Answer', text: f.a },
+      })),
     },
   ],
 };

@@ -14,7 +14,18 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/login', '/forgot-password', '/reset-password'],
+        allow: [
+          '/',
+          '/login',
+          '/forgot-password',
+          '/reset-password',
+          '/privacy',
+          '/terms',
+          // Explicit allow so AI crawlers (ChatGPT, Perplexity, Claude)
+          // reliably fetch the ingestion-friendly summary at /llms.txt
+          // even when aggressive proxies default to deny.
+          '/llms.txt',
+        ],
         disallow: [
           '/dashboard',
           '/superadmin',

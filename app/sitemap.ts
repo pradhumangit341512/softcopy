@@ -42,5 +42,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'yearly',
       priority: 0.3,
     },
+    // Google deduplicates fragment URLs to the parent page, so this
+    // entry doesn't get its own result — it's here so AI crawlers that
+    // actually honour fragment-level entries (some do) can jump straight
+    // to the FAQ block without re-parsing the whole page.
+    {
+      url: `${base}/#faq`,
+      lastModified: now,
+      changeFrequency: 'monthly',
+      priority: 0.5,
+    },
   ];
 }

@@ -1329,7 +1329,8 @@ html { scroll-behavior: smooth; }
   max-width: 1240px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+  /* 5 columns: brand + Product / Company / Account / Legal. */
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
   gap: 48px;
 }
 .b360 .foot__brand p {
@@ -1678,6 +1679,76 @@ html { scroll-behavior: smooth; }
   .b360 .foot__col a { padding: 9px 0; }
 }
 
+/* ─── FAQ (between pricing and onboarding) ───────────────────────
+   Uses native <details>/<summary> — zero JS, perfect keyboard access,
+   and AI crawlers (ChatGPT, Perplexity) parse the Q/A structure as-is.
+   Reuses the existing bento/sec-card colour language so the section
+   feels consistent with the rest of the page. */
+.b360 .faq {
+  display: grid;
+  gap: 10px;
+  max-width: 880px;
+  margin: 0 auto;
+}
+.b360 .faq__item {
+  background: var(--bg-alt);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.b360 .faq__item[open] {
+  border-color: rgba(45, 92, 255, 0.28);
+  box-shadow: var(--shadow-md);
+}
+.b360 .faq__q {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 22px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-fraunces), serif;
+  font-weight: 500;
+  font-size: 17px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.b360 .faq__q::-webkit-details-marker { display: none; }
+.b360 .faq__q:hover { color: var(--blue-deep); }
+.b360 .faq__chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--blue-pale);
+  color: var(--blue);
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 16px;
+  font-weight: 600;
+  flex-shrink: 0;
+  transition: transform 0.2s ease-out, background 0.2s;
+}
+.b360 .faq__item[open] .faq__chevron {
+  background: var(--blue);
+  color: #ffffff;
+  transform: rotate(45deg);
+}
+.b360 .faq__a {
+  margin: 0;
+  padding: 0 22px 20px;
+  color: var(--ink-mid);
+  font-size: 15px;
+  line-height: 1.65;
+  max-width: 68ch;
+}
+
+@media (max-width: 560px) {
+  .b360 .faq__q { padding: 16px 18px; font-size: 16px; gap: 14px; }
+  .b360 .faq__a { padding: 0 18px 18px; font-size: 14.5px; }
+  .b360 .faq__chevron { width: 24px; height: 24px; font-size: 15px; }
+}
+
 /* ─── Legal pages (/privacy, /terms) ─────────────────────────────
    Long-form body copy. Same font stack + palette as the marketing
    site so the legal surface feels part of the product, not a tacked-on
@@ -1757,33 +1828,31 @@ html { scroll-behavior: smooth; }
   border-top: 1px solid var(--line);
 }
 
-/* ─── WhatsApp floating action button ───────────────────────────
-   Sits in the thumb zone on mobile. Stays below the mobile-menu
-   dropdown (z-index 95) so it can't cover menu items. Pill shape
-   with icon+label on tablet/desktop, collapses to a 56px circle
-   on phones to stay out of the way. */
+/* ─── Floating WhatsApp FAB ──────────────────────────────────────
+   Fixed 56px circle in the bottom-right thumb zone. Rendered by
+   components/common/WhatsAppFAB.tsx and mounted once from the root
+   layout so every public route shows it (the component's
+   usePathname() gate hides it on /dashboard + auth surfaces).
+   Styled outside the .b360 scope so it works on /privacy /terms too. */
 .wa-fab {
   position: fixed;
   right: 22px;
-  bottom: 22px;
   z-index: 80;
+  width: 56px;
+  height: 56px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 18px 12px 14px;
-  border-radius: 999px;
+  justify-content: center;
+  border-radius: 50%;
   background: #25d366;
   color: #ffffff;
-  font-family: var(--font-manrope), system-ui, sans-serif;
-  font-size: 14px;
-  font-weight: 600;
   text-decoration: none;
   box-shadow:
     0 14px 30px rgba(37, 211, 102, 0.38),
     0 4px 10px rgba(11, 16, 32, 0.1);
   transition: transform 0.18s ease-out, background 0.2s ease-out, box-shadow 0.2s ease-out;
   /* Respect iOS home-indicator safe area on PWAs / notched devices. */
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
 }
 .wa-fab:hover {
   transform: translateY(-2px);
@@ -1797,27 +1866,29 @@ html { scroll-behavior: smooth; }
   outline-offset: 3px;
 }
 .wa-fab svg { flex-shrink: 0; }
-.wa-fab__label { white-space: nowrap; }
 
-@media (max-width: 768px) {
-  .wa-fab {
-    padding: 14px;
-    border-radius: 50%;
-    width: 56px;
-    height: 56px;
-    justify-content: center;
-  }
-  .wa-fab__label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
+/* Pulse ring — a single expanding circle behind the FAB that fades
+   as it grows. Pure CSS, runs on the compositor thread. Gated on
+   prefers-reduced-motion below. */
+.wa-fab__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #25d366;
+  opacity: 0.55;
+  animation: wa-fab-pulse 1.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+@keyframes wa-fab-pulse {
+  0%   { transform: scale(1);    opacity: 0.55; }
+  70%  { transform: scale(1.45); opacity: 0;    }
+  100% { transform: scale(1.45); opacity: 0;    }
+}
+
+@media (max-width: 380px) {
+  .wa-fab { right: 16px; width: 52px; height: 52px; }
+  .wa-fab svg { width: 26px; height: 26px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1839,5 +1910,6 @@ html { scroll-behavior: smooth; }
   .b360 .fade-up { opacity: 1; transform: none; }
   .wa-fab { transition: none; }
   .wa-fab:hover { transform: none; }
+  .wa-fab__pulse { animation: none; opacity: 0; }
   html { scroll-behavior: auto; }
 }

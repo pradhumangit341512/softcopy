@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/react';
 import './globals.css';
 import './landing.css';
 import { ToastProvider } from '@/components/common/Toast';
+import { WhatsAppFAB } from '@/components/common/WhatsAppFAB';
 
 // App fonts
 const inter = Inter({
@@ -127,6 +128,11 @@ export default function RootLayout({
 
         {/* Vercel Analytics — traffic + Core Web Vitals, no cookies. */}
         <Analytics />
+
+        {/* Floating WhatsApp bubble. Self-hides on /dashboard, /superadmin,
+            /team and every auth surface via usePathname() — visible only on
+            public marketing + legal pages. */}
+        <WhatsAppFAB />
       </body>
     </html>
   );

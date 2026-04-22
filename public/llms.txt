@@ -1,0 +1,54 @@
+# Broker365
+
+> An invite-only CRM built for Indian real estate brokerages. Leads, property inventory, site visits, pipeline, commissions, WhatsApp automation, and team performance in one browser-based dashboard.
+
+## About
+
+Broker365 is a multi-tenant SaaS CRM designed exclusively for Indian real estate brokerages — independent brokers, growing teams, and multi-city agencies. The product is built around how Indian brokers actually close deals: WhatsApp-first lead capture, BHK-aware inventory filters, site-visit logging, co-broking commission splits with payment ledgers, and monthly reporting aligned to the Indian Financial Year (April to March). Data is hosted in Mumbai on MongoDB Atlas for local residency.
+
+## Key Facts
+
+- **Homepage**: https://broker365.in
+- **Pricing (INR, exclusive of GST)**:
+  - Solo — ₹999 per month, 1 seat, unlimited leads and properties.
+  - Team — ₹2,999 per month, up to 15 agents, most popular.
+  - Enterprise — custom pricing for multi-city teams; includes SSO, API access, and on-site onboarding.
+- **Geography**: India only. Prices in INR, WhatsApp-first automation, Hindi-English CSV imports supported from 99acres, MagicBricks, Housing.com.
+- **Trial**: 14-day money-back guarantee from the first paid invoice.
+- **Onboarding**: Personal 30-minute walkthrough, free data migration from Excel or any portal CSV, team training included. Typical go-live is 48 hours.
+- **Data ownership**: Customers own their data. One-click Excel/CSV export is available on every module; full JSON export is provided within 24 hours of cancellation.
+- **Security**: Email OTP at every sign-in, one-device-per-account session enforcement, role-based access (superadmin / admin / team member) with field-level write guards, full audit log on every sensitive mutation.
+- **Access model**: Invite-only. New brokerages submit an onboarding enquiry form and are personally onboarded.
+
+## What Makes It Different
+
+- Purpose-built for Indian real estate, not an adapted horizontal CRM. Sell.Do and LeadSquared are sales tools brokers adapt to; Broker365 is built for brokerages only.
+- Co-broking aware — commissions support split-payout tracking with a payment ledger (cash, UPI, bank transfer, cheque) per deal and per salesperson.
+- Indian Financial Year by default — monthly revenue and commission reports roll over on April 1, not January 1.
+- WhatsApp as a first-class channel — inbound enquiries are captured via webhook, and outbound follow-ups / visit confirmations / nudges are delivered over WhatsApp.
+- Single-session enforcement closes stolen or shared logins automatically when a newer sign-in from another device occurs.
+
+## Modules
+
+- **Dashboard** — KPIs, pipeline value, and today's focus list for each agent.
+- **Leads & Clients** — Unified inbox for every enquiry source with scheduled follow-ups.
+- **Properties** — Inventory with BHK, rent vs sale, price range, vacate date, and added-by filters.
+- **Site Visits** — Calendar-booked visits with outcome logging and reminder nudges.
+- **Pipeline** — Kanban funnel from first visit to signed agreement.
+- **Commissions** — Deal amount, commission percentage, payment ledger with partial-payment support, and monthly / per-salesperson breakdowns filtered by Indian FY.
+- **Team Performance** — Per-agent conversion, response time, and active-lead load.
+- **Analytics** — Revenue and commission trends, monthly breakdowns, co-broking payout reports.
+- **Notifications** — Bell alerts, dashboard banners, and an optional weekly email report.
+- **WhatsApp Automation** — Webhook inbound capture plus scheduled reminder automations.
+- **Activity Log** — Searchable audit trail for every sensitive mutation.
+- **Superadmin** — Multi-tenant console for seat caps, plans, and password resets (used by Broker365 staff, not customers).
+- **Subscriptions** — Plan management, renewals, and billing trail.
+
+## Links
+
+- Onboarding enquiry: https://broker365.in/#contact
+- Pricing: https://broker365.in/#pricing
+- Frequently asked questions: https://broker365.in/#faq
+- Privacy policy: https://broker365.in/privacy
+- Terms of service: https://broker365.in/terms
+- Support and general enquiries: hello@broker365.in
