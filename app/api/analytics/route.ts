@@ -12,7 +12,6 @@ function emptyAnalytics() {
   return NextResponse.json({
     summary: {
       totalClients: 0,
-      todayVisits: 0,
       todayVisitsCount: 0,
       closedDeals: 0,
       totalCommission: 0,
@@ -72,7 +71,7 @@ export async function GET(req: NextRequest) {
         where: { ...clientFilter, visitingDate: { gte: todayStart, lt: todayEnd } },
         select: {
           id: true, clientName: true, phone: true,
-          visitingDate: true, visitingTime: true, preferredLocation: true,
+          visitingDate: true, visitingTime: true, notes: true,
         },
         orderBy: { visitingTime: "asc" },
       }),
@@ -138,7 +137,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       summary: {
         totalClients,
-        todayVisits: todayVisitsCount,
+        todayVisitsCount,
         closedDeals,
         totalCommission: commissions._sum.commissionAmount ?? 0,
       },

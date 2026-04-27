@@ -253,8 +253,9 @@ export interface TodayVisit {
   phone: string;
   property?: string;
   location?: string;
+  notes?: string;
   visitingDate: Date;
-  visitingTime: string;
+  visitingTime?: string;
   assignedTo?: string;
 }
 

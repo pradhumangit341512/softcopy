@@ -10,7 +10,7 @@ import { VisitReminder } from './VisitReminder';
 import { FollowUpBanner } from './FollowUpBanner';
 import { TodayVisit } from '@/lib/types';
 import { CHART_COLORS, CustomTooltipProps, TooltipPayloadEntry } from '@/lib/utils';
-import { CalendarCheck, Phone, MapPin } from 'lucide-react';
+import { CalendarCheck, Phone, FileText } from 'lucide-react';
 
 interface DashboardData {
   summary: {
@@ -137,7 +137,7 @@ export function Dashboard() {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {['#', 'Client', 'Phone', 'Time', 'Location'].map((h) => (
+                  {['#', 'Client', 'Phone', 'Visiting Time', 'Notes'].map((h) => (
                     <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500
                       uppercase tracking-wide text-left">
                       {h}
@@ -156,13 +156,15 @@ export function Dashboard() {
                     </td>
                     <td className="px-4 py-3.5 text-sm text-gray-600">{visit.phone}</td>
                     <td className="px-4 py-3.5">
-                      <span className="text-xs font-semibold text-blue-600
-                        bg-blue-50 px-2.5 py-1 rounded-full">
-                        {visit.visitingTime}
-                      </span>
+                      {visit.visitingTime ? (
+                        <span className="text-xs font-semibold text-blue-600
+                          bg-blue-50 px-2.5 py-1 rounded-full">
+                          {visit.visitingTime}
+                        </span>
+                      ) : null}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-gray-600">
-                      {visit.location || '—'}
+                    <td className="px-4 py-3.5 text-sm text-gray-600 max-w-[260px] truncate">
+                      {visit.notes || ''}
                     </td>
                   </tr>
                 ))}
@@ -182,18 +184,20 @@ export function Dashboard() {
                     </span>
                     <p className="text-sm font-bold text-gray-900">{visit.clientName}</p>
                   </div>
-                  <span className="text-xs font-semibold text-blue-600
-                    bg-blue-50 px-2.5 py-1 rounded-full">
-                    {visit.visitingTime}
-                  </span>
+                  {visit.visitingTime ? (
+                    <span className="text-xs font-semibold text-blue-600
+                      bg-blue-50 px-2.5 py-1 rounded-full">
+                      {visit.visitingTime}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 pl-7">
                   <span className="flex items-center gap-1 text-xs text-gray-500">
                     <Phone size={11} /> {visit.phone}
                   </span>
-                  {visit.location && (
+                  {visit.notes && (
                     <span className="flex items-center gap-1 text-xs text-gray-500">
-                      <MapPin size={11} /> {visit.location}
+                      <FileText size={11} /> {visit.notes}
                     </span>
                   )}
                 </div>
