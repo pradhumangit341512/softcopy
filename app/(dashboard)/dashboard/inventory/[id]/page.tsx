@@ -60,7 +60,7 @@ export default function EditPropertyPage() {
       }
 
       addToast({ type: 'success', message: 'Property updated successfully!' });
-      router.push('/dashboard/properties');
+      router.push('/dashboard/inventory');
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update property';
@@ -83,7 +83,7 @@ export default function EditPropertyPage() {
     return (
       <div className="py-4 sm:py-6 lg:py-8 space-y-4">
         <Alert type="error" title="Error" message={error || 'Property not found'} />
-        <Link href="/dashboard/properties">
+        <Link href="/dashboard/inventory">
           <Button variant="outline" size="sm" icon={<ArrowLeft size={18} />}>
             Back to Properties
           </Button>
@@ -95,7 +95,7 @@ export default function EditPropertyPage() {
   return (
     <div className="py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6">
       <div className="flex items-center gap-3 sm:gap-4">
-        <Link href="/dashboard/properties">
+        <Link href="/dashboard/inventory">
           <Button variant="outline" size="sm" icon={<ArrowLeft size={18} />}>
             <span className="hidden sm:inline">Back</span>
           </Button>

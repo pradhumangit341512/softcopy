@@ -34,7 +34,7 @@ export default function AddPropertyPage() {
         type: 'success',
         message: 'Property added successfully!',
       });
-      router.push('/dashboard/properties');
+      router.push('/dashboard/inventory');
       return true;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to add property';
@@ -52,7 +52,7 @@ export default function AddPropertyPage() {
     <div className="py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6">
       {/* Header with Back Button */}
       <div className="flex items-center gap-3 sm:gap-4">
-        <Link href="/dashboard/properties">
+        <Link href="/dashboard/inventory">
           <Button variant="outline" size="sm" icon={<ArrowLeft size={18} />}>
             <span className="hidden sm:inline">Back</span>
           </Button>

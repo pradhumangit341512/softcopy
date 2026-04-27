@@ -49,7 +49,7 @@ export function VisitReminder({ visitCount }: VisitReminderProps) {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => router.push('/dashboard/clients')}
+            onClick={() => router.push('/dashboard/all-leads')}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
               text-red-700 bg-red-100 hover:bg-red-200 rounded-xl transition-colors"
           >
@@ -105,7 +105,7 @@ export function VisitReminder({ visitCount }: VisitReminderProps) {
                 Dismiss
               </button>
               <button
-                onClick={() => { setShowPopup(false); router.push('/dashboard/clients'); }}
+                onClick={() => { setShowPopup(false); router.push('/dashboard/all-leads'); }}
                 className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5
                   text-sm font-semibold text-white bg-red-500 hover:bg-red-600
                   rounded-xl transition-colors"

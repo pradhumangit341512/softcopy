@@ -96,13 +96,13 @@ export default function PropertiesPage() {
       if (newFilters[key]) params.set(key, newFilters[key]);
     }
     params.set('page', '1');
-    router.push(`/dashboard/properties?${params.toString()}`);
+    router.push(`/dashboard/inventory?${params.toString()}`);
   };
 
   const handlePageChange = (newPage: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('page', String(newPage));
-    router.push(`/dashboard/properties?${params.toString()}`);
+    router.push(`/dashboard/inventory?${params.toString()}`);
   };
 
   const activeFilterCount = FILTER_KEYS.filter(
@@ -140,7 +140,7 @@ export default function PropertiesPage() {
     fetchProperties();
   }, [authLoading, fetchProperties]);
 
-  const handleEdit = (id: string) => router.push(`/dashboard/properties/${id}`);
+  const handleEdit = (id: string) => router.push(`/dashboard/inventory/${id}`);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this property? This action cannot be undone.')) return;
@@ -231,7 +231,7 @@ export default function PropertiesPage() {
             <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
 
-          <Link href="/dashboard/properties/add">
+          <Link href="/dashboard/inventory/add">
             <button className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5
               text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
               rounded-xl shadow-sm transition-colors whitespace-nowrap">
@@ -309,7 +309,7 @@ export default function PropertiesPage() {
                 onClick={() => {
                   const params = new URLSearchParams(searchParams.toString());
                   params.delete('search');
-                  router.push(`/dashboard/properties?${params.toString()}`);
+                  router.push(`/dashboard/inventory?${params.toString()}`);
                 }}
                 className="hover:text-blue-800 shrink-0"
               >
@@ -335,7 +335,7 @@ export default function PropertiesPage() {
               </p>
               {activeFilterCount > 0 && (
                 <button
-                  onClick={() => router.push('/dashboard/properties')}
+                  onClick={() => router.push('/dashboard/inventory')}
                   className="mt-1 text-xs text-blue-600 hover:underline"
                 >
                   Clear all filters
@@ -343,7 +343,7 @@ export default function PropertiesPage() {
               )}
             </div>
             {!filtersFromUrl.search && activeFilterCount === 0 && (
-              <Link href="/dashboard/properties/add">
+              <Link href="/dashboard/inventory/add">
                 <button className="text-xs text-blue-600 hover:underline font-semibold">
                   + Add your first property
                 </button>

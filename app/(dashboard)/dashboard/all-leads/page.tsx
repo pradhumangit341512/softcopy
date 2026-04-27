@@ -80,13 +80,13 @@ export default function ClientsPage() {
     if (newFilters.budgetMin) params.set('budgetMin', newFilters.budgetMin);
     if (newFilters.budgetMax) params.set('budgetMax', newFilters.budgetMax);
     params.set('page', '1');
-    router.push(`/dashboard/clients?${params.toString()}`);
+    router.push(`/dashboard/all-leads?${params.toString()}`);
   };
 
   const handlePageChange = (newPage: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('page', String(newPage));
-    router.push(`/dashboard/clients?${params.toString()}`);
+    router.push(`/dashboard/all-leads?${params.toString()}`);
   };
 
   // Count active filters for badge
@@ -154,7 +154,7 @@ export default function ClientsPage() {
     }
   };
 
-  const handleEdit   = (id: string) => router.push(`/dashboard/clients/${id}`);
+  const handleEdit   = (id: string) => router.push(`/dashboard/all-leads/${id}`);
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this client?')) return;
     try {
@@ -228,7 +228,7 @@ export default function ClientsPage() {
           </button>
 
           {/* Add client */}
-          <Link href="/dashboard/clients/add">
+          <Link href="/dashboard/all-leads/add">
             <button className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5
               text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
               rounded-xl shadow-sm transition-colors whitespace-nowrap">
@@ -310,7 +310,7 @@ export default function ClientsPage() {
                 onClick={() => {
                   const params = new URLSearchParams(searchParams.toString());
                   params.delete('search');
-                  router.push(`/dashboard/clients?${params.toString()}`);
+                  router.push(`/dashboard/all-leads?${params.toString()}`);
                 }}
                 className="hover:text-blue-800 shrink-0"
               >
@@ -337,7 +337,7 @@ export default function ClientsPage() {
               </p>
               {(statusFromUrl || dateFromUrl || dateToUrl) && (
                 <button
-                  onClick={() => router.push('/dashboard/clients')}
+                  onClick={() => router.push('/dashboard/all-leads')}
                   className="mt-1 text-xs text-blue-600 hover:underline"
                 >
                   Clear all filters
@@ -345,7 +345,7 @@ export default function ClientsPage() {
               )}
             </div>
             {!searchFromUrl && !statusFromUrl && (
-              <Link href="/dashboard/clients/add">
+              <Link href="/dashboard/all-leads/add">
                 <button className="text-xs text-blue-600 hover:underline font-semibold">
                   + Add your first client
                 </button>

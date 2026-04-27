@@ -97,7 +97,7 @@ export function NotificationPanel({ onClose }: Props) {
     if (!n.isRead) markRead(n.id);
     if (n.clientId) {
       onClose();
-      router.push(`/dashboard/clients/${n.clientId}`);
+      router.push(`/dashboard/all-leads/${n.clientId}`);
     }
   }
 

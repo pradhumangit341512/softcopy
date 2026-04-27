@@ -166,7 +166,7 @@ export default function MyWorkPage() {
             {todayVisits.map((visit, idx) => (
               <button
                 key={visit.id}
-                onClick={() => router.push(`/dashboard/clients/${visit.id}`)}
+                onClick={() => router.push(`/dashboard/all-leads/${visit.id}`)}
                 className="w-full text-left px-4 sm:px-5 py-3 sm:py-4 hover:bg-gray-50/60 transition-colors"
               >
                 <div className="flex items-center gap-3">
@@ -228,7 +228,7 @@ export default function MyWorkPage() {
             {pendingFollowUps.slice(0, 10).map((lead) => (
               <button
                 key={lead.id}
-                onClick={() => router.push(`/dashboard/clients/${lead.id}`)}
+                onClick={() => router.push(`/dashboard/all-leads/${lead.id}`)}
                 className="w-full text-left px-4 sm:px-5 py-3 sm:py-4 hover:bg-gray-50/60 transition-colors"
               >
                 <div className="flex items-center gap-3">
@@ -272,7 +272,7 @@ export default function MyWorkPage() {
             </h3>
           </div>
           <Link
-            href="/dashboard/clients"
+            href="/dashboard/all-leads"
             className="text-xs font-semibold text-blue-600 hover:text-blue-700"
           >
             View all →
@@ -284,7 +284,7 @@ export default function MyWorkPage() {
             <Users size={24} className="text-gray-300" />
             <p className="text-sm text-gray-400 font-medium">No leads yet</p>
             <Link
-              href="/dashboard/clients/add"
+              href="/dashboard/all-leads/add"
               className="text-xs text-blue-600 hover:underline font-semibold"
             >
               + Add your first lead
@@ -295,7 +295,7 @@ export default function MyWorkPage() {
             {assignedLeads.slice(0, 8).map((lead) => (
               <button
                 key={lead.id}
-                onClick={() => router.push(`/dashboard/clients/${lead.id}`)}
+                onClick={() => router.push(`/dashboard/all-leads/${lead.id}`)}
                 className="w-full text-left px-4 sm:px-5 py-3 sm:py-4 hover:bg-gray-50/60 transition-colors"
               >
                 <div className="flex items-center gap-3">

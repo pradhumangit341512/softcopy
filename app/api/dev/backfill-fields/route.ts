@@ -160,6 +160,6 @@ export async function POST() {
       usersTokenVersion +
       usersEmailVerified,
     nextStep:
-      'Reload /dashboard/clients, /dashboard/properties, /dashboard/commissions — the data should now appear.',
+      'Reload /dashboard/all-leads, /dashboard/inventory, /dashboard/commissions — the data should now appear.',
   });
 }

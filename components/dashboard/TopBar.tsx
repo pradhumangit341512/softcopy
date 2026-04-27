@@ -74,7 +74,7 @@ export function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
           params.delete('search');
           params.delete('page');
         }
-        router.push(`/dashboard/clients?${params.toString()}`);
+        router.push(`/dashboard/all-leads?${params.toString()}`);
       }, 400);
     },
     [router, searchParams]
@@ -90,7 +90,7 @@ export function TopBar({ user, onMenuClick, onLogout }: TopBarProps) {
     setSearchValue('');
     const params = new URLSearchParams(searchParams.toString());
     params.delete('search');
-    router.push(`/dashboard/clients?${params.toString()}`);
+    router.push(`/dashboard/all-leads?${params.toString()}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

@@ -88,7 +88,7 @@ export default function PipelinePage() {
           </p>
         </div>
 
-        <Link href="/dashboard/clients/add">
+        <Link href="/dashboard/all-leads/add">
           <button
             className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5
               text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
@@ -148,7 +148,7 @@ export default function PipelinePage() {
                   stageClients.map((client) => (
                     <button
                       key={client.id}
-                      onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+                      onClick={() => router.push(`/dashboard/all-leads/${client.id}`)}
                       className="w-full text-left bg-white rounded-xl p-3 shadow-sm border
                         border-gray-100 hover:shadow-md hover:border-blue-200 transition-all"
                     >

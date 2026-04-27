@@ -83,7 +83,7 @@ export default function EditClientPage() {
         type: 'success',
         message: 'Client updated successfully!',
       });
-      router.push('/dashboard/clients');
+      router.push('/dashboard/all-leads');
     } else {
       addToast({
         type: 'error',
@@ -105,7 +105,7 @@ export default function EditClientPage() {
     return (
       <div className="py-4 sm:py-6 lg:py-8 space-y-4">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard/clients">
+          <Link href="/dashboard/all-leads">
             <Button variant="outline" size="sm" icon={<ArrowLeft size={18} />}>
               <span className="hidden sm:inline">Back</span>
             </Button>
@@ -114,7 +114,7 @@ export default function EditClientPage() {
         </div>
         <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3">
           <p className="text-gray-500">{fetchError || 'Could not find this client.'}</p>
-          <Link href="/dashboard/clients">
+          <Link href="/dashboard/all-leads">
             <Button variant="outline">Back to Clients</Button>
           </Link>
         </div>
@@ -126,7 +126,7 @@ export default function EditClientPage() {
     <div className="py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6">
       {/* Header with Back Button */}
       <div className="flex items-center gap-3 sm:gap-4">
-        <Link href="/dashboard/clients">
+        <Link href="/dashboard/all-leads">
           <Button variant="outline" size="sm" icon={<ArrowLeft size={18} />}>
             <span className="hidden sm:inline">Back</span>
           </Button>

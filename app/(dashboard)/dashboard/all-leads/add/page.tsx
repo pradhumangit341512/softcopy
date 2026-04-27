@@ -44,10 +44,10 @@ export default function AddClientPage() {
     };
     const success = await addClient(formData as ClientFormData);
     if (success) {
-      // Invalidate the cached /dashboard/clients RSC so the list refetches
+      // Invalidate the cached /dashboard/all-leads RSC so the list refetches
       // the newly created record after navigation.
       router.refresh();
-      router.push('/dashboard/clients');
+      router.push('/dashboard/all-leads');
     }
     return success;
   };
@@ -56,7 +56,7 @@ export default function AddClientPage() {
     <div className="py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6">
       {/* Header with Back Button */}
       <div className="flex items-center gap-3 sm:gap-4">
-        <Link href="/dashboard/clients">
+        <Link href="/dashboard/all-leads">
           <Button variant="outline" size="sm" icon={<ArrowLeft size={18} />}>
             <span className="hidden sm:inline">Back</span>
           </Button>
