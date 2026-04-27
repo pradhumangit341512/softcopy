@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -13,13 +14,15 @@ import { Pagination } from '@/components/common/Pagination';
 import {
   IndianRupee, Clock, CheckCircle2, TrendingUp,
   ChevronRight, Plus, FileSpreadsheet,
-  FileText, Pencil, X, Target,
-  Search, Wallet, Wallet2, History, Trash2, Loader2,
+  FileText, X, Target,
+  Search, Wallet, Settings2,
+  Users2, Building2,
   Calendar,
 } from 'lucide-react';
 
 import type { LucideIcon } from 'lucide-react';
 import type { CustomTooltipProps } from '@/lib/utils';
+import { ManageDealModal, type ManagedCommission } from '@/components/commissions/ManageDealModal';
 
 // ─────────────────────────────────────────
 // Types
@@ -27,28 +30,21 @@ import type { CustomTooltipProps } from '@/lib/utils';
 interface Commission {
   id: string;
   clientId: string;
-  client: { clientName: string };
+  client: { clientName: string; phone?: string };
   user?: { name: string } | null;
   salesPersonName?: string | null;
+  builderName?: string | null;
   dealAmount: number;
+  /** Phase-1 buyer→builder ledger summary (denormalized on the Commission row). */
+  dealAmountPaid?: number;
+  dealStatus?: string; // 'Open' | 'InProgress' | 'Completed'
   commissionPercentage: number;
   commissionAmount: number;
-  /** Running total from the payment ledger. 0 = Pending, < full = Partial, >= full = Paid. */
+  /** Running total from the commission payment ledger. 0 = Pending, < full = Partial, >= full = Paid. */
   paidAmount: number;
   paidStatus: string; // 'Pending' | 'Partial' | 'Paid'
   createdAt: string;
   paymentReference?: string;
-}
-
-interface CommissionPaymentRow {
-  id: string;
-  amount: number;
-  paidOn: string;
-  method: string | null;
-  reference: string | null;
-  notes: string | null;
-  createdAt: string;
-  recorder?: { id: string; name: string } | null;
 }
 
 /** One month's rollup from /api/commissions/breakdown. */
@@ -83,8 +79,6 @@ interface BreakdownResponse {
   };
 }
 
-interface Client { id: string; clientName: string; }
-
 interface MonthlyBudget {
   id?: string;
   month: string;
@@ -92,14 +86,6 @@ interface MonthlyBudget {
 }
 
 type FilterType = 'all' | 'Pending' | 'Partial' | 'Paid';
-
-const PAYMENT_METHODS: { value: string; label: string }[] = [
-  { value: 'cash',          label: 'Cash' },
-  { value: 'upi',           label: 'UPI' },
-  { value: 'bank_transfer', label: 'Bank Transfer' },
-  { value: 'cheque',        label: 'Cheque' },
-  { value: 'other',         label: 'Other' },
-];
 
 // ─────────────────────────────────────────
 // Helpers
@@ -205,7 +191,6 @@ export default function CommissionsPage() {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const [commissions, setCommissions]     = useState<Commission[]>([]);
-  const [clients, setClients]             = useState<Client[]>([]);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState<string | null>(null);
   // paidCommission comes straight from the server (sum of CommissionPayment
@@ -221,64 +206,41 @@ export default function CommissionsPage() {
   const [page, setPage]                   = useState(1);
   const [totalPages, setTotalPages]       = useState(1);
 
-  // Time filter — accounting-period presets backed by an explicit (from, to)
-  // pair. Both bounds are sent to the API as YYYY-MM-DD; the server treats
-  // `to` as inclusive up to end-of-day. 'all' sends no bounds at all.
-  type TimePreset = 'all' | 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'thisFY' | 'custom';
-  const [timePreset, setTimePreset] = useState<TimePreset>('all');
-  const [customRange, setCustomRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  // Time filter — explicit (from, to) date range only. Both bounds are sent
+  // to the API as YYYY-MM-DD; the server treats `to` as inclusive up to
+  // end-of-day. Empty strings mean "no bound on that side".
+  const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const hasDateRange = Boolean(dateRange.from || dateRange.to);
 
   const [budget, setBudget]               = useState<MonthlyBudget>({ month: currentMonthKey(), targetAmount: 0 });
   const [budgetInput, setBudgetInput]     = useState('');
   const [editingBudget, setEditingBudget] = useState(false);
   const [savingBudget, setSavingBudget]   = useState(false);
 
-  type ModalMode = 'add' | 'edit' | 'recordPayment' | 'history' | null;
-  const [modalMode, setModalMode]         = useState<ModalMode>(null);
-  const [selectedCommission, setSelected] = useState<Commission | null>(null);
-  const [submitting, setSubmitting]       = useState(false);
-
-  // All fields for the Add/Edit Commission modal — now includes an
-  // OPTIONAL initial-payment block so brokers can log "I closed the deal
-  // AND received ₹X on the spot" in a single submission. Fields prefixed
-  // `initial*` are only sent to the API when `initialAmount > 0`.
-  const emptyForm = {
-    clientId: '', salesPersonName: '', dealAmount: '',
-    commissionPercentage: '5', paymentReference: '',
-    initialAmount: '',
-    initialPaidOn: new Date().toISOString().slice(0, 10),
-    initialMethod: 'cash',
-    initialReference: '',
-    initialNotes: '',
-  };
-  const [form, setForm] = useState(emptyForm);
-
-  const emptyPaymentForm = {
-    amount: '',
-    paidOn: new Date().toISOString().slice(0, 10),
-    method: 'cash',
-    reference: '',
-    notes: '',
-  };
-  const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
-
-  // Payment history cache — loaded on demand when user opens the history modal.
-  const [history, setHistory]                 = useState<CommissionPaymentRow[]>([]);
-  const [historyLoading, setHistoryLoading]   = useState(false);
+  // The merged "Manage Deal" modal replaces the legacy Add / Edit / Record
+  // Payment / History quartet. It owns its own form state, payment-ledger
+  // fetch, and submit logic — this page only tracks open/mode/target and
+  // refetches on `onChanged`.
+  const [manageState, setManageState] = useState<{
+    open: boolean;
+    mode: 'add' | 'manage';
+    target: Commission | null;
+  }>({ open: false, mode: 'add', target: null });
 
   // Admin-only monthly + per-salesperson breakdown for the selected window.
   const [breakdown, setBreakdown]             = useState<BreakdownResponse | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [showPerformers, setShowPerformers]   = useState(false);
 
-  const closeModal = () => {
-    setModalMode(null);
-    setSelected(null);
-    setForm(emptyForm);
-    setPaymentForm(emptyPaymentForm);
-    setHistory([]);
-  };
+  const openAdd = () =>
+    setManageState({ open: true, mode: 'add', target: null });
+
+  const openManage = (c: Commission) =>
+    setManageState({ open: true, mode: 'manage', target: c });
+
+  const closeManage = () =>
+    setManageState((s) => ({ ...s, open: false }));
 
   // Debounced copy of `search` — keeps typing snappy by issuing one fetch
   // per ~250ms of idle instead of one per keystroke.
@@ -288,71 +250,14 @@ export default function CommissionsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  /**
-   * Map a time preset to concrete (from, to) dates in YYYY-MM-DD.
-   * Presets match typical Indian-accounting periods; FY runs Apr 1 → Mar 31.
-   * Memoized so the chart / fetch effect doesn't rebuild on every render.
-   */
-  const dateRange = useMemo<{ from?: string; to?: string }>(() => {
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = today.getMonth(); // 0-indexed
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
-    const startOfMonth = (yy: number, mm: number) => new Date(yy, mm, 1);
-    const endOfMonth   = (yy: number, mm: number) => new Date(yy, mm + 1, 0);
-
-    switch (timePreset) {
-      case 'thisMonth':
-        return { from: iso(startOfMonth(y, m)), to: iso(endOfMonth(y, m)) };
-      case 'lastMonth': {
-        const prev = new Date(y, m - 1, 1);
-        return {
-          from: iso(startOfMonth(prev.getFullYear(), prev.getMonth())),
-          to:   iso(endOfMonth(prev.getFullYear(), prev.getMonth())),
-        };
-      }
-      case 'thisQuarter': {
-        const qStart = Math.floor(m / 3) * 3;
-        return { from: iso(startOfMonth(y, qStart)), to: iso(endOfMonth(y, qStart + 2)) };
-      }
-      case 'thisFY': {
-        // Indian financial year: April → March. If today is Jan–Mar, the FY
-        // started LAST calendar year; otherwise it started this year.
-        const fyStartYear = m >= 3 ? y : y - 1;
-        return {
-          from: `${fyStartYear}-04-01`,
-          to:   `${fyStartYear + 1}-03-31`,
-        };
-      }
-      case 'custom':
-        return {
-          from: customRange.from || undefined,
-          to:   customRange.to   || undefined,
-        };
-      case 'all':
-      default:
-        return {};
-    }
-  }, [timePreset, customRange]);
-
-  // Human label for the active time filter — shown on the Time chip.
+  // Human label for the active date range — shown on the Date chip.
   const timeLabel = useMemo(() => {
-    switch (timePreset) {
-      case 'thisMonth':  return 'This month';
-      case 'lastMonth':  return 'Last month';
-      case 'thisQuarter':return 'This quarter';
-      case 'thisFY':     return 'This FY';
-      case 'custom': {
-        const { from, to } = customRange;
-        if (from && to) return `${from} → ${to}`;
-        if (from)       return `From ${from}`;
-        if (to)         return `Until ${to}`;
-        return 'Custom';
-      }
-      case 'all':
-      default:           return 'All time';
-    }
-  }, [timePreset, customRange]);
+    const { from, to } = dateRange;
+    if (from && to) return `${from} → ${to}`;
+    if (from)       return `From ${from}`;
+    if (to)         return `Until ${to}`;
+    return 'Date range';
+  }, [dateRange]);
 
   // ─── Fetch ───
   const fetchCommissions = useCallback(async () => {
@@ -381,13 +286,6 @@ export default function CommissionsPage() {
     }
   }, [filter, page, debouncedSearch, dateRange]);
 
-  const fetchClients = async () => {
-    try {
-      const res = await fetch('/api/clients?limit=200', { credentials: 'include' });
-      if (res.ok) { const d = await res.json(); setClients(d.clients || []); }
-    } catch {}
-  };
-
   const fetchBudget = async () => {
     try {
       const res = await fetch(`/api/budget?month=${currentMonthKey()}`, { credentials: 'include' });
@@ -399,7 +297,7 @@ export default function CommissionsPage() {
   };
 
   useEffect(() => { fetchCommissions(); }, [fetchCommissions]);
-  useEffect(() => { fetchClients(); fetchBudget(); }, []);
+  useEffect(() => { fetchBudget(); }, []);
 
   /**
    * Load the admin-only monthly + per-salesperson breakdown. Re-runs
@@ -458,208 +356,49 @@ export default function CommissionsPage() {
     }
   };
 
-  // ─── Add ───
-  // Submits commission meta + (optionally) the first payment as a single
-  // request. The server creates the commission and the matching ledger
-  // row atomically, so the running total / status badge reflect reality
-  // the moment the modal closes.
-  const handleAdd = async () => {
-    if (!form.clientId) { addToast({ type: 'error', message: 'Client is required' }); return; }
-    if (!form.dealAmount) { addToast({ type: 'error', message: 'Deal Amount is required' }); return; }
-
-    const deal = Number(form.dealAmount);
-    const pct  = Number(form.commissionPercentage);
-    const commissionAmount = (deal * pct) / 100;
-    const initialAmount    = Number(form.initialAmount) || 0;
-
-    if (initialAmount < 0) {
-      addToast({ type: 'error', message: 'Initial payment cannot be negative' });
-      return;
-    }
-    if (initialAmount > commissionAmount + 0.005) {
-      addToast({
-        type: 'error',
-        message: `Initial payment can't exceed the commission (${fmt(commissionAmount)}).`,
+  /**
+   * Pull every commission that matches the current filter, search, and
+   * date range — paginating through the API at its max page size of 100.
+   * Used by the Excel and PDF exports so the file reflects the whole
+   * window the admin selected, not just the visible page of 10 rows.
+   */
+  const fetchAllCommissionsForExport = async (): Promise<Commission[]> => {
+    const PAGE_SIZE = 100;
+    const collected: Commission[] = [];
+    let pageNum = 1;
+    let pages = 1;
+    do {
+      const params = new URLSearchParams({
+        page: String(pageNum),
+        limit: String(PAGE_SIZE),
+        ...(filter !== 'all' && { paidStatus: filter }),
+        ...(debouncedSearch && { search: debouncedSearch }),
+        ...(dateRange.from && { from: dateRange.from }),
+        ...(dateRange.to   && { to:   dateRange.to   }),
       });
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const body: Record<string, unknown> = {
-        clientId: form.clientId,
-        salesPersonName: form.salesPersonName?.trim() || null,
-        dealAmount: deal,
-        commissionPercentage: pct,
-        paymentReference: form.paymentReference || undefined,
-      };
-      if (initialAmount > 0) {
-        body.initialPayment = {
-          amount: initialAmount,
-          paidOn: form.initialPaidOn,
-          method: form.initialMethod || null,
-          reference: form.initialReference?.trim() || undefined,
-          notes: form.initialNotes?.trim() || undefined,
-        };
-      }
-
-      const res = await fetch('/api/commissions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
-      addToast({
-        type: 'success',
-        message: initialAmount > 0
-          ? `Commission added. ${fmt(initialAmount)} recorded as first payment.`
-          : 'Commission added successfully',
-      });
-      closeModal(); fetchCommissions();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to add commission';
-      addToast({ type: 'error', message: msg });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ─── Edit ───
-  // Edit mode edits only the commission's meta (deal amount, %, ref,
-  // salesperson). Payments are managed exclusively from the History
-  // modal, so the initial-payment fields stay blank/empty here.
-  const openEdit = (c: Commission) => {
-    setSelected(c);
-    setForm({
-      ...emptyForm,
-      clientId: c.clientId,
-      salesPersonName: c.salesPersonName || '',
-      dealAmount: String(c.dealAmount),
-      commissionPercentage: String(c.commissionPercentage),
-      paymentReference: c.paymentReference || '',
-    });
-    setModalMode('edit');
-  };
-
-  // paidStatus is intentionally not sent — it's derived from the payment
-  // ledger. Use the Record Payment modal to change payment state.
-  const handleEdit = async () => {
-    if (!selectedCommission) return;
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/commissions/${selectedCommission.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          salesPersonName: form.salesPersonName?.trim() || null,
-          dealAmount: Number(form.dealAmount),
-          commissionPercentage: Number(form.commissionPercentage),
-          paymentReference: form.paymentReference || undefined,
-        }),
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
-      addToast({ type: 'success', message: 'Commission updated' });
-      closeModal(); fetchCommissions();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update commission';
-      addToast({ type: 'error', message: msg });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ─── Record a (partial or full) payment ───
-  const handleRecordPayment = async () => {
-    if (!selectedCommission) return;
-    const amt = Number(paymentForm.amount);
-    if (!amt || amt <= 0) {
-      addToast({ type: 'error', message: 'Enter a valid amount' });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/commissions/${selectedCommission.id}/payments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          amount: amt,
-          paidOn: paymentForm.paidOn,
-          method: paymentForm.method || null,
-          reference: paymentForm.reference?.trim() || null,
-          notes: paymentForm.notes?.trim() || null,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Failed to record payment');
-
-      const isPaid = data.commission?.paidStatus === 'Paid';
-      addToast({
-        type: 'success',
-        message: isPaid
-          ? 'Commission is now fully paid.'
-          : `Payment of ${fmt(amt)} recorded. Remaining: ${fmt(
-              (data.commission?.commissionAmount ?? 0) - (data.commission?.paidAmount ?? 0)
-            )}`,
-      });
-      closeModal();
-      fetchCommissions();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to record payment';
-      addToast({ type: 'error', message: msg });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  /** Load the payment history for the currently-selected commission. */
-  const loadHistory = async (commissionId: string) => {
-    setHistoryLoading(true);
-    try {
-      const res = await fetch(`/api/commissions/${commissionId}/payments`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Failed to load payment history');
+      const res = await fetch(`/api/commissions?${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch commissions for export');
       const data = await res.json();
-      setHistory(data.payments || []);
-    } catch (err: unknown) {
-      addToast({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to load payment history',
-      });
-      setHistory([]);
-    } finally {
-      setHistoryLoading(false);
-    }
+      collected.push(...(data.commissions || []));
+      pages = data.pagination?.pages || 1;
+      pageNum += 1;
+    } while (pageNum <= pages);
+    return collected;
   };
 
-  /** Remove a previously-recorded payment (soft delete). */
-  const deletePayment = async (paymentId: string) => {
-    if (!selectedCommission) return;
-    if (!confirm('Remove this payment? The running total will be recalculated.')) return;
-    try {
-      const res = await fetch(
-        `/api/commissions/${selectedCommission.id}/payments/${paymentId}`,
-        { method: 'DELETE', credentials: 'include' }
-      );
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || 'Failed to remove payment');
-      }
-      addToast({ type: 'success', message: 'Payment removed' });
-      await loadHistory(selectedCommission.id);
-      fetchCommissions();
-    } catch (err: unknown) {
-      addToast({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to remove payment',
-      });
-    }
+  /** Filename suffix that reflects the active date window. */
+  const exportSuffix = () => {
+    const { from, to } = dateRange;
+    if (from && to) return `${from}_to_${to}`;
+    if (from)       return `from_${from}`;
+    if (to)         return `until_${to}`;
+    return currentMonthKey();
   };
 
   // ─── Export PDF ───
   const exportPDF = async () => {
     try {
+      const rows = await fetchAllCommissionsForExport();
       const { default: jsPDF } = await import('jspdf');
       const { default: autoTable } = await import('jspdf-autotable');
       const doc = new jsPDF();
@@ -667,11 +406,12 @@ export default function CommissionsPage() {
       doc.text('Commissions Report', 14, 18);
       doc.setFontSize(10);
       doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, 14, 26);
-      doc.text(`Total: ${fmt(totals.totalCommission)}  |  Pending: ${fmt(totals.pendingCommission)}  |  Paid: ${fmt(totals.paidCommission)}`, 14, 33);
+      doc.text(`Range: ${hasDateRange ? timeLabel : 'All time'}  |  Records: ${rows.length}`, 14, 33);
+      doc.text(`Total: ${fmt(totals.totalCommission)}  |  Pending: ${fmt(totals.pendingCommission)}  |  Paid: ${fmt(totals.paidCommission)}`, 14, 40);
       autoTable(doc, {
-        startY: 40,
+        startY: 47,
         head: [['Client', 'Sales Person', 'Deal Amount', 'Commission %', 'Amount', 'Status', 'Date']],
-        body: commissions.map(c => [
+        body: rows.map(c => [
           c.client.clientName, getSalesPerson(c), fmt(c.dealAmount),
           `${c.commissionPercentage}%`, fmt(c.commissionAmount),
           c.paidStatus, new Date(c.createdAt).toLocaleDateString('en-IN'),
@@ -680,8 +420,8 @@ export default function CommissionsPage() {
         headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [248, 250, 252] },
       });
-      doc.save(`commissions-${currentMonthKey()}.pdf`);
-      addToast({ type: 'success', message: 'PDF downloaded' });
+      doc.save(`commissions-${exportSuffix()}.pdf`);
+      addToast({ type: 'success', message: `PDF downloaded (${rows.length} records)` });
     } catch {
       addToast({ type: 'error', message: 'PDF export failed.' });
     }
@@ -690,6 +430,7 @@ export default function CommissionsPage() {
   // ─── Export Excel (exceljs — no vulnerabilities) ───
   const exportExcel = async () => {
     try {
+      const rows = await fetchAllCommissionsForExport();
       const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
 
@@ -709,7 +450,7 @@ export default function CommissionsPage() {
         cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
       });
-      commissions.forEach(c => {
+      rows.forEach(c => {
         ws.addRow({
           client: c.client.clientName, sales: getSalesPerson(c),
           deal: c.dealAmount, pct: c.commissionPercentage,
@@ -722,17 +463,19 @@ export default function CommissionsPage() {
       const ws2 = workbook.addWorksheet('Summary');
       ws2.columns = [
         { header: 'Metric', key: 'metric', width: 28 },
-        { header: 'Value (₹)', key: 'value', width: 18 },
+        { header: 'Value', key: 'value', width: 28 },
       ];
       ws2.getRow(1).eachCell(cell => {
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
       });
       ws2.addRows([
-        { metric: 'Total Commission',      value: totals.totalCommission },
-        { metric: 'Pending Commission',    value: totals.pendingCommission },
-        { metric: 'Paid Commission',       value: totals.paidCommission },
-        { metric: 'Monthly Budget Target', value: budget.targetAmount },
+        { metric: 'Date Range',            value: hasDateRange ? timeLabel : 'All time' },
+        { metric: 'Records',               value: rows.length },
+        { metric: 'Total Commission (₹)',  value: totals.totalCommission },
+        { metric: 'Pending Commission (₹)',value: totals.pendingCommission },
+        { metric: 'Paid Commission (₹)',   value: totals.paidCommission },
+        { metric: 'Monthly Budget (₹)',    value: budget.targetAmount },
       ]);
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -741,9 +484,9 @@ export default function CommissionsPage() {
       });
       const url = URL.createObjectURL(blob);
       const a   = document.createElement('a');
-      a.href = url; a.download = `commissions-${currentMonthKey()}.xlsx`;
+      a.href = url; a.download = `commissions-${exportSuffix()}.xlsx`;
       a.click(); URL.revokeObjectURL(url);
-      addToast({ type: 'success', message: 'Excel downloaded' });
+      addToast({ type: 'success', message: `Excel downloaded (${rows.length} records)` });
     } catch (err) {
       console.error(err);
       addToast({ type: 'error', message: 'Excel export failed.' });
@@ -791,45 +534,18 @@ export default function CommissionsPage() {
     { key: 'Paid',    label: 'Paid'    },
   ];
 
-  const TIME_PRESETS: { key: TimePreset; label: string }[] = [
-    { key: 'all',        label: 'All time'     },
-    { key: 'thisMonth',  label: 'This month'   },
-    { key: 'lastMonth',  label: 'Last month'   },
-    { key: 'thisQuarter',label: 'This quarter' },
-    { key: 'thisFY',     label: 'This FY'      },
-    { key: 'custom',     label: 'Custom…'      },
-  ];
-
-  /** Apply a preset and reset to first page. */
-  const applyTimePreset = (key: TimePreset) => {
-    setTimePreset(key);
+  /** Update one side of the date range and reset to the first page. */
+  const updateDateRange = (patch: Partial<{ from: string; to: string }>) => {
+    setDateRange(prev => ({ ...prev, ...patch }));
     setPage(1);
-    if (key !== 'custom') {
-      setShowTimePicker(false);
-      setCustomRange({ from: '', to: '' });
-    }
   };
 
-  /** Convenience: open the Record Payment modal for a commission. */
-  const openRecordPayment = (c: Commission) => {
-    setSelected(c);
-    const remaining = Math.max(0, c.commissionAmount - (c.paidAmount ?? 0));
-    setPaymentForm({
-      ...emptyPaymentForm,
-      amount: remaining > 0 ? String(remaining) : '',
-    });
-    setModalMode('recordPayment');
+  /** Wipe the date range and close the picker. */
+  const clearDateRange = () => {
+    setDateRange({ from: '', to: '' });
+    setShowTimePicker(false);
+    setPage(1);
   };
-
-  /** Convenience: open the Payment History modal and load rows. */
-  const openHistory = (c: Commission) => {
-    setSelected(c);
-    setModalMode('history');
-    loadHistory(c.id);
-  };
-
-  const computedCommission = form.dealAmount && form.commissionPercentage
-    ? (Number(form.dealAmount) * Number(form.commissionPercentage)) / 100 : 0;
 
   // ─────────────────────────────────────────
   // RENDER
@@ -848,6 +564,24 @@ export default function CommissionsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <>
+              <Link href="/dashboard/commissions/statement"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium
+                  text-purple-700 bg-purple-50 border border-purple-200 rounded-xl
+                  hover:bg-purple-100 transition-colors">
+                <Users2 size={15} />
+                <span className="hidden sm:inline">Statement</span>
+              </Link>
+              <Link href="/dashboard/commissions/by-builder"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium
+                  text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl
+                  hover:bg-indigo-100 transition-colors">
+                <Building2 size={15} />
+                <span className="hidden sm:inline">By Builder</span>
+              </Link>
+            </>
+          )}
           <button onClick={exportExcel}
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium
               text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl
@@ -861,12 +595,14 @@ export default function CommissionsPage() {
             <FileText size={15} />
             <span className="hidden sm:inline">PDF</span>
           </button>
-          <button onClick={() => setModalMode('add')}
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold
-              text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-colors">
-            <Plus size={16} />
-            <span>Add Payment</span>
-          </button>
+          {isAdmin && (
+            <button onClick={openAdd}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold
+                text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-colors">
+              <Plus size={16} />
+              <span>Add Payment</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1202,124 +938,129 @@ export default function CommissionsPage() {
       {/* TABLE */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
-        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100
-          flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-gray-800">Commission Details</h3>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {commissions.length} record{commissions.length !== 1 ? 's' : ''}
-              {timePreset !== 'all' && (
-                <span className="ml-1 text-gray-500">· {timeLabel}</span>
-              )}
-            </p>
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 space-y-3">
+          {/* Title row */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-gray-800">Commission Details</h3>
+              <p className="text-xs text-gray-400 mt-0.5 truncate">
+                {commissions.length} record{commissions.length !== 1 ? 's' : ''}
+                {hasDateRange && (
+                  <span className="ml-1 text-gray-500">· {timeLabel}</span>
+                )}
+              </p>
+            </div>
           </div>
 
-          {/* Search — debounced via `debouncedSearch`, so typing stays smooth */}
-          <div className="relative w-full sm:w-52">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input type="text" value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search client..."
-              className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-xl
-                bg-gray-50 focus:bg-white focus:outline-none focus:ring-2
-                focus:ring-blue-500/20 focus:border-blue-400 text-gray-700" />
-          </div>
+          {/* Controls row — wraps cleanly so the date chip never gets
+              clipped behind the status pills when both are active. */}
+          <div className="flex flex-wrap items-center gap-2">
 
-          {/* Time preset chip — opens a popover of accounting-period options.
-              Uses a plain <details>-less approach so the dropdown can hold a
-              custom date range without fighting focus. */}
-          <div className="relative">
-            <button type="button"
-              onClick={() => setShowTimePicker(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
-                rounded-xl border transition-all
-                ${timePreset !== 'all'
-                  ? 'border-blue-200 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>
-              <Calendar size={13} />
-              {timeLabel}
-              {timePreset !== 'all' && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  aria-label="Clear time filter"
-                  onClick={(e) => { e.stopPropagation(); applyTimePreset('all'); }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      applyTimePreset('all');
-                    }
-                  }}
-                  className="ml-1 text-blue-400 hover:text-blue-700 cursor-pointer
-                    rounded hover:bg-blue-100 px-0.5 focus:outline-none focus:ring-1 focus:ring-blue-300"
-                >
-                  <X size={12} />
-                </span>
-              )}
-            </button>
-            {showTimePicker && (
-              <>
-                <button
-                  type="button"
-                  aria-label="Close time filter"
-                  className="fixed inset-0 z-40 cursor-default"
-                  onClick={() => setShowTimePicker(false)}
-                />
-                <div className="absolute right-0 mt-1.5 z-50 w-60 bg-white border border-gray-100
-                  rounded-xl shadow-xl p-2 space-y-1">
-                  {TIME_PRESETS.map(({ key, label }) => (
-                    <button key={key} type="button"
-                      onClick={() => applyTimePreset(key)}
-                      className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg
-                        transition-colors ${
-                          timePreset === key
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'text-gray-600 hover:bg-gray-50'
-                        }`}>
-                      {label}
-                    </button>
-                  ))}
-                  {timePreset === 'custom' && (
-                    <div className="border-t border-gray-100 pt-2 mt-1 space-y-2">
-                      <div>
-                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">From</label>
-                        <input type="date"
-                          value={customRange.from}
-                          onChange={e => { setCustomRange({ ...customRange, from: e.target.value }); setPage(1); }}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg
-                            focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">To</label>
-                        <input type="date"
-                          value={customRange.to}
-                          onChange={e => { setCustomRange({ ...customRange, to: e.target.value }); setPage(1); }}
-                          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg
-                            focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-                      </div>
+            {/* Search — debounced via `debouncedSearch`, so typing stays smooth */}
+            <div className="relative w-full sm:w-52 sm:flex-1 sm:max-w-xs">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input type="text" value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search client..."
+                aria-label="Search by client name"
+                className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-xl
+                  bg-gray-50 focus:bg-white focus:outline-none focus:ring-2
+                  focus:ring-blue-500/20 focus:border-blue-400 text-gray-700" />
+            </div>
+
+            {/* Date-range chip — opens a popover with only From / To inputs.
+                No presets; admins pick the exact window they want and the
+                list, totals, breakdown, and exports all follow it. */}
+            <div className="relative">
+              <button type="button"
+                onClick={() => setShowTimePicker(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold
+                  rounded-xl border transition-all
+                  ${hasDateRange
+                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>
+                <Calendar size={13} />
+                <span className="truncate max-w-[200px]">{timeLabel}</span>
+                {hasDateRange && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Clear date range"
+                    onClick={(e) => { e.stopPropagation(); clearDateRange(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        clearDateRange();
+                      }
+                    }}
+                    className="ml-1 text-blue-400 hover:text-blue-700 cursor-pointer
+                      rounded hover:bg-blue-100 px-0.5 focus:outline-none focus:ring-1 focus:ring-blue-300"
+                  >
+                    <X size={12} />
+                  </span>
+                )}
+              </button>
+              {showTimePicker && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Close date picker"
+                    className="fixed inset-0 z-40 cursor-default"
+                    onClick={() => setShowTimePicker(false)}
+                  />
+                  <div className="absolute right-0 mt-1.5 z-50 w-72 max-w-[calc(100vw-2rem)]
+                    bg-white border border-gray-100 rounded-xl shadow-xl p-4 space-y-3">
+                    <p className="text-xs font-semibold text-gray-700">Pick a date range</p>
+                    <div>
+                      <label htmlFor="commissions-from-date"
+                        className="block text-xs font-medium text-gray-600 mb-1">From date</label>
+                      <input id="commissions-from-date" type="date"
+                        value={dateRange.from}
+                        max={dateRange.to || undefined}
+                        onChange={e => updateDateRange({ from: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                          focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-800" />
+                    </div>
+                    <div>
+                      <label htmlFor="commissions-to-date"
+                        className="block text-xs font-medium text-gray-600 mb-1">To date</label>
+                      <input id="commissions-to-date" type="date"
+                        value={dateRange.to}
+                        min={dateRange.from || undefined}
+                        onChange={e => updateDateRange({ to: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                          focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-800" />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button type="button"
+                        onClick={clearDateRange}
+                        className="flex-1 px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50
+                          hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors">
+                        Clear
+                      </button>
                       <button type="button"
                         onClick={() => setShowTimePicker(false)}
-                        className="w-full px-3 py-1.5 text-xs font-semibold text-white bg-blue-600
+                        className="flex-1 px-3 py-2 text-xs font-semibold text-white bg-blue-600
                           hover:bg-blue-700 rounded-lg transition-colors">
                         Apply
                       </button>
                     </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+                  </div>
+                </>
+              )}
+            </div>
 
-          {/* Payment-status chips */}
-          <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl w-fit shrink-0 overflow-x-auto">
-            {FILTERS.map(({ key, label }) => (
-              <button key={key} onClick={() => { setFilter(key); setPage(1); }}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap
-                  ${filter === key ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                {label}
-              </button>
-            ))}
+            {/* Payment-status chips */}
+            <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl w-fit overflow-x-auto ml-auto">
+              {FILTERS.map(({ key, label }) => (
+                <button key={key} type="button" onClick={() => { setFilter(key); setPage(1); }}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap
+                    ${filter === key ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1333,10 +1074,12 @@ export default function CommissionsPage() {
               <IndianRupee size={24} className="text-gray-300" />
             </div>
             <p className="text-gray-400 text-sm font-medium">No commissions found</p>
-            <button onClick={() => setModalMode('add')}
-              className="text-xs text-blue-600 hover:underline font-semibold">
-              + Add first commission
-            </button>
+            {isAdmin && (
+              <button onClick={openAdd}
+                className="text-xs text-blue-600 hover:underline font-semibold">
+                + Add first commission
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -1379,31 +1122,18 @@ export default function CommissionsPage() {
                           {new Date(c.createdAt).toLocaleDateString('en-IN')}
                         </td>
                         <td className="px-4 py-3.5">
-                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                            {isAdmin && (
-                              <button onClick={() => openEdit(c)}
-                                title="Edit commission (admin only)"
-                                className="w-7 h-7 rounded-lg border border-gray-200 bg-white
-                                  flex items-center justify-center text-gray-400 hover:text-blue-600
-                                  hover:border-blue-200 transition-colors">
-                                <Pencil size={12} />
-                              </button>
-                            )}
-                            <button onClick={() => openHistory(c)}
-                              title="Payment history"
-                              className="w-7 h-7 rounded-lg border border-gray-200 bg-white
-                                flex items-center justify-center text-gray-400 hover:text-purple-600
-                                hover:border-purple-200 transition-colors">
-                              <History size={12} />
+                          <div className="flex items-center justify-center">
+                            <button
+                              onClick={() => openManage(c)}
+                              title="Manage deal — edit details, record payments, view history"
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold
+                                text-blue-700 hover:text-blue-800 border border-blue-200
+                                bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg
+                                transition-colors whitespace-nowrap"
+                            >
+                              <Settings2 size={12} />
+                              Manage
                             </button>
-                            {!isFullyPaid && (
-                              <button onClick={() => openRecordPayment(c)}
-                                className="text-xs font-semibold text-emerald-600 hover:text-emerald-700
-                                  border border-emerald-200 bg-emerald-50 hover:bg-emerald-100
-                                  px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap">
-                                Record Payment
-                              </button>
-                            )}
                           </div>
                         </td>
                       </tr>
@@ -1456,30 +1186,14 @@ export default function CommissionsPage() {
                         </div>
                       )}
                     </div>
-                    <div className="flex gap-2">
-                      {isAdmin && (
-                        <button onClick={() => openEdit(c)}
-                          className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs
-                            font-semibold text-gray-600 border border-gray-200 bg-gray-50
-                            hover:bg-gray-100 rounded-xl transition-colors">
-                          <Pencil size={11} /> Edit
-                        </button>
-                      )}
-                      <button onClick={() => openHistory(c)}
-                        className="flex items-center justify-center gap-1.5 py-2 px-3 text-xs
-                          font-semibold text-purple-600 border border-purple-200 bg-purple-50
-                          hover:bg-purple-100 rounded-xl transition-colors">
-                        <History size={11} /> History
-                      </button>
-                      {!isFullyPaid && (
-                        <button onClick={() => openRecordPayment(c)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs
-                            font-semibold text-emerald-600 border border-emerald-200 bg-emerald-50
-                            hover:bg-emerald-100 rounded-xl transition-colors">
-                          Record Payment <ChevronRight size={11} />
-                        </button>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => openManage(c)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm
+                        font-semibold text-blue-700 border border-blue-200 bg-blue-50
+                        hover:bg-blue-100 rounded-xl transition-colors"
+                    >
+                      <Settings2 size={13} /> Manage
+                    </button>
                   </div>
                 );
               })}
@@ -1495,560 +1209,14 @@ export default function CommissionsPage() {
         )}
       </div>
 
-      {/* ADD / EDIT MODAL */}
-      {(modalMode === 'add' || modalMode === 'edit') && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center
-          justify-center p-3 sm:p-6">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="text-base sm:text-lg font-bold text-gray-900">
-                  {modalMode === 'add' ? 'Add New Payment' : 'Edit Commission'}
-                </h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {modalMode === 'add' ? 'Record a new commission entry' : 'Update commission details'}
-                </p>
-              </div>
-              <button onClick={closeModal}
-                className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center
-                  justify-center text-gray-500 transition-colors">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="px-5 sm:px-6 py-5 space-y-4">
-              {modalMode === 'add' && (
-                <div>
-                  <label htmlFor="client-select" className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Client <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    id="client-select"
-                    aria-label="Select client"
-                    value={form.clientId}
-                    onChange={e => setForm({ ...form, clientId: e.target.value })}
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                      focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
-                      bg-white text-gray-800">
-                    <option value="">Select client...</option>
-                    {clients.map(c => (
-                      <option key={c.id} value={c.id}>{c.clientName}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                  Sales Person <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                </label>
-                <input type="text" value={form.salesPersonName}
-                  onChange={e => setForm({ ...form, salesPersonName: e.target.value })}
-                  placeholder="Enter sales person name..."
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                    focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
-                    text-gray-800 placeholder:text-gray-400" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Deal Amount (₹) <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="number" value={form.dealAmount}
-                      onChange={e => setForm({ ...form, dealAmount: e.target.value })}
-                      placeholder="0"
-                      className="w-full pl-7 pr-3 py-2.5 text-sm border border-gray-200
-                        rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                        focus:border-blue-400 text-gray-800" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Commission %</label>
-                  <div className="relative">
-                    <input type="number" value={form.commissionPercentage}
-                      onChange={e => setForm({ ...form, commissionPercentage: e.target.value })}
-                      placeholder="5" min="0" max="100" step="0.5"
-                      className="w-full px-3 pr-7 py-2.5 text-sm border border-gray-200
-                        rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                        focus:border-blue-400 text-gray-800" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
-                  </div>
-                </div>
-              </div>
-
-              {computedCommission > 0 && (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3
-                  flex items-center justify-between">
-                  <span className="text-xs font-medium text-emerald-600">Commission Amount</span>
-                  <span className="text-base font-bold text-emerald-700">{fmt(computedCommission)}</span>
-                </div>
-              )}
-
-              {/* Payment status is derived from the ledger, not an input. In
-                  ADD mode we let the broker optionally log the first payment
-                  right here so "closed deal + received token money" is one
-                  submit. In EDIT mode we hide this — payments are managed
-                  via the History modal, one source of truth per concern. */}
-              {modalMode === 'add' ? (() => {
-                const initialAmt = Number(form.initialAmount) || 0;
-                const half       = Math.max(0, Math.round(computedCommission / 2));
-                const willBeFull = initialAmt + 0.005 >= computedCommission && initialAmt > 0 && computedCommission > 0;
-                const overMax    = computedCommission > 0 && initialAmt > computedCommission + 0.005;
-
-                return (
-                  <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Wallet2 size={14} className="text-emerald-500" />
-                        <h4 className="text-sm font-semibold text-gray-800">
-                          Initial payment{' '}
-                          <span className="text-xs text-gray-400 font-normal">(optional)</span>
-                        </h4>
-                      </div>
-                      {initialAmt > 0 && (
-                        <button type="button"
-                          onClick={() => setForm({ ...form, initialAmount: '' })}
-                          className="text-[11px] font-semibold text-gray-500 hover:text-gray-700
-                            bg-white border border-gray-200 hover:bg-gray-50 px-2 py-0.5 rounded-md transition-colors">
-                          Clear
-                        </button>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                        Amount received (₹)
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                        <input type="number" min="0" step="0.01"
-                          value={form.initialAmount}
-                          onChange={e => setForm({ ...form, initialAmount: e.target.value })}
-                          placeholder="0"
-                          className="w-full pl-7 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                            focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
-                            bg-white text-gray-800" />
-                      </div>
-                      <div className="flex gap-1.5 mt-2 flex-wrap">
-                        <button type="button"
-                          onClick={() => setForm({ ...form, initialAmount: '' })}
-                          className="text-[11px] font-semibold text-gray-600 bg-white border border-gray-200
-                            hover:bg-gray-50 px-2 py-1 rounded-lg transition-colors">
-                          None
-                        </button>
-                        <button type="button"
-                          disabled={computedCommission <= 0}
-                          onClick={() => setForm({ ...form, initialAmount: String(half) })}
-                          className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100
-                            px-2 py-1 rounded-lg transition-colors disabled:opacity-50">
-                          Half ({fmt(half)})
-                        </button>
-                        <button type="button"
-                          disabled={computedCommission <= 0}
-                          onClick={() => setForm({ ...form, initialAmount: String(computedCommission) })}
-                          className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100
-                            px-2 py-1 rounded-lg transition-colors disabled:opacity-50">
-                          Full ({fmt(computedCommission)})
-                        </button>
-                      </div>
-                      {overMax && (
-                        <p className="text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
-                          <X size={12} /> Cannot exceed commission amount ({fmt(computedCommission)}).
-                        </p>
-                      )}
-                      {willBeFull && !overMax && (
-                        <p className="text-xs text-emerald-600 font-medium mt-1.5 flex items-center gap-1">
-                          <CheckCircle2 size={12} /> Will be created as fully Paid.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Only show payment meta when an amount has been entered —
-                        avoids cluttering the form for "no advance" case. */}
-                    {initialAmt > 0 && (
-                      <>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Paid on</label>
-                            <input type="date"
-                              value={form.initialPaidOn}
-                              onChange={e => setForm({ ...form, initialPaidOn: e.target.value })}
-                              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                                focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
-                                bg-white text-gray-800" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Method</label>
-                            <select
-                              value={form.initialMethod}
-                              onChange={e => setForm({ ...form, initialMethod: e.target.value })}
-                              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                                focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
-                                bg-white text-gray-800">
-                              {PAYMENT_METHODS.map(m => (
-                                <option key={m.value} value={m.value}>{m.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                            Reference <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                          </label>
-                          <input type="text"
-                            value={form.initialReference}
-                            onChange={e => setForm({ ...form, initialReference: e.target.value })}
-                            placeholder="Cheque no., UPI Ref, Transaction ID…"
-                            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                              focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
-                              text-gray-800 placeholder:text-gray-400" />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                            Notes <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                          </label>
-                          <textarea
-                            value={form.initialNotes}
-                            onChange={e => setForm({ ...form, initialNotes: e.target.value })}
-                            rows={2}
-                            placeholder="Any context about this payment…"
-                            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                              focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
-                              text-gray-800 placeholder:text-gray-400" />
-                        </div>
-                      </>
-                    )}
-
-                    <p className="text-[11px] text-gray-400 leading-relaxed">
-                      Leave Amount at 0 if nothing&apos;s been collected yet. Later instalments
-                      are recorded via the <strong>Record Payment</strong> button on the row.
-                    </p>
-                  </div>
-                );
-              })() : (
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 flex items-start gap-2">
-                  <Wallet2 size={14} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-gray-500">
-                    Payment status is tracked from the payment ledger. Use{' '}
-                    <strong>Record Payment</strong> on the commission row to log a new
-                    instalment, or <strong>History</strong> to review / remove past entries.
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                  Payment Reference <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                </label>
-                <input type="text" value={form.paymentReference}
-                  onChange={e => setForm({ ...form, paymentReference: e.target.value })}
-                  placeholder="Cheque no., UPI Ref, Transaction ID..."
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                    focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                    focus:border-blue-400 text-gray-800 placeholder:text-gray-400" />
-              </div>
-            </div>
-
-            <div className="px-5 sm:px-6 py-4 border-t border-gray-100 flex gap-3">
-              <button onClick={closeModal}
-                className="flex-1 py-2.5 text-sm font-semibold text-gray-600 border
-                  border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
-              <button
-                onClick={modalMode === 'add' ? handleAdd : handleEdit}
-                disabled={
-                  submitting ||
-                  (modalMode === 'add' &&
-                    computedCommission > 0 &&
-                    Number(form.initialAmount || 0) > computedCommission + 0.005)
-                }
-                className="flex-1 py-2.5 text-sm font-semibold text-white bg-blue-600
-                  hover:bg-blue-700 rounded-xl transition-colors disabled:opacity-60
-                  disabled:cursor-not-allowed">
-                {submitting ? 'Saving...' : modalMode === 'add' ? 'Add Commission' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* RECORD PAYMENT MODAL */}
-      {modalMode === 'recordPayment' && selectedCommission && (() => {
-        const paid      = selectedCommission.paidAmount ?? 0;
-        const remaining = Math.max(0, selectedCommission.commissionAmount - paid);
-        const entered   = Number(paymentForm.amount) || 0;
-        const willBeFull = entered + 0.005 >= remaining && entered > 0;
-        return (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center
-            justify-center p-3 sm:p-6">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <div>
-                  <h3 className="text-base font-bold text-gray-900">Record Payment</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {selectedCommission.client.clientName} · {getSalesPerson(selectedCommission)}
-                  </p>
-                </div>
-                <button onClick={closeModal}
-                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center
-                    justify-center text-gray-500 transition-colors">
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="px-5 py-5 space-y-4">
-                {/* Balance summary */}
-                <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-2">
-                  <div>
-                    <p className="text-xs text-gray-400">Total</p>
-                    <p className="text-sm font-bold text-gray-800 mt-0.5">{fmt(selectedCommission.commissionAmount)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-emerald-500">Paid so far</p>
-                    <p className="text-sm font-bold text-emerald-700 mt-0.5">{fmt(paid)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-orange-500">Remaining</p>
-                    <p className="text-sm font-bold text-orange-700 mt-0.5">{fmt(remaining)}</p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Amount received (₹) <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input type="number" min="0" step="0.01" max={remaining}
-                      value={paymentForm.amount}
-                      onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                      placeholder="0"
-                      className="w-full pl-7 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                        focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                        focus:border-blue-400 text-gray-800" />
-                  </div>
-                  <div className="flex gap-1.5 mt-2">
-                    <button type="button"
-                      onClick={() => setPaymentForm({ ...paymentForm, amount: String(remaining) })}
-                      className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100
-                        px-2 py-1 rounded-lg transition-colors">
-                      Full remaining
-                    </button>
-                    <button type="button"
-                      onClick={() => setPaymentForm({ ...paymentForm, amount: String(Math.round(remaining / 2)) })}
-                      className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100
-                        px-2 py-1 rounded-lg transition-colors">
-                      Half
-                    </button>
-                  </div>
-                  {willBeFull && (
-                    <p className="text-xs text-emerald-600 font-medium mt-2 flex items-center gap-1">
-                      <CheckCircle2 size={12} /> This payment will fully settle the commission.
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                      Paid on <span className="text-red-500">*</span>
-                    </label>
-                    <input type="date"
-                      value={paymentForm.paidOn}
-                      onChange={e => setPaymentForm({ ...paymentForm, paidOn: e.target.value })}
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                        focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                        focus:border-blue-400 text-gray-800" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">Method</label>
-                    <select
-                      value={paymentForm.method}
-                      onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                        focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                        focus:border-blue-400 bg-white text-gray-800">
-                      {PAYMENT_METHODS.map(m => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Reference <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                  </label>
-                  <input type="text"
-                    value={paymentForm.reference}
-                    onChange={e => setPaymentForm({ ...paymentForm, reference: e.target.value })}
-                    placeholder="Cheque no., UPI Ref, Transaction ID…"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                      focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                      focus:border-blue-400 text-gray-800 placeholder:text-gray-400" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Notes <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                  </label>
-                  <textarea
-                    value={paymentForm.notes}
-                    onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                    rows={2}
-                    placeholder="Any context about this payment…"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                      focus:outline-none focus:ring-2 focus:ring-blue-500/20
-                      focus:border-blue-400 text-gray-800 placeholder:text-gray-400" />
-                </div>
-              </div>
-
-              <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
-                <button onClick={closeModal}
-                  className="flex-1 py-2.5 text-sm font-semibold text-gray-600 border
-                    border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                  Cancel
-                </button>
-                <button onClick={handleRecordPayment}
-                  disabled={submitting || !entered || entered <= 0 || entered > remaining + 0.005}
-                  className="flex-1 py-2.5 text-sm font-semibold text-white bg-emerald-600
-                    hover:bg-emerald-700 rounded-xl transition-colors disabled:opacity-60
-                    disabled:cursor-not-allowed">
-                  {submitting ? 'Saving...' : willBeFull ? 'Settle & mark Paid' : 'Record Payment'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* PAYMENT HISTORY MODAL */}
-      {modalMode === 'history' && selectedCommission && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center
-          justify-center p-3 sm:p-6">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div>
-                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                  <History size={16} className="text-purple-500" />
-                  Payment History
-                </h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {selectedCommission.client.clientName} · {fmt(selectedCommission.commissionAmount)} total
-                </p>
-              </div>
-              <button onClick={closeModal}
-                className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center
-                  justify-center text-gray-500 transition-colors">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="px-5 py-4 space-y-3">
-              {/* Running balance */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="bg-gray-50 rounded-xl p-3">
-                  <p className="text-[11px] text-gray-400">Total</p>
-                  <p className="text-sm font-bold text-gray-800 mt-0.5">
-                    {fmt(selectedCommission.commissionAmount)}
-                  </p>
-                </div>
-                <div className="bg-emerald-50 rounded-xl p-3">
-                  <p className="text-[11px] text-emerald-500">Paid</p>
-                  <p className="text-sm font-bold text-emerald-700 mt-0.5">
-                    {fmt(selectedCommission.paidAmount ?? 0)}
-                  </p>
-                </div>
-                <div className="bg-orange-50 rounded-xl p-3">
-                  <p className="text-[11px] text-orange-500">Remaining</p>
-                  <p className="text-sm font-bold text-orange-700 mt-0.5">
-                    {fmt(Math.max(0, selectedCommission.commissionAmount - (selectedCommission.paidAmount ?? 0)))}
-                  </p>
-                </div>
-              </div>
-
-              {/* Payment list */}
-              {historyLoading ? (
-                <div className="flex items-center justify-center py-10 text-gray-400">
-                  <Loader2 size={18} className="animate-spin" />
-                  <span className="ml-2 text-sm">Loading payments…</span>
-                </div>
-              ) : history.length === 0 ? (
-                <div className="text-center py-8">
-                  <Wallet2 size={24} className="mx-auto text-gray-300 mb-2" />
-                  <p className="text-sm text-gray-400">No payments recorded yet.</p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
-                  {history.map(p => (
-                    <li key={p.id} className="px-3 py-3 flex items-start gap-3 bg-white">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                        <IndianRupee size={14} className="text-emerald-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm font-bold text-gray-900">{fmt(p.amount)}</span>
-                          <span className="text-xs text-gray-400">
-                            {new Date(p.paidOn).toLocaleDateString('en-IN', {
-                              day: 'numeric', month: 'short', year: 'numeric',
-                            })}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
-                          {p.method && (
-                            <span className="capitalize">
-                              {PAYMENT_METHODS.find(m => m.value === p.method)?.label ?? p.method}
-                            </span>
-                          )}
-                          {p.reference && <span>Ref: {p.reference}</span>}
-                          {p.recorder?.name && <span>by {p.recorder.name}</span>}
-                        </div>
-                        {p.notes && (
-                          <p className="text-xs text-gray-500 mt-1 italic">&ldquo;{p.notes}&rdquo;</p>
-                        )}
-                      </div>
-                      {isAdmin && (
-                        <button
-                          onClick={() => deletePayment(p.id)}
-                          title="Remove this payment (admin only)"
-                          className="w-7 h-7 rounded-lg border border-gray-200 bg-white
-                            flex items-center justify-center text-gray-400 hover:text-red-600
-                            hover:border-red-200 transition-colors flex-shrink-0"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
-              <button onClick={closeModal}
-                className="flex-1 py-2.5 text-sm font-semibold text-gray-600 border
-                  border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                Close
-              </button>
-              {selectedCommission.paidStatus !== 'Paid' && (
-                <button
-                  onClick={() => openRecordPayment(selectedCommission)}
-                  className="flex-1 py-2.5 text-sm font-semibold text-white bg-emerald-600
-                    hover:bg-emerald-700 rounded-xl transition-colors">
-                  + Record Payment
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
+      <ManageDealModal
+        open={manageState.open}
+        mode={manageState.mode}
+        commission={manageState.target as ManagedCommission | null}
+        isAdmin={isAdmin}
+        onClose={closeManage}
+        onChanged={fetchCommissions}
+      />
     </div>
   );
 }

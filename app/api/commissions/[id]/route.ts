@@ -44,6 +44,7 @@ export async function PUT(
     // /api/commissions/:id/payments with an amount.
     const updateData: Record<string, unknown> = {};
     if (data.salesPersonName !== undefined) updateData.salesPersonName = data.salesPersonName;
+    if (data.builderName !== undefined) updateData.builderName = data.builderName;
     if (data.paymentReference !== undefined) updateData.paymentReference = data.paymentReference;
     if (data.dealAmount !== undefined) updateData.dealAmount = data.dealAmount;
     if (data.commissionPercentage !== undefined) updateData.commissionPercentage = data.commissionPercentage;
@@ -65,14 +66,16 @@ export async function PUT(
 
     // If commissionAmount changed, the existing paidAmount may now cross a
     // threshold (e.g. a deal was renegotiated upward, flipping Paid→Partial).
-    // Recompute paidStatus so it stays consistent with the ledger.
+    // Recompute paidStatus so it stays consistent with the ledger AND
+    // recompute every CommissionSplit's shareAmount + status (splits are
+    // percentages of commissionAmount; they must move when it does).
     if (updateData.commissionAmount !== undefined) {
       const fresh = await db.commission.findUnique({
         where: { id },
         select: { commissionAmount: true, paidAmount: true },
       });
       if (fresh) {
-        const EPS = 0.005;
+        const EPS = 1; // 1 rupee tolerance — sub-rupee drift shouldn't strand a deal at Partial/InProgress
         const nextStatus =
           fresh.paidAmount <= 0
             ? 'Pending'
@@ -86,13 +89,33 @@ export async function PUT(
             paymentDate: nextStatus === 'Paid' ? new Date() : null,
           },
         });
+
+        // Cascade to splits — each one is a % of the commission, so the
+        // shareAmount + status need to follow the new commissionAmount.
+        const splits = await db.commissionSplit.findMany({
+          where: { commissionId: id, deletedAt: null },
+          select: { id: true, sharePercent: true, paidOut: true },
+        });
+        for (const s of splits) {
+          const newShareAmount = (fresh.commissionAmount * s.sharePercent) / 100;
+          const splitStatus =
+            s.paidOut <= 0
+              ? 'Pending'
+              : s.paidOut + EPS >= newShareAmount
+                ? 'Paid'
+                : 'Partial';
+          await db.commissionSplit.update({
+            where: { id: s.id },
+            data: { shareAmount: newShareAmount, status: splitStatus },
+          });
+        }
       }
     }
 
     const updated = await db.commission.findUnique({
       where: { id },
       include: {
-        client: { select: { clientName: true } },
+        client: { select: { clientName: true, phone: true } },
         user: { select: { name: true } },
       },
     });

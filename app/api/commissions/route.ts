@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth, isValidObjectId } from "@/lib/auth";
 import { createCommissionSchema, parseBody } from "@/lib/validations";
-import { isTeamMember } from "@/lib/authorize";
+import { isTeamMember, requireAdmin } from "@/lib/authorize";
 
 export const runtime = "nodejs";
 
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
         take: limit,
         orderBy: { createdAt: "desc" },
         include: {
-          client: { select: { clientName: true } },
+          client: { select: { clientName: true, phone: true } },
           user: { select: { name: true } },
         },
       }),
@@ -117,11 +117,17 @@ export async function GET(req: NextRequest) {
 }
 
 // ── POST: Create commission ──
+// Admin-only. Team members may VIEW commissions on their own clients but
+// can no longer record new ones, edit them, or log payments — the broker
+// owner controls all financial records to keep the audit trail clean.
 export async function POST(req: NextRequest) {
   try {
     const payload = await verifyAuth(req);
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
 
     if (!isValidObjectId(payload.companyId)) {
       return NextResponse.json(
@@ -163,7 +169,7 @@ export async function POST(req: NextRequest) {
       : 0;
 
     // Derive status from what was paid at creation time.
-    const EPS = 0.005;
+    const EPS = 1; // 1 rupee tolerance — sub-rupee drift shouldn't strand a deal at Partial/InProgress
     const paidStatus =
       initialAmount <= 0
         ? 'Pending'
@@ -176,6 +182,7 @@ export async function POST(req: NextRequest) {
         clientId: data.clientId,
         companyId: payload.companyId,
         salesPersonName: data.salesPersonName,
+        builderName: data.builderName ?? null,
         dealAmount: data.dealAmount,
         commissionPercentage: data.commissionPercentage,
         commissionAmount,
@@ -186,7 +193,7 @@ export async function POST(req: NextRequest) {
         deletedAt: null,
       },
       include: {
-        client: { select: { clientName: true } },
+        client: { select: { clientName: true, phone: true } },
         user: { select: { name: true } },
       },
     });

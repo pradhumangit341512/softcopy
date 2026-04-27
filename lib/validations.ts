@@ -160,6 +160,8 @@ export const createCommissionSchema = z
   .object({
     clientId: objectIdSchema,
     salesPersonName: optionalString,
+    // Optional builder/developer counterparty. Free-text; not a master record.
+    builderName: optionalString,
     dealAmount: z.coerce.number().positive('Enter valid deal amount'),
     commissionPercentage: z.coerce.number().min(0).max(100),
     paymentReference: optionalString,
@@ -192,6 +194,96 @@ export const updateCommissionSchema = createCommissionSchema
   .partial()
   .omit({ initialPayment: true })
   .strip();
+
+/**
+ * Stages a buyer→builder deal payment can belong to. Fixed enum (rather
+ * than free text) so the by-stage report stays sane and totals roll up
+ * cleanly. "Other" is the escape hatch for anything that doesn't fit.
+ */
+export const DEAL_PAYMENT_STAGES = [
+  'Token',
+  'Agreement',
+  'Registry',
+  'LoanDisbursed',
+  'Possession',
+  'Other',
+] as const;
+
+/**
+ * One buyer→builder instalment recorded against a deal. Distinct from
+ * CommissionPayment (builder→broker). The route layer caps amount so
+ * dealAmountPaid never exceeds dealAmount.
+ */
+export const createDealPaymentSchema = z
+  .object({
+    amount: z.coerce.number().positive('Amount must be greater than 0'),
+    paidOn: z
+      .union([z.string(), z.date()])
+      .transform((v) => new Date(v))
+      .refine((d) => !isNaN(d.getTime()), 'Invalid date'),
+    stage: z.enum(DEAL_PAYMENT_STAGES),
+    method: z
+      .enum(['cash', 'upi', 'bank_transfer', 'cheque', 'other'])
+      .optional()
+      .nullable()
+      .transform((v) => v || null),
+    reference: optionalString,
+    notes: optionalString,
+  })
+  .strict();
+
+export type CreateDealPaymentInput = z.infer<typeof createDealPaymentSchema>;
+
+/**
+ * One participant in a commission's payout pie. participantUserId is null
+ * when the participant is an external co-broker or an ex-employee whose
+ * user record was removed — participantName carries the human label.
+ *
+ * sharePercent is bounded 0..100. The route layer accepts splits whose
+ * sum is anything (a soft "splits don't add to 100%" warning is returned
+ * but never blocks the save).
+ */
+export const createCommissionSplitSchema = z
+  .object({
+    participantUserId: objectIdSchema.optional().nullable(),
+    participantName: z.string().trim().min(1, 'Participant name is required'),
+    sharePercent: z.coerce.number().min(0).max(100),
+  })
+  .strict();
+
+export const updateCommissionSplitSchema = z
+  .object({
+    participantUserId: objectIdSchema.optional().nullable(),
+    participantName: z.string().trim().min(1).optional(),
+    sharePercent: z.coerce.number().min(0).max(100).optional(),
+  })
+  .strict();
+
+/**
+ * One brokerage→participant payout against a single split. The route caps
+ * amount so paidOut never exceeds shareAmount (with a small EPS tolerance).
+ */
+export const createCommissionSplitPayoutSchema = z
+  .object({
+    amount: z.coerce.number().positive('Amount must be greater than 0'),
+    paidOn: z
+      .union([z.string(), z.date()])
+      .transform((v) => new Date(v))
+      .refine((d) => !isNaN(d.getTime()), 'Invalid date'),
+    method: z
+      .enum(['cash', 'upi', 'bank_transfer', 'cheque', 'other'])
+      .optional()
+      .nullable()
+      .transform((v) => v || null),
+    reference: optionalString,
+    notes: optionalString,
+  })
+  .strict();
+
+export type CreateCommissionSplitInput = z.infer<typeof createCommissionSplitSchema>;
+export type UpdateCommissionSplitInput = z.infer<typeof updateCommissionSplitSchema>;
+export type CreateCommissionSplitPayoutInput = z.infer<typeof createCommissionSplitPayoutSchema>;
+
 
 /**
  * One payment recorded against a commission. Amount must be positive;

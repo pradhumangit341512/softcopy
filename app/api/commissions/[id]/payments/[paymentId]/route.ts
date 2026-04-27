@@ -22,7 +22,7 @@ async function recomputeCommissionTotals(commissionId: string) {
   if (!commission) return;
 
   const paidAmount = agg._sum.amount ?? 0;
-  const EPS = 0.005;
+  const EPS = 1; // 1 rupee tolerance — sub-rupee drift shouldn't strand a deal at Partial/InProgress
   const paidStatus =
     paidAmount <= 0
       ? 'Pending'

@@ -41,6 +41,9 @@ model Company {
   clients            Client[]
   commissions        Commission[]
   commissionPayments CommissionPayment[]
+  dealPayments       DealPayment[]
+  commissionSplits   CommissionSplit[]
+  splitPayouts       CommissionSplitPayout[]
   otps               OTP[]
   invoices           Invoice[]
   monthlyBudgets     MonthlyBudget[]
@@ -79,6 +82,9 @@ model User {
   trustedDevices          TrustedDevice[]
   sessions                UserSession[]
   commissionPaymentsMade  CommissionPayment[] @relation("CommissionPaymentRecorder")
+  dealPaymentsRecorded    DealPayment[]       @relation("DealPaymentRecorder")
+  splitsParticipating     CommissionSplit[]   @relation("SplitParticipant")
+  splitPayoutsRecorded    CommissionSplitPayout[] @relation("SplitPayoutRecorder")
   @@index([role])
   @@index([companyId, role, status])
   @@index([deletedAt])
@@ -184,7 +190,20 @@ model Commission {
   companyId            String    @db.ObjectId
   salesPersonName      String?
   userId               String?   @db.ObjectId
+  // The developer / builder counterparty on this deal. Free-text for now —
+  // not a separate Builder master collection. Used for "deals by builder"
+  // reports and shown alongside the client name in the manage-deal modal.
+  builderName          String?
   dealAmount           Float
+  // Denormalized running total of all non-deleted DealPayment.amount rows
+  // (i.e. instalments the BUYER has paid the BUILDER). Kept in sync by the
+  // deal-payments routes — same pattern as paidAmount/CommissionPayment.
+  dealAmountPaid       Float     @default(0)
+  // Derived from dealAmountPaid vs dealAmount:
+  //   dealAmountPaid <= 0                     → "Open"
+  //   0 < dealAmountPaid < dealAmount         → "InProgress"
+  //   dealAmountPaid >= dealAmount            → "Completed"
+  dealStatus           String    @default("Open")
   commissionPercentage Float
   commissionAmount     Float
   // Denormalized running total of all non-deleted CommissionPayment.amount
@@ -206,6 +225,9 @@ model Commission {
   user                 User?               @relation(fields: [userId], references: [id], onDelete: Restrict)
   company              Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   payments             CommissionPayment[]
+  dealPayments         DealPayment[]
+  splits               CommissionSplit[]
+  splitPayouts         CommissionSplitPayout[]
   @@index([companyId])
   @@index([userId])
   @@index([clientId])
@@ -242,6 +264,104 @@ model CommissionPayment {
   @@index([companyId, paidOn])
   @@index([recordedBy])
   @@map("commission_payments")
+}
+
+// Ledger of buyer→builder instalments on the underlying property deal.
+// Distinct from CommissionPayment (which is builder→brokerage). Each row
+// here is one stage of the buyer's payment to the developer (token,
+// agreement, registry, loan disbursement, possession, etc.) and increments
+// Commission.dealAmountPaid. Used so brokers can answer "how much of the
+// ₹50L deal has actually flowed to the builder so far?" alongside the
+// commission collection state.
+model DealPayment {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+  commissionId   String     @db.ObjectId
+  companyId      String     @db.ObjectId
+  amount         Float
+  paidOn         DateTime
+  // Stage of the deal the payment is associated with. Free-text would be
+  // tempting but a fixed enum keeps the by-stage report sane.
+  // Token | Agreement | Registry | LoanDisbursed | Possession | Other
+  stage          String
+  method         String?    // cash | upi | bank_transfer | cheque | other
+  reference      String?    // txn id, cheque no, UPI ref
+  notes          String?
+  recordedBy     String     @db.ObjectId
+  deletedAt      DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  commission     Commission @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+  company        Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recorder       User       @relation("DealPaymentRecorder", fields: [recordedBy], references: [id], onDelete: Restrict)
+  @@index([commissionId, deletedAt])
+  @@index([companyId, paidOn])
+  @@index([recordedBy])
+  @@map("deal_payments")
+}
+
+// One slice of a commission's payout pie. Solo brokers have a single
+// 100%-share split pointing to themselves. Brokerages with sub-brokers (or
+// co-broking deals) have several splits whose `sharePercent` should sum to
+// 100 — the API surfaces a soft warning if not, but never blocks the save
+// because a deal can close before the final share is settled.
+//
+// `participantUserId` is null when the participant is an external co-broker
+// or an ex-employee — `participantName` is denormalized so the historical
+// row stays readable even if the user is later soft-deleted.
+//
+// `shareAmount` is auto-derived (commissionAmount × sharePercent / 100)
+// every time either the parent's commissionAmount or this row's
+// sharePercent changes. `paidOut` and `status` come from the
+// CommissionSplitPayout ledger below.
+model CommissionSplit {
+  id                 String                   @id @default(auto()) @map("_id") @db.ObjectId
+  commissionId       String                   @db.ObjectId
+  companyId          String                   @db.ObjectId
+  participantUserId  String?                  @db.ObjectId
+  participantName    String
+  sharePercent       Float
+  shareAmount        Float                    @default(0)
+  paidOut            Float                    @default(0)
+  status             String                   @default("Pending") // Pending | Partial | Paid
+  deletedAt          DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  commission         Commission               @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+  company            Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  participant        User?                    @relation("SplitParticipant", fields: [participantUserId], references: [id], onDelete: SetNull)
+  payouts            CommissionSplitPayout[]
+  @@index([commissionId, deletedAt])
+  @@index([companyId, participantUserId])
+  @@index([companyId, deletedAt])
+  @@map("commission_splits")
+}
+
+// Ledger of brokerage→participant payouts against a single CommissionSplit.
+// Each row increments split.paidOut. When paidOut >= shareAmount the split
+// flips to "Paid"; partial payments leave it "Partial". Soft-delete a row
+// to reverse — totals recompute.
+model CommissionSplitPayout {
+  id           String           @id @default(auto()) @map("_id") @db.ObjectId
+  splitId      String           @db.ObjectId
+  commissionId String           @db.ObjectId
+  companyId    String           @db.ObjectId
+  amount       Float
+  paidOn       DateTime
+  method       String?    // cash | upi | bank_transfer | cheque | other
+  reference    String?
+  notes        String?
+  recordedBy   String           @db.ObjectId
+  deletedAt    DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  split        CommissionSplit  @relation(fields: [splitId], references: [id], onDelete: Cascade)
+  commission   Commission       @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recorder     User             @relation("SplitPayoutRecorder", fields: [recordedBy], references: [id], onDelete: Restrict)
+  @@index([splitId, deletedAt])
+  @@index([commissionId, deletedAt])
+  @@index([companyId, paidOn])
+  @@map("commission_split_payouts")
 }
 
 model OTP {

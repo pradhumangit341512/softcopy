@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyAuth } from '@/lib/auth';
-import { isTeamMember } from '@/lib/authorize';
+import { isTeamMember, requireAdmin } from '@/lib/authorize';
 import { createCommissionPaymentSchema, parseBody } from '@/lib/validations';
 import { recordAudit } from '@/lib/audit';
 
@@ -28,7 +28,7 @@ async function recomputeCommissionTotals(commissionId: string) {
 
   const paidAmount = agg._sum.amount ?? 0;
   // Tiny floating-point tolerance so "48999.99 of 49000" still reads Paid.
-  const EPS = 0.005;
+  const EPS = 1; // 1 rupee tolerance — sub-rupee drift shouldn't strand a deal at Partial/InProgress
   const paidStatus =
     paidAmount <= 0
       ? 'Pending'
@@ -94,7 +94,10 @@ export async function GET(
   }
 }
 
-/** POST /api/commissions/:id/payments — record a new payment. */
+/**
+ * POST /api/commissions/:id/payments — record a new payment.
+ * Admin-only. Team members may view the ledger but not write to it.
+ */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -102,6 +105,9 @@ export async function POST(
   try {
     const payload = await verifyAuth(req);
     if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const forbidden = requireAdmin(payload);
+    if (forbidden) return forbidden;
 
     const { id } = await params;
 
