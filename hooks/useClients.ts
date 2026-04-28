@@ -107,7 +107,7 @@ export function useClients() {
         addToast({ type: 'success', message: 'Client added successfully!' });
         return true;
       } catch (err) {
-        const msg = messageOf(err, 'Failed to add client');
+        const msg = messageOf(err, 'Failed to add Leads');
         setError(msg);
         addToast({ type: 'error', message: msg });
         return false;

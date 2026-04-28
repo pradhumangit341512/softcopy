@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
       clientsDeleted + propertiesDeleted + commissionsDeleted > 0
         ? 'You have soft-deleted rows. POST to this endpoint to restore them.'
         : clientsActive + propertiesActive + commissionsActive === 0
-        ? 'No data exists at all — add clients/properties through the UI first.'
+        ? 'No data exists at all — add leads/properties through the UI first.'
         : 'All existing rows are already active. Tables should populate.',
   });
 }

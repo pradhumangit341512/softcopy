@@ -29,7 +29,7 @@ export default function AuthLayout({
           </h2>
 
           <p className="text-lg lg:text-xl text-gray-600 mb-8 leading-relaxed">
-            Complete CRM solution for real estate builders and brokers. Track clients,
+            Complete CRM solution for real estate builders and brokers. Track s,
             visits, follow-ups, and commissions in one place.
           </p>
 
@@ -39,7 +39,7 @@ export default function AuthLayout({
               <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white">
                 ✓
               </div>
-              <span className="text-gray-700">Client Management</span>
+              <span className="text-gray-700"> Management</span>
             </li>
             <li className="flex items-center gap-3">
               <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white">

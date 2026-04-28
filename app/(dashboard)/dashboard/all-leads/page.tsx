@@ -227,13 +227,13 @@ export default function ClientsPage() {
             <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Export'}</span>
           </button>
 
-          {/* Add client */}
+          {/* Add Leads */}
           <Link href="/dashboard/all-leads/add">
             <button className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5
               text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
               rounded-xl shadow-sm transition-colors whitespace-nowrap">
               <Plus size={15} />
-              <span className="hidden sm:inline">Add Client</span>
+              <span className="hidden sm:inline">Add Leads</span>
               <span className="sm:hidden">Add</span>
             </button>
           </Link>
