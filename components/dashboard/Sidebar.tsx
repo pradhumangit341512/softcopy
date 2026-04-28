@@ -92,14 +92,21 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
       >
-        {/* ── Logo ── */}
+        {/* ── Logo ──
+            Broker365 brand lockup. /logodark.svg is the variant designed
+            for dark backgrounds (light fill on the dark sidebar). The
+            720×160 viewBox is rendered at h-9 with auto width to keep
+            the original aspect ratio (~4.5:1). */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-gray-800">
-          <div>
-            <h1 className="text-lg font-bold font-display tracking-tight text-white">
-              RealEstate CRM
-            </h1>
-            <p className="text-xs text-gray-500 mt-0.5">v1.0</p>
-          </div>
+          <Link href="/dashboard" aria-label="Broker365 home" className="block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logodark.svg"
+              alt="Broker365"
+              className="h-9 w-auto select-none"
+              draggable={false}
+            />
+          </Link>
 
           {/* Close button — mobile only */}
           <Button
