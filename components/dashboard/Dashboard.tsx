@@ -89,7 +89,7 @@ export function Dashboard() {
       {/* ── STATS ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatsCard
-          title="Total Clients"
+          title="Total Leads"
           value={data.summary.totalClients}
           icon="👥"
         />

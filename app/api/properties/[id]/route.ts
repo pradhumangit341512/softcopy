@@ -60,6 +60,24 @@ export async function PUT(
     const parsed = await parseBody(req, updatePropertySchema);
     if (!parsed.ok) return parsed.response;
 
+    // F12 — keep ownerPhone and ownerPhones in sync. We only normalise when
+    // the caller actually sent one of the two fields, so a partial update
+    // that doesn't touch phones leaves both untouched.
+    const data: Record<string, unknown> = { ...parsed.data };
+    if (parsed.data.ownerPhone !== undefined || parsed.data.ownerPhones !== undefined) {
+      const phoneList = Array.from(
+        new Set(
+          [parsed.data.ownerPhone, ...(parsed.data.ownerPhones ?? [])]
+            .map((p) => p?.trim())
+            .filter((p): p is string => Boolean(p))
+        )
+      );
+      if (phoneList.length > 0) {
+        data.ownerPhone = phoneList[0];
+        data.ownerPhones = phoneList;
+      }
+    }
+
     const where: Record<string, unknown> = {
       id,
       companyId: payload.companyId,
@@ -67,7 +85,7 @@ export async function PUT(
     };
     if (isTeamMember(payload.role)) where.createdBy = payload.userId;
 
-    const result = await db.property.updateMany({ where, data: parsed.data });
+    const result = await db.property.updateMany({ where, data });
     if (result.count === 0) {
       return NextResponse.json(
         { error: "Property not found or not authorized" },

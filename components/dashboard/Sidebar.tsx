@@ -6,10 +6,14 @@ import {
   LayoutDashboard, Users, TrendingUp,
   BarChart3, Settings, X, Building2,
   GitBranch, Briefcase, UserCog, Award,
+  CalendarCheck, FolderTree, Handshake, Sparkles,
+  BookOpen, Database,
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '../common/Button';
+import { useFeatureSet } from '@/hooks/useFeature';
+import type { FeatureKey } from '@/lib/plans';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -23,15 +27,19 @@ interface NavItem {
   label: string;
   /** If defined, only these roles see the item */
   roles?: Array<'admin' | 'superadmin' | 'user'>;
+  /** If defined, item is hidden when the company doesn't have this feature */
+  feature?: FeatureKey;
 }
 
-/** Nav items with optional role-based visibility.
- * If `roles` is omitted, all roles see the item.
- * If `roles` is set, only those roles see it.
+/** Nav items with optional role + feature gating.
+ * Items without `feature` are always visible (subject to role check).
+ * Items with `feature` are hidden unless the company has it unlocked.
  */
 const navItems: NavItem[] = [
   // ── Everyone ──
   { href: '/dashboard',                  icon: LayoutDashboard, label: 'Dashboard'         },
+  { href: '/dashboard/daily-plan',       icon: CalendarCheck,   label: 'Daily Plan',
+    feature: 'feature.daily_plan' },
 
   // ── Team member only ──
   { href: '/dashboard/my-work',              icon: Briefcase,       label: 'My Work',
@@ -50,6 +58,16 @@ const navItems: NavItem[] = [
     roles: ['admin', 'superadmin'] },
   { href: '/dashboard/inventory',            icon: Building2,       label: 'Inventory',
     roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/projects-working',     icon: FolderTree,      label: 'Projects Working',
+    roles: ['admin', 'superadmin'], feature: 'feature.projects_working' },
+  { href: '/dashboard/brokers-requirements', icon: Handshake,       label: 'Brokers Requirements',
+    roles: ['admin', 'superadmin'], feature: 'feature.broker_reqs' },
+  { href: '/dashboard/find-opportunity',     icon: Sparkles,        label: 'Find Opportunity',
+    roles: ['admin', 'superadmin'], feature: 'feature.opportunity_matcher' },
+  { href: '/dashboard/learn-grow',           icon: BookOpen,        label: 'Learn & Grow',
+    feature: 'feature.learn_grow' },
+  { href: '/dashboard/database',             icon: Database,        label: 'Reference DB',
+    roles: ['admin', 'superadmin'], feature: 'feature.reference_db' },
   { href: '/dashboard/commissions',          icon: TrendingUp,      label: 'Commissions',
     roles: ['admin', 'superadmin'] },
   { href: '/dashboard/analytics',            icon: BarChart3,       label: 'Analytics',
@@ -63,14 +81,23 @@ const navItems: NavItem[] = [
   { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'          },
 ];
 
-/** Main navigation sidebar with links, user info, and mobile responsive behavior */
+/** Main navigation sidebar with role + feature gating, mobile overlay. */
 export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
   const pathname = usePathname();
+  const features = useFeatureSet();
 
-  // initials from name
   const initials = user?.name
     ? user.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
     : 'U';
+
+  const visibleItems = navItems.filter((item) => {
+    if (item.roles) {
+      if (!user?.role) return false;
+      if (!item.roles.includes(user.role as 'admin' | 'superadmin' | 'user')) return false;
+    }
+    if (item.feature && !features.includes(item.feature)) return false;
+    return true;
+  });
 
   return (
     <>
@@ -92,11 +119,7 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
       >
-        {/* ── Logo ──
-            Broker365 brand lockup. /logodark.svg is the variant designed
-            for dark backgrounds (light fill on the dark sidebar). The
-            720×160 viewBox is rendered at h-9 with auto width to keep
-            the original aspect ratio (~4.5:1). */}
+        {/* ── Logo ── */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-gray-800">
           <Link href="/dashboard" aria-label="Broker365 home" className="block">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -108,7 +131,6 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
             />
           </Link>
 
-          {/* Close button — mobile only */}
           <Button
             onClick={onClose}
             className="md:hidden w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700
@@ -121,19 +143,11 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
 
         {/* ── Navigation ── */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems
-            .filter((item) => {
-              // No roles restriction → visible to everyone
-              if (!item.roles) return true;
-              // Hide until we know the user's role
-              if (!user?.role) return false;
-              return item.roles.includes(user.role as 'admin' | 'superadmin' | 'user');
-            })
-            .map(({ href, icon: Icon, label }, idx) => {
+          {visibleItems.map(({ href, icon: Icon, label }, idx) => {
             const isActive =
               href === '/dashboard'
                 ? pathname === '/dashboard'
-                : pathname === href || pathname.startsWith(href + '/');
+                : pathname === href || pathname?.startsWith(href + '/');
 
             return (
               <Link key={`${href}-${idx}`} href={href} onClick={onClose}>
@@ -155,7 +169,6 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
                   />
                   {label}
 
-                  {/* Active indicator dot */}
                   {isActive && (
                     <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60" />
                   )}
@@ -168,7 +181,6 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
         {/* ── User info ── */}
         <div className="px-4 py-4 border-t border-gray-800">
           <div className="flex items-center gap-3">
-            {/* Avatar with initials */}
             <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-blue-600
               flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-md">
               {initials}
@@ -181,7 +193,6 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
                 {user?.email}
               </p>
             </div>
-            {/* Role pill */}
             {user?.role && (
               <span className="text-xs font-semibold text-blue-400 bg-blue-900/40
                 px-2 py-0.5 rounded-full capitalize -shrink-0">

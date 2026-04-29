@@ -4,6 +4,7 @@ import { verifyToken, getTokenFromRequest } from "@/lib/auth";
 import { ErrorCode, apiError, newRequestId } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { apiLimiter, getClientIp, rateLimited } from "@/lib/rate-limit";
+import { effectiveFeatures } from "@/lib/entitlements";
 
 export const runtime = "nodejs";
 
@@ -61,8 +62,21 @@ export async function GET(req: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...safeUser } = user;
+
+    // Resolve the company's effective feature list once, server-side.
+    // Client code reads this via useFeature() instead of duplicating
+    // the entitlement logic in JS.
+    const features = user.company
+      ? effectiveFeatures({
+          plan: user.company.plan,
+          status: user.company.status,
+          subscriptionUntil: user.company.subscriptionUntil,
+          featureFlags: user.company.featureFlags,
+        })
+      : [];
+
     return NextResponse.json(
-      { user: safeUser },
+      { user: { ...safeUser, features } },
       { status: 200, headers: { "X-Request-Id": requestId } }
     );
   } catch (err) {

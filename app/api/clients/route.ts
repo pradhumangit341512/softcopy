@@ -26,29 +26,48 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
 
-    const status     = searchParams.get("status");
-    const source     = searchParams.get("source");
-    const search     = searchParams.get("search");
-    const dateFrom   = searchParams.get("dateFrom");
-    const dateTo     = searchParams.get("dateTo");
-    const followUp   = searchParams.get("followUp");
-    const budgetMin  = searchParams.get("budgetMin");
-    const budgetMax  = searchParams.get("budgetMax");
+    const status      = searchParams.get("status");
+    const source      = searchParams.get("source");
+    const search      = searchParams.get("search");
+    const dateFrom    = searchParams.get("dateFrom");
+    const dateTo      = searchParams.get("dateTo");
+    const followUp    = searchParams.get("followUp");
+    const budgetMin   = searchParams.get("budgetMin");
+    const budgetMax   = searchParams.get("budgetMax");
+    const inquiryType = searchParams.get("inquiryType");
     const page = Math.max(1, Number(searchParams.get("page") || 1));
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 10)));
     const skip = (page - 1) * limit;
+
+    // We collect independent OR-groups (ownership scope, search match) into
+    // a top-level AND so a search can't accidentally widen the team-member's
+    // ownership scope. Each entry in `andClauses` is an independent
+    // constraint that all rows must satisfy.
+    const andClauses: Array<Record<string, unknown>> = [];
 
     const where: Record<string, unknown> = {
       companyId: payload.companyId,
       deletedAt: null,
     };
 
+    // Team members see leads they currently own (via Client.ownedBy). We OR
+    // on createdBy so legacy rows where ownedBy is still null (pre-migration
+    // 008) keep showing up for the original captor.
     if (isTeamMember(payload.role)) {
-      where.createdBy = payload.userId;
+      andClauses.push({
+        OR: [
+          { ownedBy: payload.userId },
+          { ownedBy: null, createdBy: payload.userId },
+        ],
+      });
     } else if (isAdminRole(payload.role)) {
       const createdByFilter = searchParams.get('createdBy');
       if (createdByFilter && isValidObjectId(createdByFilter)) {
         where.createdBy = createdByFilter;
+      }
+      const ownedByFilter = searchParams.get('ownedBy');
+      if (ownedByFilter && isValidObjectId(ownedByFilter)) {
+        where.ownedBy = ownedByFilter;
       }
     }
 
@@ -57,6 +76,12 @@ export async function GET(req: NextRequest) {
       const statuses = status.split(',').filter(Boolean);
       if (statuses.length === 1) where.status = statuses[0];
       else if (statuses.length > 1) where.status = { in: statuses };
+    }
+
+    // F4 — single-value inquiryType filter (Buy / Sell / Rent). Driven by
+    // the Buyer/Rental tabs but also exposed for direct query use.
+    if (inquiryType) {
+      where.inquiryType = inquiryType;
     }
 
     // Multi-select source
@@ -87,11 +112,13 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) {
-      where.OR = [
-        { clientName: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search } },
-        { email: { contains: search, mode: "insensitive" } },
-      ];
+      andClauses.push({
+        OR: [
+          { clientName: { contains: search, mode: "insensitive" } },
+          { phone: { contains: search } },
+          { email: { contains: search, mode: "insensitive" } },
+        ],
+      });
     }
 
     if (dateFrom || dateTo) {
@@ -99,6 +126,12 @@ export async function GET(req: NextRequest) {
       if (dateFrom) createdAt.gte = new Date(dateFrom);
       if (dateTo) createdAt.lte = new Date(dateTo);
       where.createdAt = createdAt;
+    }
+
+    // Attach the collected AND-grouped constraints (ownership scope +
+    // search match) so they compose without overwriting each other.
+    if (andClauses.length > 0) {
+      where.AND = andClauses;
     }
 
     const [clients, total] = await Promise.all([
@@ -182,6 +215,10 @@ export async function POST(req: NextRequest) {
         visitStatus: data.visitStatus,
         companyId: payload.companyId,
         createdBy: assignTo,
+        // ownedBy mirrors createdBy at insertion time. Once a transfer
+        // happens (POST /api/clients/[id]/transfer), the two fields diverge:
+        // createdBy stays put as the audit anchor, ownedBy follows the lead.
+        ownedBy: assignTo,
         visitingDate: data.visitingDate,
         followUpDate: data.followUpDate,
         deletedAt: null,

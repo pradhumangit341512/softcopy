@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Copy, CheckCircle2 } from 'lucide-react';
+import { Copy, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { PLANS, PLAN_FEATURES, PLAN_METADATA, FEATURE_LABELS, type Plan } from '@/lib/plans';
 
 interface CreateResult {
   company: { id: string; companyName: string };
@@ -20,7 +21,7 @@ export default function NewCompanyPage() {
 
   const [form, setForm] = useState({
     companyName: '',
-    plan: 'standard' as 'standard' | 'pro' | 'enterprise' | 'custom',
+    plan: 'standard' as Plan,
     seatLimit: 5,
     monthlyFee: '',
     subscriptionUntil: defaultExpiry(),
@@ -159,18 +160,18 @@ export default function NewCompanyPage() {
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Company</h2>
           <Input label="Company name" value={form.companyName} onChange={(v) => update('companyName', v)} required />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Select
-              label="Plan"
-              value={form.plan}
-              onChange={(v) => update('plan', v as typeof form.plan)}
-              options={[
-                { value: 'standard', label: 'Standard' },
-                { value: 'pro', label: 'Pro' },
-                { value: 'enterprise', label: 'Enterprise' },
-                { value: 'custom', label: 'Custom' },
-              ]}
+
+          <div>
+            <p className="text-sm font-medium text-gray-700 mb-2">
+              Plan <span className="text-red-500">*</span>
+            </p>
+            <PlanPicker
+              selected={form.plan}
+              onChange={(p) => update('plan', p)}
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Seat limit"
               type="number"
@@ -303,24 +304,67 @@ function Textarea({ label, value, onChange, placeholder }: { label: string; valu
   );
 }
 
-function Select({
-  label, value, onChange, options,
+const PLAN_BORDER: Record<Plan, string> = {
+  basic: 'border-emerald-300 bg-emerald-50',
+  standard: 'border-sky-300 bg-sky-50',
+  pro: 'border-violet-300 bg-violet-50',
+  enterprise: 'border-amber-300 bg-amber-50',
+};
+
+/**
+ * Card-grid plan picker showing tier metadata + the actual feature list each
+ * plan unlocks. Reads from lib/plans.ts so the same source-of-truth that
+ * drives runtime gating drives the picker — no drift possible.
+ */
+function PlanPicker({
+  selected,
+  onChange,
 }: {
-  label: string; value: string; onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  selected: Plan;
+  onChange: (plan: Plan) => void;
 }) {
   return (
-    <label className="block">
-      <span className="text-sm font-medium text-gray-700">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    </label>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {PLANS.map((p) => {
+        const meta = PLAN_METADATA[p];
+        const features = PLAN_FEATURES[p];
+        const isActive = p === selected;
+        return (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            className={`text-left p-4 rounded-xl border-2 transition-colors ${
+              isActive
+                ? `${PLAN_BORDER[p]} ring-2 ring-offset-1 ring-blue-500`
+                : 'border-gray-200 bg-white hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-gray-900">{meta.label}</span>
+              {isActive && (
+                <ShieldCheck className="w-4 h-4 text-blue-600" aria-hidden />
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">{meta.tagline}</p>
+            <p className="text-sm text-gray-700 mt-2">
+              ₹{meta.pricePerUserMonth.toLocaleString('en-IN')}
+              <span className="text-xs text-gray-500"> / user / month</span>
+            </p>
+            <p className="text-xs text-gray-500 mt-3 mb-1 uppercase tracking-wide">
+              {features.length} features
+            </p>
+            <ul className="text-[11px] text-gray-600 space-y-0.5 max-h-40 overflow-y-auto">
+              {features.map((key) => (
+                <li key={key} className="flex items-start gap-1">
+                  <span aria-hidden className="text-emerald-500">✓</span>
+                  <span className="truncate">{FEATURE_LABELS[key].label}</span>
+                </li>
+              ))}
+            </ul>
+          </button>
+        );
+      })}
+    </div>
   );
 }

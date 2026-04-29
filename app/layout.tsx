@@ -5,6 +5,7 @@ import './globals.css';
 import './landing.css';
 import { ToastProvider } from '@/components/common/Toast';
 import { WhatsAppFAB } from '@/components/common/WhatsAppFAB';
+import { ConfirmProvider } from '@/components/common/ConfirmDialog';
 
 // App fonts
 const inter = Inter({
@@ -87,7 +88,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -120,10 +121,13 @@ export default function RootLayout({
         suppressHydrationWarning={true}
         className={`${inter.variable} ${poppins.variable} ${fraunces.variable} ${manrope.variable} ${jetbrainsMono.variable} font-sans bg-white text-gray-900 antialiased`}
       >
-        {/* Toast Provider Wrapper */}
+        {/* Toast + Confirm providers — both expose imperative APIs
+            (useToast, useConfirm). Confirm replaces window.confirm() in
+            destructive flows so we get a consistent, branded modal. */}
         <ToastProvider>
-          {/* Main Content */}
-          {children}
+          <ConfirmProvider>
+            {children}
+          </ConfirmProvider>
         </ToastProvider>
 
         {/* Vercel Analytics — traffic + Core Web Vitals, no cookies. */}

@@ -9,6 +9,8 @@
     "lint": "eslint",
     "migrate": "tsx scripts/migrate.ts",
     "promote-superadmin": "tsx scripts/promote-superadmin.ts",
+    "features:pdf": "tsx scripts/generate-features-pdf.ts",
+    "reset:dev": "rm -rf .next node_modules/.cache && npx prisma generate && npx prisma db push --skip-generate && npm run dev",
     "postinstall": "prisma generate"
   },
   "dependencies": {

@@ -140,6 +140,14 @@ export interface Client extends BaseModel {
 
   companyId?: string;
   company?: Company;
+
+  /** Current owner of the lead. Defaults to createdBy on insert; flipped by
+   * the lead-transfer endpoint when ownership is reassigned. */
+  ownedBy?: string;
+  /** Set on every transfer to the previous owner; null until first transfer. */
+  transferredFrom?: string;
+  /** Timestamp of the last transfer (null until first transfer). */
+  transferredAt?: Date;
 }
 
 // ==================== CLIENT FORM (IMPORTANT) ====================
@@ -167,15 +175,86 @@ export interface Property extends BaseModel {
   description?: string;
   status: PropertyStatus;
 
+  // F10 — structured project identity (all optional)
+  projectName?: string;
+  sectorNo?: string;
+  unitNo?: string;
+  towerNo?: string;
+  typology?: string;
+
+  // F11 — deal-flow fields (all optional)
+  /** Owner's asked price — usually higher than sellingPrice. */
+  demand?: number;
+  /** 'Pending' | 'Partial' | 'Completed' — see PAYMENT_STATUSES. */
+  paymentStatus?: string;
+  /** 'Registry' | 'Transfer' | 'NewLaunch' — see CASE_TYPES. */
+  caseType?: string;
+  /** 'NotApplied' | 'Applied' | 'Sanctioned' | 'Disbursed' — see LOAN_STATUSES. */
+  loanStatus?: string;
+
   // Owner details
   ownerName: string;
   ownerPhone: string;
+  /** F12 — full list of owner phones. ownerPhones[0] always equals ownerPhone
+   * for back-compat. Reads should prefer this array; writes set both fields. */
+  ownerPhones?: string[];
   ownerEmail?: string;
 
   companyId?: string;
   createdBy?: string;
   creator?: User;
   company?: Company;
+}
+
+// ==================== PROJECTS / TOWERS / UNITS (F17) ====================
+
+export interface Unit extends BaseModel {
+  towerId: string;
+  floor: number;
+  unitNo: string;
+  ownerName?: string | null;
+  ownerEmail?: string | null;
+  ownerPhones?: string[];
+  typology?: string | null;
+  size?: string | null;
+  status: string;
+  remarks?: string | null;
+  assignedTo?: string | null;
+}
+
+export interface Tower extends BaseModel {
+  projectId: string;
+  name: string;
+  units?: Unit[];
+}
+
+export interface Project extends BaseModel {
+  companyId?: string;
+  name: string;
+  propertyType: 'Commercial' | 'Residential';
+  constructionStatus: 'ReadyToMove' | 'UnderConstruction';
+  city?: string | null;
+  location?: string | null;
+  sector?: string | null;
+  createdBy?: string;
+  towers?: Tower[];
+}
+
+// ==================== BROKER REQUIREMENT (F18) ====================
+
+export interface BrokerRequirement extends BaseModel {
+  brokerName: string;
+  brokerCompany?: string | null;
+  contact: string;
+  email?: string | null;
+  status: 'Hot' | 'Ok' | 'Visit';
+  requirement: string;
+  source?: string | null;
+  followUpDate?: string | Date | null;
+  remark?: string | null;
+  companyId?: string;
+  createdBy?: string;
+  creator?: User;
 }
 
 // ==================== COMMISSION ====================

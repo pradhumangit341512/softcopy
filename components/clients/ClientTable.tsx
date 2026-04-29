@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Edit2, Trash2, Phone, FileText, X } from 'lucide-react';
+import { Edit2, Trash2, Phone, FileText, X, ArrowRightLeft } from 'lucide-react';
 import { Badge } from '@/components/common/Badge';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Button } from '@/components/common/Button';
@@ -13,6 +13,9 @@ interface ClientTableProps {
   clients: Client[];
   onEdit: (id: string) => void;
   onDelete?: (id: string) => Promise<void>;
+  /** When provided, a Transfer button appears next to Edit/Delete for each
+   * row. Parent decides whether to show this based on feature gating. */
+  onTransfer?: (client: Client) => void;
 }
 
 function cleanPhone(phone: string): string {
@@ -20,7 +23,7 @@ function cleanPhone(phone: string): string {
 }
 
 /** Table component for displaying a list of clients with inline actions */
-export function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
+export function ClientTable({ clients, onEdit, onDelete, onTransfer }: ClientTableProps) {
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -92,6 +95,19 @@ export function ClientTable({ clients, onEdit, onDelete }: ClientTableProps) {
                     >
                       <Edit2 size={14} />
                     </Button>
+
+                    {onTransfer && (
+                      <button
+                        type="button"
+                        onClick={() => onTransfer(client)}
+                        title="Transfer to teammate"
+                        className="w-7 h-7 rounded-lg border border-blue-100 bg-blue-50
+                          flex items-center justify-center text-blue-500
+                          hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                      >
+                        <ArrowRightLeft size={14} />
+                      </button>
+                    )}
 
                     {onDelete && (
                       <button

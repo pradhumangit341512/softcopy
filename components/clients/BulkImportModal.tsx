@@ -4,8 +4,11 @@ import { useState, useRef } from 'react';
 import { Upload, Download, X, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 
-// Column header aliases — maps flexible Excel header names to Client fields
+// Column header aliases — maps flexible Excel header names to lead fields.
+// Both 'lead name' (new) and 'client name' (legacy) accepted so customers
+// don't have to rename column headers in their existing templates.
 const COLUMN_MAP: Record<string, string> = {
+  'lead name': 'clientName', 'leadname': 'clientName', 'lead': 'clientName',
   'client name': 'clientName', 'clientname': 'clientName', 'name': 'clientName', 'client': 'clientName',
   'phone': 'phone', 'mobile': 'phone', 'contact': 'phone', 'phone number': 'phone', 'mobile number': 'phone',
   'email': 'email', 'email address': 'email', 'mail': 'email',
@@ -120,7 +123,7 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
       });
 
       if (!colMap || Object.keys(colMap).length === 0) {
-        setError('Could not match any column headers. Make sure your Excel has headers like: Client Name, Phone, Requirement Type, Inquiry Type');
+        setError('Could not match any column headers. Make sure your Excel has headers like: Lead Name, Phone, Requirement Type, Inquiry Type');
         return;
       }
 
@@ -208,10 +211,10 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
   async function downloadTemplate() {
     const ExcelJS = (await import('exceljs')).default;
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Clients');
+    const ws = wb.addWorksheet('Leads');
 
     ws.columns = [
-      { header: 'Client Name', key: 'clientName', width: 25 },
+      { header: 'Lead Name', key: 'clientName', width: 25 },
       { header: 'Phone', key: 'phone', width: 18 },
       { header: 'Email', key: 'email', width: 25 },
       { header: 'Company Name', key: 'companyName', width: 20 },
@@ -268,7 +271,7 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
             <FileSpreadsheet size={18} className="text-blue-500" />
-            {step === 'done' ? 'Import Complete' : 'Import Clients from Excel'}
+            {step === 'done' ? 'Import Complete' : 'Import Leads from Excel'}
           </h2>
           <button onClick={handleClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
             <X size={16} />

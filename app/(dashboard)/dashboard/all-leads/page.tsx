@@ -5,16 +5,33 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Download, Upload, Users, SlidersHorizontal, X } from 'lucide-react';
 import { BulkImportModal } from '@/components/clients/BulkImportModal';
+import { TransferLeadModal } from '@/components/clients/TransferLeadModal';
 
 import { Loader } from '@/components/common/Loader';
 import { ClientTable } from '@/components/clients/ClientTable';
 import { useAuth } from '@/hooks/useAuth';
+import { useFeature } from '@/hooks/useFeature';
 import { Alert } from '@/components/common/Alert';
 import { Pagination } from '@/components/common/Pagination';
 
 import type { Client } from '@/lib/types';
 import { ClientFilters } from '@/components/clients/ClientFilters';
 import { Button } from '@/components/common/Button';
+import { TabStrip } from '@/components/common/TabStrip';
+import { useConfirm } from '@/components/common/ConfirmDialog';
+
+/**
+ * Tab id → API filter params applied when that tab is active. Tabs are
+ * coarse presets; the granular filter dropdowns suppress conflicting
+ * fields while a tab is active. Each tab can pin any subset of fields —
+ * F3 pins status, F4 pins inquiryType. Future tabs can pin multiple
+ * fields by adding more entries to the inner record.
+ */
+const TAB_FILTERS: Record<string, Record<string, string>> = {
+  dead:   { status: 'DeadLead' },
+  buyers: { inquiryType: 'Buy' },
+  rental: { inquiryType: 'Rent' },
+};
 
 export default function ClientsPage() {
   const router       = useRouter();
@@ -31,10 +48,20 @@ export default function ClientsPage() {
   // ✅ Mobile: collapsible filter panel
   const [showFilters, setShowFilters] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [transferTarget, setTransferTarget] = useState<Client | null>(null);
+  const canTransfer = useFeature('feature.lead_transfer');
+  const canShowDeadTab = useFeature('feature.dead_leads_tab');
+  const canShowTypeTabs = useFeature('feature.lead_type_tabs');
+  const canExportLeads = useFeature('feature.export_leads');
+  const confirm = useConfirm();
 
   // ── Read everything from URL (single source of truth) ──
   const searchFromUrl    = searchParams.get('search')    || '';
   const statusFromUrl    = searchParams.get('status')    || '';
+  // F3 — `tab` is a coarse status preset that the tab strip writes. When a
+  // tab is active it locks the API call to one status; the granular status
+  // filter dropdown is hidden so the two can't conflict. `null` = "All Leads".
+  const tabFromUrl       = searchParams.get('tab')       || '';
   const sourceFromUrl    = searchParams.get('source')    || '';
   const dateFromUrl      = searchParams.get('dateFrom')  || '';
   const dateToUrl        = searchParams.get('dateTo')    || '';
@@ -68,9 +95,16 @@ export default function ClientsPage() {
     });
   }, [searchFromUrl, statusFromUrl, sourceFromUrl, dateFromUrl, dateToUrl, followUpFromUrl, budgetMinFromUrl, budgetMaxFromUrl]);
 
-  // Push filter changes to URL
+  // Push filter changes to URL.
+  //
+  // Preserve the active `tab` param so applying a filter while on Buyers /
+  // Rental / Dead Leads stays on that tab — only an explicit tab click
+  // changes tabs. Every filter field that can be set via the panel is
+  // rewritten from `newFilters`, so we only need to carry forward params
+  // the panel doesn't own.
   const handleFilterChange = (newFilters: typeof filters) => {
     const params = new URLSearchParams();
+    if (tabFromUrl)           params.set('tab',       tabFromUrl);
     if (newFilters.search)    params.set('search',    newFilters.search);
     if (newFilters.status)    params.set('status',    newFilters.status);
     if (newFilters.source)    params.set('source',    newFilters.source);
@@ -98,11 +132,18 @@ export default function ClientsPage() {
     setLoading(true);
     setError(null);
     try {
+      // Tab takes precedence over the granular filters when the same field
+      // is pinned by both — F3/F4 are mutually exclusive with their
+      // matching dropdown filters so the API call must reflect that.
+      const tabFilter = TAB_FILTERS[tabFromUrl] ?? {};
+      const effectiveStatus = tabFilter.status || statusFromUrl;
+
       const params = new URLSearchParams({
-        ...(searchFromUrl && { search:   searchFromUrl }),
-        ...(statusFromUrl && { status:   statusFromUrl }),
-        ...(dateFromUrl   && { dateFrom: dateFromUrl }),
-        ...(dateToUrl     && { dateTo:   dateToUrl }),
+        ...(searchFromUrl && { search: searchFromUrl }),
+        ...(effectiveStatus && { status: effectiveStatus }),
+        ...(tabFilter.inquiryType && { inquiryType: tabFilter.inquiryType }),
+        ...(dateFromUrl && { dateFrom: dateFromUrl }),
+        ...(dateToUrl && { dateTo: dateToUrl }),
         page: String(pageFromUrl),
       });
       const response = await fetch(`/api/clients?${params}`, {
@@ -120,7 +161,7 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, searchFromUrl, statusFromUrl, dateFromUrl, dateToUrl, pageFromUrl]);
+  }, [user?.id, searchFromUrl, statusFromUrl, tabFromUrl, dateFromUrl, dateToUrl, pageFromUrl]);
 
   useEffect(() => {
     if (authLoading || !user?.id) return;
@@ -156,7 +197,13 @@ export default function ClientsPage() {
 
   const handleEdit   = (id: string) => router.push(`/dashboard/all-leads/${id}`);
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this client?')) return;
+    const ok = await confirm({
+      title: 'Delete this lead?',
+      message: 'The lead will be soft-deleted and removed from your active list. Recoverable from the database; not from the app UI.',
+      tone: 'danger',
+      confirmText: 'Delete lead',
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/clients/${id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Delete failed');
@@ -174,7 +221,7 @@ export default function ClientsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            Clients
+            Leads
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
             Manage all your property leads
@@ -214,18 +261,21 @@ export default function ClientsPage() {
             <span className="hidden sm:inline">Import</span>
           </button>
 
-          {/* Export */}
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5
-              text-sm font-medium text-gray-700 bg-white border border-gray-200
-              rounded-xl shadow-sm hover:bg-gray-50 transition-colors
-              disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <Download size={15} className={exporting ? 'animate-bounce' : ''} />
-            <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Export'}</span>
-          </button>
+          {/* Export — gated by feature.export_leads */}
+          {canExportLeads && (
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5
+                text-sm font-medium text-gray-700 bg-white border border-gray-200
+                rounded-xl shadow-sm hover:bg-gray-50 transition-colors
+                disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Download size={15} className={exporting ? 'animate-bounce' : ''} />
+              <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Export'}</span>
+            </button>
+          )}
 
           {/* Add Leads */}
           <Link href="/dashboard/all-leads/add">
@@ -278,6 +328,34 @@ export default function ClientsPage() {
         </div>
       </div>
 
+      {/* ══ TAB STRIP ══
+          Coarse status presets. The active tab locks the API to one status
+          and hides the granular status filter (so the two can't conflict).
+          Tabs gated behind features hide entirely when the company doesn't
+          have them — feature.dead_leads_tab today, F4/F5 will land here. */}
+      <TabStrip
+        ariaLabel="Leads view"
+        activeTab={tabFromUrl}
+        tabs={[
+          { id: '',       label: 'All Leads' },
+          { id: 'buyers', label: 'All Buyers',      visible: canShowTypeTabs },
+          { id: 'rental', label: 'Rental Business', visible: canShowTypeTabs },
+          { id: 'dead',   label: 'Dead Leads',      visible: canShowDeadTab },
+        ]}
+        onSelect={(nextTab) => {
+          const params = new URLSearchParams(searchParams.toString());
+          if (nextTab) params.set('tab', nextTab);
+          else params.delete('tab');
+          // Switching tabs always resets to page 1 — old page numbers
+          // rarely make sense in the new filter scope.
+          params.set('page', '1');
+          // The granular status filter is mutually exclusive with tabs.
+          // Clear it on tab change so refresh shows the tab's expected slice.
+          params.delete('status');
+          router.push(`/dashboard/all-leads?${params.toString()}`);
+        }}
+      />
+
       {/* ══ TABLE CARD ══ */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
@@ -289,7 +367,7 @@ export default function ClientsPage() {
               <Users size={14} className="text-blue-500" />
             </div>
             <h3 className="text-sm font-semibold text-gray-700">
-              Clients
+              Leads
               {!loading && (
                 <span className="ml-2 text-xs font-medium text-gray-400 bg-gray-100
                   px-2 py-0.5 rounded-full">
@@ -333,10 +411,19 @@ export default function ClientsPage() {
             </div>
             <div className="text-center">
               <p className="text-gray-500 text-sm font-medium">
-                {searchFromUrl ? `No results for "${searchFromUrl}"` : 'No clients yet'}
+                {searchFromUrl
+                  ? `No results for "${searchFromUrl}"`
+                  : tabFromUrl === 'dead'
+                  ? 'No dead leads'
+                  : tabFromUrl === 'buyers'
+                  ? 'No buyer leads'
+                  : tabFromUrl === 'rental'
+                  ? 'No rental leads'
+                  : 'No leads yet'}
               </p>
-              {(statusFromUrl || dateFromUrl || dateToUrl) && (
+              {(statusFromUrl || dateFromUrl || dateToUrl || tabFromUrl) && (
                 <button
+                  type="button"
                   onClick={() => router.push('/dashboard/all-leads')}
                   className="mt-1 text-xs text-blue-600 hover:underline"
                 >
@@ -361,6 +448,7 @@ export default function ClientsPage() {
                   clients={clients}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
+                  onTransfer={canTransfer ? (c) => setTransferTarget(c) : undefined}
                 />
               </div>
             </div>
@@ -385,6 +473,22 @@ export default function ClientsPage() {
         onClose={() => setShowImportModal(false)}
         onImported={() => fetchClients()}
       />
+
+      {/* Transfer Lead Modal — only mounted when feature is enabled */}
+      {canTransfer && (
+        <TransferLeadModal
+          isOpen={transferTarget !== null}
+          clientId={transferTarget?.id ?? null}
+          clientName={transferTarget?.clientName}
+          currentOwnerId={transferTarget?.ownedBy ?? transferTarget?.creatorId ?? null}
+          onClose={() => setTransferTarget(null)}
+          onTransferred={() => {
+            setTransferTarget(null);
+            fetchClients();
+          }}
+        />
+      )}
     </div>
   );
 }
+

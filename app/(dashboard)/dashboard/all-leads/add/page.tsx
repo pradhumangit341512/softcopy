@@ -62,7 +62,7 @@ export default function AddClientPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Add New Client</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Add New Lead</h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
             Fill in the details to add a new property lead
           </p>
@@ -71,7 +71,7 @@ export default function AddClientPage() {
 
       {/* Form Card */}
       <Card>
-        <CardHeader title="Client Information" />
+        <CardHeader title="Lead Information" />
         <CardBody>
           {loading ? (
             <Loader size="md" message="Saving..." />

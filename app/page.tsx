@@ -12,11 +12,12 @@ import {
   MODULES,
   SECURITY_POINTS,
   WORKFLOW_STEPS,
-  LANDING_JSON_LD,
+  buildLandingJsonLd,
   FAQS,
 } from './_landing/data';
 import { LandingNav } from './_landing/LandingNav';
 import { OnboardingForm } from './_landing/OnboardingForm';
+import { FeedbackSection, type FeedbackItem, type FeedbackSummary } from './_landing/FeedbackSection';
 
 /**
  * Broker365 landing page — Server Component.
@@ -96,6 +97,61 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Loads up to 12 approved testimonials + the aggregate rating summary
+ * directly from the database so they ship in the initial HTML.
+ * Wrapped in try/catch because a DB hiccup shouldn't take down the
+ * whole landing page — we render an empty wall and the submit form
+ * still works.
+ */
+async function loadFeedback(): Promise<{
+  feedbackItems: FeedbackItem[];
+  feedbackSummary: FeedbackSummary;
+}> {
+  try {
+    // Lazy import so the marketing build doesn't pull Prisma into the
+    // shared chunk graph if this code path is removed later.
+    const { db } = await import('@/lib/db');
+    const [items, agg] = await Promise.all([
+      db.feedback.findMany({
+        where: { status: 'approved' },
+        orderBy: [{ approvedAt: 'desc' }, { createdAt: 'desc' }],
+        take: 12,
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          rating: true,
+          message: true,
+          approvedAt: true,
+        },
+      }),
+      db.feedback.aggregate({
+        where: { status: 'approved' },
+        _avg: { rating: true },
+        _count: true,
+      }),
+    ]);
+    return {
+      feedbackItems: items.map((i) => ({
+        ...i,
+        approvedAt: i.approvedAt?.toISOString() ?? null,
+      })),
+      feedbackSummary: {
+        count: agg._count,
+        averageRating: agg._avg.rating ? Number(agg._avg.rating.toFixed(2)) : null,
+      },
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[landing] feedback load skipped:', err);
+    return {
+      feedbackItems: [],
+      feedbackSummary: { count: 0, averageRating: null },
+    };
+  }
+}
+
 export default async function LandingPage() {
   // Cheap, cookie-only auth probe. If an auth_token cookie exists we assume
   // the visitor already has (or recently had) a session and send them to
@@ -114,14 +170,39 @@ export default async function LandingPage() {
     redirect('/dashboard');
   }
 
+  // Fetch approved feedback server-side so testimonials land in the
+  // initial HTML — search engines and AI overviews lift them straight
+  // out of the markup without needing JS execution.
+  const { feedbackItems, feedbackSummary } = await loadFeedback();
+
   return (
     <div className="b360">
       {/* JSON-LD — Organization + WebSite + SoftwareApplication + FAQPage.
-          Fake aggregateRating has been removed to avoid Google Manual
-          Action risk; re-add only when backed by a real review source. */}
+          AggregateRating + Review nodes are populated only when there's
+          real approved feedback in the DB. Faking either would risk a
+          Google Manual Action. */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(LANDING_JSON_LD) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            buildLandingJsonLd({
+              aggregateRating:
+                feedbackSummary.count > 0 && feedbackSummary.averageRating != null
+                  ? {
+                      ratingValue: feedbackSummary.averageRating,
+                      reviewCount: feedbackSummary.count,
+                    }
+                  : undefined,
+              reviews: feedbackItems.slice(0, 5).map((f) => ({
+                name: f.name,
+                role: f.role,
+                rating: f.rating,
+                message: f.message,
+                datePublished: f.approvedAt ?? undefined,
+              })),
+            })
+          ),
+        }}
       />
 
       {/* Skip-to-content for keyboard + screen-reader users. */}
@@ -501,6 +582,15 @@ export default async function LandingPage() {
             ))}
           </div>
         </section>
+
+        {/* ── Real-time feedback wall + submit form ──────────────
+            Server-rendered list so AEO/GEO crawlers (Google AI Overview,
+            Perplexity, ChatGPT browse) can lift the reviews straight out
+            of the initial HTML. */}
+        <FeedbackSection
+          initialItems={feedbackItems}
+          initialSummary={feedbackSummary}
+        />
 
         {/* ── Pricing ────────────────────────────────── */}
         <section id="pricing" className="section section--alt" aria-labelledby="pricing-title">

@@ -24,11 +24,19 @@ export function isTeamMember(role: string | undefined): boolean {
  * this helper does not check soft-delete. Accepting a deleted row would
  * grant access to a tombstoned record.
  *
+ * Ownership precedence for team members:
+ *   1. If row has `ownedBy` set → that's the current owner; only they pass.
+ *      (Used by Client after F2 lead-transfer; owner changes over time
+ *      but createdBy stays put as the audit anchor.)
+ *   2. Else fall back to `createdBy` — covers legacy Client rows where
+ *      ownedBy hasn't been backfilled yet, and every other model that
+ *      doesn't have an ownedBy concept (Property, Commission, etc.).
+ *
  * Returns a ready-to-send error response on failure, or `null` on success.
  */
 export function assertCompanyOwnership(
   payload: AuthTokenPayload,
-  row: { companyId: string; createdBy?: string | null }
+  row: { companyId: string; createdBy?: string | null; ownedBy?: string | null }
 ): NextResponse | null {
   if (row.companyId !== payload.companyId) {
     return NextResponse.json(
@@ -37,15 +45,14 @@ export function assertCompanyOwnership(
     );
   }
 
-  if (
-    isTeamMember(payload.role) &&
-    row.createdBy &&
-    row.createdBy !== payload.userId
-  ) {
-    return NextResponse.json(
-      { error: 'Forbidden — not your record' },
-      { status: 403 }
-    );
+  if (isTeamMember(payload.role)) {
+    const ownerField = row.ownedBy ?? row.createdBy ?? null;
+    if (ownerField && ownerField !== payload.userId) {
+      return NextResponse.json(
+        { error: 'Forbidden — not your record' },
+        { status: 403 }
+      );
+    }
   }
 
   return null;

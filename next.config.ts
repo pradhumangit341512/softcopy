@@ -43,15 +43,18 @@ const cspDirectives = [
   // visitor, not from our code. We deliberately do NOT allow 'unsafe-eval'
   // in prod just to silence extensions — that would weaken the policy for
   // every real user. Chrome reports it as a warning; it is not an outage.
+  // va.vercel-scripts.com hosts @vercel/analytics. We always allow it (dev
+  // and prod) because the SDK is bundled into our app and tries to load it
+  // unconditionally — blocking it just produces noisy console errors.
   isDev
-    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com${vercelLiveScript}`
-    : `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com${vercelLiveScript}`,
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com https://va.vercel-scripts.com${vercelLiveScript}`
+    : `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com https://va.vercel-scripts.com${vercelLiveScript}`,
   // script-src-elem defaults to script-src when unspecified, but some
   // browsers (Firefox) treat that more strictly. Pin it explicitly so the
   // feedback loader on Vercel previews isn't blocked in those engines.
   isDev
-    ? `script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com${vercelLiveScript}`
-    : `script-src-elem 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com${vercelLiveScript}`,
+    ? `script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com https://va.vercel-scripts.com${vercelLiveScript}`
+    : `script-src-elem 'self' 'unsafe-inline' https://checkout.razorpay.com https://www.googletagmanager.com https://va.vercel-scripts.com${vercelLiveScript}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: https: blob:",
   "font-src 'self' data: https://fonts.gstatic.com",
@@ -88,7 +91,28 @@ const nextConfig: NextConfig = {
   ],
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
-  serverExternalPackages: ["exceljs", "twilio", "jsonwebtoken"],
+  // exceljs / twilio / jsonwebtoken use Node-only APIs that webpack can't bundle.
+  //
+  // The @opentelemetry/* + @sentry/profiling-node entries fix the recurring
+  // dev-time error:
+  //   Cannot find module './vendor-chunks/@opentelemetry.js'
+  // Sentry's instrumentation.ts pulls OpenTelemetry into every API request.
+  // Webpack splits it into a vendor chunk that intermittently fails to land
+  // on disk during HMR — externalizing tells Node to require these packages
+  // directly instead of going through webpack's chunk graph.
+  serverExternalPackages: [
+    "exceljs",
+    "twilio",
+    "jsonwebtoken",
+    "@opentelemetry/api",
+    "@opentelemetry/core",
+    "@opentelemetry/instrumentation",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-trace-base",
+    "@opentelemetry/sdk-trace-node",
+    "@opentelemetry/semantic-conventions",
+    "@sentry/profiling-node",
+  ],
 
   async headers() {
     return [

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth } from "@/lib/auth";
 import ExcelJS from "exceljs";
+import { requireFeature } from "@/lib/require-feature";
 
 // ✅ Fix #1: Force Node.js runtime so ExcelJS works
 export const runtime = "nodejs";
@@ -19,6 +20,13 @@ export async function GET(req: NextRequest) {
     const payload = await verifyAuth(req) as AuthPayload | null;
     if (!payload)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    /* ================= FEATURE GATE ================= */
+    // F14 — only companies on a plan that includes Export Leads can hit
+    // this route. Without the gate, a team member could still trigger an
+    // export by hitting the URL directly even if the button is hidden.
+    const gate = await requireFeature(payload.companyId, 'feature.export_leads');
+    if (!gate.ok) return gate.response;
 
     const companyId = payload.companyId;
 
@@ -78,10 +86,10 @@ export async function GET(req: NextRequest) {
 
     /* ================= CREATE EXCEL ================= */
     const workbook  = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Clients");
+    const worksheet = workbook.addWorksheet("Leads");
 
     worksheet.columns = [
-      { header: "Client Name",    key: "clientName",        width: 20 },
+      { header: "Lead Name",      key: "clientName",        width: 20 },
       { header: "Phone",          key: "phone",             width: 15 },
       { header: "Email",          key: "email",             width: 25 },
       { header: "Requirement",    key: "requirementType",   width: 15 },

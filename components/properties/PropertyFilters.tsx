@@ -8,6 +8,8 @@ import {
   PROPERTY_STATUS_OPTIONS,
   PROPERTY_TYPE_OPTIONS,
 } from '@/lib/types';
+import { PROPERTY_STATUSES } from '@/lib/constants';
+import { useFeature } from '@/hooks/useFeature';
 
 export interface PropertyFilterValues {
   status: string;
@@ -48,10 +50,19 @@ export function PropertyFilters({
   teamMembers = [],
   isAdmin = false,
 }: PropertyFiltersProps) {
-  const statusOptions = [
-    { value: '', label: 'All Status' },
-    ...PROPERTY_STATUS_OPTIONS,
-  ];
+  // F7 — extended status taxonomy. When the company has the feature, the
+  // dropdown shows the canonical 7 values; otherwise the legacy 4-value
+  // PROPERTY_STATUS_OPTIONS list. Either way, "All Status" stays at the top.
+  const useExtendedPropertyStatuses = useFeature('feature.extended_property_statuses');
+  const statusOptions = useExtendedPropertyStatuses
+    ? [
+        { value: '', label: 'All Status' },
+        ...PROPERTY_STATUSES.map((v) => ({ value: v, label: v })),
+      ]
+    : [
+        { value: '', label: 'All Status' },
+        ...PROPERTY_STATUS_OPTIONS,
+      ];
 
   const propertyTypeOptions = [
     { value: '', label: 'All Types' },
@@ -116,7 +127,7 @@ export function PropertyFilters({
       </div>
 
       {/* ── Row 3: Listing toggle + Price + Vacate ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2  gap-2.5">
         {/* Listing Type Toggle */}
         <div>
           <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider mb-1.5">

@@ -148,6 +148,18 @@ export async function POST(req: NextRequest) {
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
+    // F12 — keep ownerPhone and ownerPhones in lock-step. The primary phone
+    // (form's required field) is always element 0; any extras the user
+    // typed in the multi-phone UI append after, deduped to avoid duplicates.
+    const phoneList = Array.from(
+      new Set(
+        [data.ownerPhone, ...(data.ownerPhones ?? [])]
+          .map((p) => p?.trim())
+          .filter((p): p is string => Boolean(p))
+      )
+    );
+    const primaryPhone = phoneList[0] ?? data.ownerPhone;
+
     const property = await db.property.create({
       data: {
         propertyName: data.propertyName,
@@ -160,8 +172,20 @@ export async function POST(req: NextRequest) {
         area: data.area,
         description: data.description,
         status: data.status,
+        // F10 — structured project identity (all nullable)
+        projectName: data.projectName,
+        sectorNo: data.sectorNo,
+        unitNo: data.unitNo,
+        towerNo: data.towerNo,
+        typology: data.typology,
+        // F11 — deal-flow fields
+        demand: data.demand ?? null,
+        paymentStatus: data.paymentStatus,
+        caseType: data.caseType,
+        loanStatus: data.loanStatus,
         ownerName: data.ownerName,
-        ownerPhone: data.ownerPhone,
+        ownerPhone: primaryPhone,
+        ownerPhones: phoneList,
         ownerEmail: data.ownerEmail,
         companyId: payload.companyId,
         createdBy: payload.userId,

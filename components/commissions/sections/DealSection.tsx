@@ -110,8 +110,8 @@ export function DealSection({
             />
             {mode === 'add' && !state.selectedClient && (
               <p className="text-[11px] text-gray-400 mt-1.5">
-                Type to search by name, phone, or email. New client? Add them first under{' '}
-                <span className="font-medium">Clients</span>.
+                Type to search by name, phone, or email. New lead? Add them first under{' '}
+                <span className="font-medium">Leads</span>.
               </p>
             )}
           </div>

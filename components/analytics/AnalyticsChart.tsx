@@ -54,6 +54,21 @@ interface StatusData {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
+/**
+ * Y-axis tick formatter for charts that plot rupee values. Renders 1.2k /
+ * 1.2L / 1.2Cr so labels stay readable on narrow screens. Treats NaN /
+ * non-numeric input as 0 to keep the axis from rendering "NaN" literally.
+ */
+const inrAxisTickFormatter = (v: unknown): string => {
+  const num = Number(v);
+  if (!Number.isFinite(num)) return '₹0';
+  const abs = Math.abs(num);
+  if (abs >= 1e7) return `₹${(num / 1e7).toFixed(1)}Cr`;
+  if (abs >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
+  if (abs >= 1e3) return `₹${(num / 1e3).toFixed(0)}k`;
+  return `₹${num}`;
+};
+
 /** Analytics dashboard with charts for revenue, clients, and status distribution */
 export function AnalyticsChart() {
   const [data, setData] = useState<ChartMonthly[]>([]);
@@ -160,45 +175,74 @@ export function AnalyticsChart() {
 
         {/* Revenue & Deals */}
         <ChartCard title="Revenue & Commissions Trend">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="revenue" stroke="#3b82f6" />
-              <Line type="monotone" dataKey="commissions" stroke="#10b981" />
-            </LineChart>
-          </ResponsiveContainer>
+          {data.length === 0 ? (
+            <ChartEmpty />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis tickFormatter={inrAxisTickFormatter} width={70} />
+                <Tooltip
+                  formatter={(value, name) => {
+                    const key = String(name ?? '');
+                    if (key === 'revenue' || key === 'commissions') {
+                      return [inrAxisTickFormatter(value), key];
+                    }
+                    return [String(value), key];
+                  }}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="revenue" stroke="#3b82f6" />
+                <Line type="monotone" dataKey="commissions" stroke="#10b981" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </ChartCard>
 
-        {/* Clients */}
-        <ChartCard title="New Clients Added">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="clients" fill="#f59e0b" />
-            </BarChart>
-          </ResponsiveContainer>
+        {/* Leads */}
+        <ChartCard title="New Leads Added">
+          {data.length === 0 ? (
+            <ChartEmpty />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="clients" name="Leads" fill="#f59e0b" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </ChartCard>
 
         {/* Status */}
-        <ChartCard title="Client Status Distribution">
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie data={statusData} dataKey="value" outerRadius={90}>
-                {statusData.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+        <ChartCard title="Lead Status Distribution">
+          {statusData.length === 0 ? (
+            <ChartEmpty />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={statusData}
+                  dataKey="value"
+                  nameKey="name"
+                  outerRadius={90}
+                  label={({ name, percent }) =>
+                    `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                  }
+                >
+                  {statusData.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend verticalAlign="bottom" height={32} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </ChartCard>
 
         {/* Metrics */}
@@ -222,6 +266,19 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
+/** Centred placeholder shown when a chart has no rows to render. Same
+ * height as the chart so the page layout doesn't jump when data loads. */
+function ChartEmpty({ message = 'No data to display yet.' }: { message?: string }) {
+  return (
+    <div
+      className="flex items-center justify-center text-sm text-gray-400"
+      style={{ height: 300 }}
+    >
+      {message}
+    </div>
+  );
+}
+
 interface AnalyticsStats {
   totalRevenue: number;
   totalDeals: number;
@@ -234,7 +291,7 @@ function Metrics({ stats }: { stats: AnalyticsStats }) {
     <div className="space-y-4">
       <Metric label="Total Revenue" value={`₹${(stats.totalRevenue / 100000).toFixed(2)}L`} />
       <Metric label="Total Deals" value={`${stats.totalDeals}`} />
-      <Metric label="Total Clients" value={`${stats.totalClients}`} />
+      <Metric label="Total Leads" value={`${stats.totalClients}`} />
       <Metric label="Avg Commission" value={`₹${stats.avgCommission}`} />
     </div>
   );

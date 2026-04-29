@@ -166,16 +166,55 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
+/**
+ * Tooltip used by the Commission Overview chart.
+ *
+ * Renders ALL payload entries — required for the multi-month stacked-bar
+ * mode where each bar carries both `paid` and `pending` series. Showing
+ * only payload[0] (the previous behaviour) silently dropped the pending
+ * value, so users saw a stacked bar but only the bottom number on hover.
+ *
+ * Single-bar mode (Pending / Paid / Target) still works because there's
+ * always exactly one entry in the payload — we just render the same row
+ * shape for it.
+ */
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
-  if (active && payload?.length) {
-    return (
-      <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3">
-        <p className="text-xs font-semibold text-gray-500 mb-1">{label}</p>
-        <p className="text-sm font-bold text-gray-800">{fmt(Number(payload[0]?.value))}</p>
+  if (!active || !payload?.length) return null;
+
+  // Total across stacked series — useful in multi-month mode so users
+  // can see the combined commission for the month at a glance.
+  const total = payload.reduce(
+    (acc, entry) => acc + (Number(entry?.value) || 0),
+    0
+  );
+  const showTotal = payload.length > 1;
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3 min-w-[160px]">
+      <p className="text-xs font-semibold text-gray-500 mb-1.5">{label}</p>
+      <div className="space-y-1">
+        {payload.map((entry, i) => (
+          <div key={`${entry.name}-${i}`} className="flex items-center gap-2 text-xs">
+            <span
+              aria-hidden
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: entry.color }}
+            />
+            <span className="text-gray-500 truncate">{entry.name}</span>
+            <span className="ml-auto font-bold text-gray-800">
+              {fmt(Number(entry.value) || 0)}
+            </span>
+          </div>
+        ))}
+        {showTotal && (
+          <div className="flex items-center gap-2 pt-1 mt-1 border-t border-gray-100 text-xs">
+            <span className="text-gray-500">Total</span>
+            <span className="ml-auto font-bold text-gray-900">{fmt(total)}</span>
+          </div>
+        )}
       </div>
-    );
-  }
-  return null;
+    </div>
+  );
 };
 
 // ─────────────────────────────────────────
@@ -508,24 +547,50 @@ export default function CommissionsPage() {
    *   - ≥2 months in breakdown → month-over-month Paid+Pending stacked bars
    *   - otherwise             → simple Pending/Paid/Target summary
    * Memoized so Recharts keeps a stable identity across unrelated rerenders.
+   * Numeric fields are coerced through `Number(x) || 0` so a missing/NaN
+   * value from the backend can't blow the chart up with `null` ticks.
    */
   const chartData = useMemo(() => {
     if (isMultiMonth && breakdown) {
       return breakdown.monthly.map((m) => ({
         status: formatMonthShort(m.month),
-        paid: m.paid,
-        pending: m.pending,
+        paid: Number(m.paid) || 0,
+        pending: Number(m.pending) || 0,
         // Keep `amount` too so the old single-series bar still works if a
         // consumer (export, screenshot) reads it.
-        amount: m.commission,
+        amount: Number(m.commission) || 0,
       }));
     }
     return [
-      { status: 'Pending', amount: totals.pendingCommission, paid: 0, pending: totals.pendingCommission },
-      { status: 'Paid',    amount: paidAmount,              paid: paidAmount, pending: 0 },
-      ...(budget.targetAmount > 0 ? [{ status: 'Target', amount: budget.targetAmount, paid: 0, pending: 0 }] : []),
+      {
+        status: 'Pending',
+        amount: Number(totals.pendingCommission) || 0,
+        paid: 0,
+        pending: Number(totals.pendingCommission) || 0,
+      },
+      {
+        status: 'Paid',
+        amount: Number(paidAmount) || 0,
+        paid: Number(paidAmount) || 0,
+        pending: 0,
+      },
+      ...(budget.targetAmount > 0
+        ? [{
+            status: 'Target',
+            amount: Number(budget.targetAmount) || 0,
+            paid: 0,
+            pending: 0,
+          }]
+        : []),
     ];
   }, [isMultiMonth, breakdown, totals.pendingCommission, paidAmount, budget.targetAmount]);
+
+  // Used to show an empty-state instead of an axes-only blank chart when
+  // there's nothing to plot. We sum the numeric series across rows.
+  const chartHasValue = useMemo(
+    () => chartData.some((d) => (d.paid || 0) + (d.pending || 0) + (d.amount || 0) > 0),
+    [chartData]
+  );
 
   const FILTERS: { key: FilterType; label: string }[] = [
     { key: 'all',     label: 'All'     },
@@ -693,24 +758,54 @@ export default function CommissionsPage() {
                 : 'Pending · Paid · Target'}
             </p>
           </div>
-          <ResponsiveContainer width="100%" height={isMultiMonth ? 220 : 180}>
-            <BarChart data={chartData} barCategoryGap={isMultiMonth ? '20%' : '35%'}
-              margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="status" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
-                tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
-              {isMultiMonth ? (
-                <>
-                  <Bar dataKey="paid"    stackId="m" name="Paid (₹)"    radius={[0, 0, 0, 0]} fill="#10b981" />
-                  <Bar dataKey="pending" stackId="m" name="Pending (₹)" radius={[6, 6, 0, 0]} fill="#f59e0b" />
-                </>
-              ) : (
-                <Bar dataKey="amount" name="Amount (₹)" radius={[6, 6, 0, 0]} fill="#3b82f6" />
-              )}
-            </BarChart>
-          </ResponsiveContainer>
+          {chartHasValue ? (
+            <ResponsiveContainer width="100%" height={isMultiMonth ? 220 : 180}>
+              <BarChart
+                data={chartData}
+                barCategoryGap={isMultiMonth ? '20%' : '35%'}
+                margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis
+                  dataKey="status"
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                  // Compact INR formatter: ₹0 → ₹999, ₹1k → ₹999k, ₹1L → ₹999L, ₹1Cr+
+                  // Keeps Y-axis labels short on narrow screens without
+                  // losing the order of magnitude.
+                  tickFormatter={(v) => {
+                    const n = Math.abs(Number(v) || 0);
+                    if (n >= 1e7) return `₹${(v / 1e7).toFixed(1)}Cr`;
+                    if (n >= 1e5) return `₹${(v / 1e5).toFixed(1)}L`;
+                    if (n >= 1e3) return `₹${(v / 1e3).toFixed(0)}k`;
+                    return `₹${v}`;
+                  }}
+                />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
+                {isMultiMonth ? (
+                  <>
+                    <Bar dataKey="paid"    stackId="m" name="Paid (₹)"    radius={[0, 0, 0, 0]} fill="#10b981" />
+                    <Bar dataKey="pending" stackId="m" name="Pending (₹)" radius={[6, 6, 0, 0]} fill="#f59e0b" />
+                  </>
+                ) : (
+                  <Bar dataKey="amount" name="Amount (₹)" radius={[6, 6, 0, 0]} fill="#3b82f6" />
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div
+              className="flex items-center justify-center text-center text-xs text-gray-400"
+              style={{ height: isMultiMonth ? 220 : 180 }}
+            >
+              No commission activity in the selected window yet.
+            </div>
+          )}
         </div>
       </div>
 
@@ -961,8 +1056,8 @@ export default function CommissionsPage() {
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input type="text" value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
-                placeholder="Search client..."
-                aria-label="Search by client name"
+                placeholder="Search lead..."
+                aria-label="Search by lead name"
                 className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-xl
                   bg-gray-50 focus:bg-white focus:outline-none focus:ring-2
                   focus:ring-blue-500/20 focus:border-blue-400 text-gray-700" />

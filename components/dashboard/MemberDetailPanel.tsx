@@ -136,7 +136,7 @@ export function MemberDetailPanel({
 
           {/* Summary Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-5">
-            <StatCard label="Clients Assigned" value={stats.totalLeads.toString()} />
+            <StatCard label="Leads Assigned" value={stats.totalLeads.toString()} />
             <StatCard label="Deals Closed" value={stats.dealsClosed.toString()} color="green" />
             <StatCard label="Conversion" value={`${stats.conversionRate}%`}
               color={stats.conversionRate >= 30 ? 'green' : stats.conversionRate >= 15 ? 'amber' : 'gray'} />

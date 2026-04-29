@@ -331,8 +331,33 @@ export const createPropertySchema = z
     area: optionalString,
     description: optionalString,
     status: z.string().optional().default('Available'),
+    // F10 — structured project identity. All optional and free-text;
+    // server doesn't enforce a master project list yet.
+    projectName: optionalString,
+    sectorNo: optionalString,
+    unitNo: optionalString,
+    towerNo: optionalString,
+    typology: optionalString,
+    // F11 — deal-flow fields. Schema accepts any string so legacy / typo
+    // values won't 400. UI is the canonical source via lib/constants.ts.
+    demand: z
+      .union([z.coerce.number().nonnegative(), z.literal('')])
+      .optional()
+      .nullable()
+      .transform((v) => (v === '' || v === null || v === undefined ? null : Number(v))),
+    paymentStatus: optionalString,
+    caseType: optionalString,
+    loanStatus: optionalString,
     ownerName: z.string().trim().min(2),
     ownerPhone: phoneSchema,
+    // F12 — optional secondary numbers. The route normalises this with
+    // `ownerPhone` so both fields land on the row in sync. Empty entries
+    // are stripped before validation so the user can leave blank rows in
+    // the UI without a 400.
+    ownerPhones: z
+      .array(phoneSchema)
+      .optional()
+      .transform((arr) => (arr ?? []).filter(Boolean)),
     ownerEmail: z
       .union([emailSchema, z.literal('')])
       .optional()
@@ -437,7 +462,7 @@ export type OnboardingEnquiryInput = z.infer<typeof onboardingEnquirySchema>;
  */
 export const createCompanyWithAdminSchema = z.object({
   companyName: z.string().trim().min(2, 'Company name is required'),
-  plan: z.enum(['standard', 'pro', 'enterprise', 'custom']).default('standard'),
+  plan: z.enum(['basic', 'standard', 'pro', 'enterprise']).default('standard'),
   seatLimit: z.number().int().min(1).max(1000).default(5),
   monthlyFee: z.number().nonnegative().nullable().optional(),
   subscriptionUntil: z
@@ -455,7 +480,7 @@ export const createCompanyWithAdminSchema = z.object({
 
 export const updateCompanyBySuperAdminSchema = z.object({
   companyName: z.string().trim().min(2).optional(),
-  plan: z.enum(['standard', 'pro', 'enterprise', 'custom']).optional(),
+  plan: z.enum(['basic', 'standard', 'pro', 'enterprise']).optional(),
   seatLimit: z.number().int().min(1).max(1000).optional(),
   monthlyFee: z.number().nonnegative().nullable().optional(),
   subscriptionUntil: z
@@ -465,6 +490,21 @@ export const updateCompanyBySuperAdminSchema = z.object({
   status: z.enum(['active', 'suspended', 'expired']).optional(),
   notes: optionalString,
 }).strict();
+
+/**
+ * Schema for the per-feature override map. Keys are feature ids from
+ * lib/plans.ts FEATURE_KEYS; values are booleans.
+ *   true  → grant beyond the plan default
+ *   false → revoke despite the plan default
+ * Setting `featureFlags: {}` clears all overrides (back to plan default).
+ */
+export const updateCompanyFeatureFlagsSchema = z.object({
+  plan: z.enum(['basic', 'standard', 'pro', 'enterprise']).optional(),
+  featureFlags: z.record(z.string(), z.boolean()).optional(),
+}).strict().refine(
+  (d) => d.plan !== undefined || d.featureFlags !== undefined,
+  { message: 'Provide plan, featureFlags, or both' }
+);
 
 export const recordPaymentSchema = z.object({
   companyId: objectIdSchema,
@@ -484,6 +524,177 @@ export const recordPaymentSchema = z.object({
 }).strict().refine(
   (d) => d.coversUntil > d.coversFrom,
   { message: 'coversUntil must be after coversFrom', path: ['coversUntil'] }
+);
+
+// ==================== FEEDBACK ====================
+
+/**
+ * Public submit form on the landing page. Anyone can post; rate-limited
+ * at the API layer. Approval happens by a superadmin before it goes
+ * live as a landing-page testimonial.
+ */
+export const createFeedbackSchema = z.object({
+  name: z.string().trim().min(2, 'Name is required').max(80),
+  role: z.string().trim().max(120).optional().nullable().transform((v) => v || null),
+  rating: z.coerce.number().int().min(1).max(5).default(5),
+  message: z.string().trim().min(20, 'Tell us a bit more (20+ chars)').max(600, 'Keep it under 600 chars'),
+  email: z
+    .union([emailSchema, z.literal('')])
+    .optional()
+    .nullable()
+    .transform((v) => v || null),
+  source: z.string().trim().max(40).optional().nullable().transform((v) => v || 'landing'),
+}).strict();
+
+/** Superadmin moderation — flip status, capture approver. */
+export const moderateFeedbackSchema = z.object({
+  status: z.enum(['approved', 'rejected', 'pending']),
+}).strict();
+
+// ==================== LEARN & GROW (F20) ====================
+
+export const createLearnFolderSchema = z.object({
+  name: z.string().trim().min(1, 'Folder name is required').max(100),
+}).strict();
+
+export const updateLearnFolderSchema = createLearnFolderSchema.partial().strip();
+
+export const createLearnFileSchema = z.object({
+  name: z.string().trim().min(1, 'File name is required').max(200),
+  url: z.string().trim().url('Must be a valid URL'),
+  kind: z.enum(['pdf', 'video', 'image', 'doc', 'link']).default('link'),
+  notes: optionalString,
+}).strict();
+
+export const updateLearnFileSchema = createLearnFileSchema.partial().strip();
+
+// ==================== REFERENCE PROJECTS (F21) ====================
+
+export const createReferenceProjectSchema = z.object({
+  projectName: z.string().trim().min(2, 'Project name is required'),
+  location: optionalString,
+  typology: optionalString,
+  sector: optionalString,
+  price: optionalString,
+  size: optionalString,
+  propertyType: optionalString,
+  constructionStatus: optionalString,
+  // Loose URL validation — accepts any well-formed URL or blank.
+  pdfUrl: z
+    .union([z.string().trim().url(), z.literal('')])
+    .optional()
+    .nullable()
+    .transform((v) => v || null),
+  remarks: optionalString,
+}).strict();
+
+export const updateReferenceProjectSchema = createReferenceProjectSchema.partial().strip();
+
+// ==================== PER-MEMBER PERMISSIONS (F24) ====================
+
+/**
+ * Update payload for User.permissions. Keys are validated against the
+ * canonical PERMISSION_KEYS list at the call site; here we only check the
+ * shape (string → boolean map). Empty object clears all overrides.
+ */
+export const updateUserPermissionsSchema = z.object({
+  permissions: z.record(z.string(), z.boolean()),
+}).strict();
+
+// ==================== PROJECTS (F17) ====================
+
+export const createProjectSchema = z.object({
+  name: z.string().trim().min(2, 'Project name is required'),
+  propertyType: z.enum(['Commercial', 'Residential']),
+  constructionStatus: z.enum(['ReadyToMove', 'UnderConstruction']),
+  city: optionalString,
+  location: optionalString,
+  sector: optionalString,
+}).strict();
+
+export const updateProjectSchema = createProjectSchema.partial().strip();
+
+export const createTowerSchema = z.object({
+  name: z.string().trim().min(1, 'Tower name is required'),
+}).strict();
+
+export const updateTowerSchema = createTowerSchema.partial().strip();
+
+export const createUnitSchema = z.object({
+  floor: z.coerce.number().int().min(0).max(200),
+  unitNo: z.string().trim().min(1, 'Unit number is required'),
+  ownerName: optionalString,
+  ownerEmail: z.union([emailSchema, z.literal('')]).optional().nullable().transform((v) => v || null),
+  ownerPhones: z.array(z.string().trim().min(3)).optional().default([]),
+  typology: optionalString,
+  size: optionalString,
+  status: z.string().trim().default('Vacant'),
+  remarks: optionalString,
+  assignedTo: z.string().regex(/^[0-9a-fA-F]{24}$/).optional().nullable(),
+}).strict();
+
+export const updateUnitSchema = createUnitSchema.partial().strip();
+
+// ==================== BROKER REQUIREMENTS (F18) ====================
+
+export const createBrokerRequirementSchema = z.object({
+  brokerName: z.string().trim().min(2, 'Broker name is required'),
+  brokerCompany: optionalString,
+  contact: z.string().trim().min(1, 'Contact is required'),
+  email: z
+    .union([emailSchema, z.literal('')])
+    .optional()
+    .nullable()
+    .transform((v) => v || null),
+  status: z.enum(['Hot', 'Ok', 'Visit']).default('Ok'),
+  requirement: z.string().trim().min(2, 'Requirement is required'),
+  source: optionalString,
+  followUpDate: optionalDate,
+  remark: optionalString,
+}).strict();
+
+export const updateBrokerRequirementSchema = createBrokerRequirementSchema.partial().strip();
+
+// ==================== LEAD TRANSFER ====================
+
+/**
+ * Transfer a lead to another teammate. Server enforces:
+ *   - target user is in the same company
+ *   - target user is active and role 'user' or 'admin'
+ *   - reason is optional but recorded in the audit log
+ */
+export const transferLeadSchema = z.object({
+  toUserId: objectIdSchema,
+  reason: z.string().trim().max(500).optional().nullable(),
+}).strict();
+
+// ==================== DAILY PLAN ====================
+
+/**
+ * One half (morning OR evening) of a daily plan. Both halves share the same
+ * shape, so we keep it as one schema and let the route decide which side to
+ * upsert. All fields optional — partial saves are explicitly supported so
+ * users can fill morning at start of day and evening at EOD.
+ */
+const dailyPlanHalfSchema = z.object({
+  onlinePortal: z.boolean().optional(),
+  whatsappPost: z.boolean().optional(),
+  emailsWorking: z.number().int().min(0).max(999).optional(),
+  buyersWorking: z.number().int().min(0).max(999).optional(),
+  sellersWorking: z.number().int().min(0).max(999).optional(),
+  meetingsVisits: z.number().int().min(0).max(999).optional(),
+  note: z.string().trim().max(2000).optional().nullable(),
+}).strict();
+
+export const upsertDailyPlanSchema = z.object({
+  // 'YYYY-MM-DD' in the company's local TZ. Defaults to today on the server
+  // when omitted to avoid TZ drift between client and server.
+  dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  morning: dailyPlanHalfSchema.optional(),
+  evening: dailyPlanHalfSchema.optional(),
+}).strict().refine(
+  (d) => d.morning !== undefined || d.evening !== undefined,
+  { message: 'Provide morning or evening' }
 );
 
 // ==================== TYPES ====================

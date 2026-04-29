@@ -51,7 +51,7 @@ export default function PrivacyPage() {
             account.
           </li>
           <li>
-            <strong>Operational data</strong> — clients, properties, pipeline stages,
+            <strong>Operational data</strong> — clients, Inventory, pipeline stages,
             commissions, and any notes you enter into the CRM. Stored on your
             behalf; never sold or shared.
           </li>

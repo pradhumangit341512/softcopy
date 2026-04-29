@@ -12,6 +12,8 @@ import {
   ClientStatus,
   Client,
 } from '@/lib/types';
+import { LEAD_STATUSES, LEAD_SOURCES } from '@/lib/constants';
+import { useFeature } from '@/hooks/useFeature';
 
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
@@ -53,6 +55,26 @@ export function ClientForm({
   const [assignedTo, setAssignedTo] = useState(
     (initialData as Record<string, unknown>)?.createdBy as string ?? ''
   );
+
+  // F6 — extended status taxonomy (Hot / NotConnected / Serious / etc.).
+  // When the company doesn't have the feature, fall back to the legacy
+  // 4-value ClientStatus enum so behaviour is unchanged.
+  const useExtendedStatuses = useFeature('feature.extended_lead_statuses');
+  const statusValues: ReadonlyArray<string> = useExtendedStatuses
+    ? LEAD_STATUSES
+    : Object.values(ClientStatus);
+  // Always preserve the current value as a selectable option even if it's
+  // not in the active list — protects legacy rows from silently switching
+  // to whatever happens to be the first option.
+  const initialStatus = initialData?.status ?? 'New';
+  const statusOptions = statusValues.includes(initialStatus)
+    ? statusValues
+    : [initialStatus, ...statusValues];
+
+  // F8 — preset source dropdown via <datalist>. Users can still type a
+  // custom value (long-tail sources stay supported) but get autocomplete
+  // for the canonical list.
+  const useSourcePresets = useFeature('feature.source_presets');
 
   // Pick only the fields the form uses — prevents extra API fields
   // (id, companyId, createdAt, etc.) from leaking into form state
@@ -120,7 +142,7 @@ export function ClientForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <Input
-            label="Client Name *"
+            label="Lead Name *"
             placeholder="Full name"
             {...register('clientName')}
             error={errors.clientName?.message}
@@ -182,7 +204,7 @@ export function ClientForm({
         <div>
           <label className={labelStyle}>Status *</label>
           <select {...register('status')} className={selectStyle}>
-            {Object.values(ClientStatus).map((v) => (
+            {statusOptions.map((v) => (
               <option key={v} value={v}>{v}</option>
             ))}
           </select>
@@ -283,10 +305,18 @@ export function ClientForm({
       {/* ── Source & Notes ── */}
       <Input
         label="Source"
-        placeholder="e.g. Website, Referral"
+        placeholder={useSourcePresets ? 'Pick a source or type a custom one' : 'e.g. Website, Referral'}
+        list={useSourcePresets ? 'lead-source-options' : undefined}
         {...register('source')}
         error={errors.source?.message}
       />
+      {useSourcePresets && (
+        <datalist id="lead-source-options">
+          {LEAD_SOURCES.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+      )}
 
       <Input
         label="Notes"

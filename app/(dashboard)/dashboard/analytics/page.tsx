@@ -195,7 +195,7 @@ export default function AnalyticsPage() {
 
   const summaryCards = [
     {
-      title: 'Total Clients',
+      title: 'Total Leads',
       value: data.summary.totalClients.toLocaleString(),
       icon: Users,
       color: '#3b82f6',

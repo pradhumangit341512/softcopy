@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Copy, KeyRound, Pause, Save } from 'lucide-react';
+import { Copy, KeyRound, Pause, Save, ShieldCheck } from 'lucide-react';
 
 interface UserRow {
   id: string; name: string; email: string; phone: string; role: string;
@@ -128,7 +128,14 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
               Onboarded {new Date(company.createdAt).toLocaleDateString()} · Plan: <span className="capitalize">{company.plan}</span> · Status: <span className="capitalize">{company.status}</span>
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Link
+              href={`/superadmin/companies/${id}/features`}
+              className="flex items-center gap-2 px-3 py-2 border border-violet-300 text-violet-700 bg-violet-50 rounded text-sm hover:bg-violet-100"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Manage features
+            </Link>
             <button onClick={resetPassword} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50">
               <KeyRound className="w-4 h-4" />
               Reset admin password
@@ -167,8 +174,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Stat label="Seats used" value={`${stats.seatsUsed} / ${stats.seatsLimit}`} />
-        <Stat label="Active clients" value={stats.activeClients.toString()} />
-        <Stat label="Active properties" value={stats.activeProperties.toString()} />
+        <Stat label="Active leads" value={stats.activeClients.toString()} />
+        <Stat label="Active inventory" value={stats.activeProperties.toString()} />
         <Stat label="Commission booked" value={`₹${stats.totalCommissionAmount.toLocaleString('en-IN')}`} />
       </div>
 

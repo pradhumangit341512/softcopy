@@ -22,8 +22,15 @@ model Company {
   // Hard cutoff used by middleware. Authoritative source of truth for whether
   // a tenant's logins still work. Updated when superadmin records a payment.
   subscriptionUntil  DateTime?
-  // Internal plan tier — descriptive only, no automated logic ties to it.
+  // Tier that drives feature entitlements via PLAN_FEATURES in lib/plans.ts.
+  // Resolution order at runtime: subscription-active → plan-default → featureFlags override.
   plan               String          @default("standard")
+  // Per-company feature overrides on top of plan defaults. Shape:
+  //   { "feature.daily_plan": true,  // grant beyond plan
+  //     "feature.export_leads": false // revoke despite plan
+  //   }
+  // Resolved by lib/entitlements.ts hasFeature().
+  featureFlags       Json?
   status             String          @default("active")
   // Max number of `role:user` team members the broker admin may create.
   // Enforced at /api/users POST.
@@ -71,6 +78,11 @@ model User {
   // Bumping this invalidates all previously-issued tokens for this user.
   // Set at login-issue-time (as `tv` JWT claim) so revocation is instant.
   tokenVersion Int          @default(0)
+  // F24 — per-user permission overrides on top of the role default.
+  // Shape: { "clients.read": true, "commissions.delete": false, ... }
+  // Resolution: role baseline -> per-user grant (true) -> per-user revoke (false).
+  // Gated by feature.granular_permissions (Enterprise).
+  permissions  Json?
   deletedAt    DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -166,6 +178,15 @@ model Client {
   notes             String?
   companyId         String       @db.ObjectId
   createdBy         String       @db.ObjectId
+  // Current owner of the lead. Defaults to createdBy on insert; flipped by
+  // the transfer endpoint when a teammate hands the lead over. Used by
+  // list endpoints when filtering "leads owned by user X" — `createdBy`
+  // stays put as an audit trail of who first captured the lead.
+  ownedBy           String?      @db.ObjectId
+  // Audit trail of the LAST transfer (older transfers live in AuditLog).
+  // Null = lead has never been transferred.
+  transferredFrom   String?      @db.ObjectId
+  transferredAt     DateTime?
   deletedAt         DateTime?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
@@ -178,6 +199,7 @@ model Client {
   // Hot paths: dashboard listing, team-scoped filters, date-range reports.
   // Leftmost-prefix rules cover single-field companyId / status queries too.
   @@index([companyId, createdBy, status, createdAt])
+  @@index([companyId, ownedBy, status, createdAt])
   @@index([companyId, status, createdAt])
   @@index([companyId, visitingDate])
   // Soft-delete-aware composite — every list query filters deletedAt: null
@@ -424,9 +446,34 @@ model Property {
   description    String?
   status         String   @default("Available")
 
+  // F10 — structured project identity. All optional so existing rows
+  // remain valid. Indexed by projectName for project-grouped reports.
+  projectName    String?
+  sectorNo       String?
+  unitNo         String?
+  towerNo        String?
+  typology       String?
+
+  // F11 — India-specific deal fields used during seller capture.
+  // demand    : owner's asked price (negotiation starting point — usually
+  //             higher than the broker's listed sellingPrice / askingRent).
+  // paymentStatus: 'Pending' | 'Partial' | 'Completed' — buyer-side payment.
+  // caseType  : 'Registry' (fresh registration) | 'Transfer' (resale via
+  //             society NOC) | 'NewLaunch' (under-construction direct).
+  // loanStatus: 'NotApplied' | 'Applied' | 'Sanctioned' | 'Disbursed'.
+  demand         Float?
+  paymentStatus  String?
+  caseType       String?
+  loanStatus     String?
+
   // Owner details
   ownerName      String
+  // F12 — kept alongside ownerPhones for backward compatibility with code
+  // paths that still read a single value (search, exports, legacy reports).
+  // New writes always set both: ownerPhone = ownerPhones[0]. After all
+  // call-sites migrate to ownerPhones, this field can be dropped.
   ownerPhone     String
+  ownerPhones    String[]   @default([])
   ownerEmail     String?
 
   companyId      String   @db.ObjectId
@@ -443,6 +490,10 @@ model Property {
   @@index([companyId, status, createdAt])
   @@index([companyId, createdBy, status, createdAt])
   @@index([companyId, deletedAt, createdAt])
+  // Project-grouped reports + Find Opportunity matcher (F19) will scan
+  // by projectName + sectorNo, so this index covers both.
+  @@index([companyId, projectName])
+  @@index([companyId, sectorNo])
 }
 
 model MonthlyBudget {
@@ -555,4 +606,198 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([resource, resourceId])
   @@map("audit_logs")
+}
+
+// F20 — Learn & Grow resource library. Folders contain files. Files are
+// URL-based for now (Vercel Blob / S3 wiring is a follow-up). Each row
+// is per-company; admins typically curate a shared set, team members
+// browse and open links.
+model LearnFolder {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId String   @db.ObjectId
+  name      String
+  createdBy String   @db.ObjectId
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  files     LearnFile[]
+  @@index([companyId, deletedAt])
+  @@map("learn_folders")
+}
+
+model LearnFile {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  folderId  String   @db.ObjectId
+  name      String
+  url       String
+  // 'pdf' | 'video' | 'image' | 'doc' | 'link' — UI hint for icon choice.
+  kind      String   @default("link")
+  notes     String?
+  createdBy String   @db.ObjectId
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  folder    LearnFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  @@index([folderId, deletedAt])
+  @@map("learn_files")
+}
+
+// Public landing-page feedback. Anyone can submit; only approved rows
+// surface as testimonials on the landing page. Approvals happen in the
+// superadmin console. Spam protection is rate-limited at the API layer.
+model Feedback {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  role        String?
+  rating      Int       @default(5)
+  message     String
+  email       String?
+  source      String?
+  // 'pending' | 'approved' | 'rejected'. Rejected stays in the table for
+  // audit + spam analysis; only 'approved' rows are public.
+  status      String    @default("pending")
+  approvedAt  DateTime?
+  approvedBy  String?   @db.ObjectId
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  @@index([status, createdAt])
+  @@index([status, rating])
+  @@map("feedback")
+}
+
+// F21 — public reference catalogue of projects (with brochure PDFs).
+// Distinct from F17 Project (which is a real working asset on this
+// company's books). Use for "shareable info" the team distributes
+// externally — a curated list a salesperson can browse and copy a
+// brochure link from.
+model ReferenceProject {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId          String   @db.ObjectId
+  projectName        String
+  location           String?
+  typology           String?
+  sector             String?
+  // Free-text price string so brokers can write "₹2.4Cr" or "₹25k/sqft"
+  // without wedging us on units. UI shows verbatim.
+  price              String?
+  size               String?
+  propertyType       String?
+  constructionStatus String?
+  pdfUrl             String?
+  remarks            String?
+  createdBy          String   @db.ObjectId
+  deletedAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  @@index([companyId, propertyType])
+  @@index([companyId, deletedAt, createdAt])
+  @@map("reference_projects")
+}
+
+// F17 — Projects Working hierarchy. Project → Tower → Unit. Each level
+// is a separate document with parent foreign keys. We keep cascades on
+// Tower → Project deletes only — Unit-level data is the most valuable
+// audit trail and we'd rather soft-delete with deletedAt than wipe.
+model Project {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId          String   @db.ObjectId
+  name               String
+  // 'Commercial' | 'Residential'
+  propertyType       String
+  // 'ReadyToMove' | 'UnderConstruction'
+  constructionStatus String
+  city               String?
+  location           String?
+  sector             String?
+  createdBy          String   @db.ObjectId
+  deletedAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  towers             Tower[]
+  @@index([companyId, propertyType, constructionStatus])
+  @@index([companyId, deletedAt, createdAt])
+  @@map("projects")
+}
+
+model Tower {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  projectId String   @db.ObjectId
+  name      String
+  units     Unit[]
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([projectId])
+  @@map("towers")
+}
+
+model Unit {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  towerId     String   @db.ObjectId
+  floor       Int
+  unitNo      String
+  ownerName   String?
+  ownerEmail  String?
+  ownerPhones String[] @default([])
+  typology    String?
+  size        String?
+  // 'Vacant' | 'SelfOccupied' | 'Rented' | 'ForSale' | 'Sold'
+  status      String   @default("Vacant")
+  remarks     String?
+  assignedTo  String?  @db.ObjectId
+  tower       Tower    @relation(fields: [towerId], references: [id], onDelete: Cascade)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([towerId])
+  @@index([status])
+  @@map("units")
+}
+
+// F18 — incoming requirements from outside brokers / channel partners.
+// Distinct from Client (a buyer/seller lead) and from User (an internal
+// teammate). Brokers reach out asking "I have a 3BHK buyer in Sector 24 —
+// got anything?" and we record that demand here so the team can match it
+// against inventory or hand the broker over to the right salesperson.
+model BrokerRequirement {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId     String   @db.ObjectId
+  brokerName    String
+  brokerCompany String?
+  contact       String   // primary phone — kept loose-typed; brokers paste anything
+  email         String?
+  // 'Hot' | 'Ok' | 'Visit' — see BROKER_REQ_STATUSES in lib/constants.ts.
+  status        String   @default("Ok")
+  requirement   String   // free-text description of what they're looking for
+  source        String?
+  followUpDate  DateTime?
+  remark        String?
+  createdBy     String   @db.ObjectId
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([companyId, status, createdAt])
+  @@index([companyId, deletedAt, createdAt])
+  @@index([companyId, createdBy])
+  @@map("broker_requirements")
+}
+
+// One row per (user, dateKey) capturing morning commitment + evening achievements.
+// dateKey is "YYYY-MM-DD" in the company's timezone, used for idempotent upsert.
+// morning/evening are JSON blobs so we can evolve the form fields without migrations.
+model DailyPlan {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  companyId  String   @db.ObjectId
+  dateKey    String   // 'YYYY-MM-DD'
+  date       DateTime // start-of-day for sorting/range queries
+  morning    Json?    // { onlinePortal, whatsappPost, emailsWorking, buyersWorking, sellersWorking, meetingsVisits, note }
+  evening    Json?    // same shape
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@unique([userId, dateKey])
+  @@index([companyId, date])
+  @@index([userId, date])
+  @@map("daily_plans")
 }

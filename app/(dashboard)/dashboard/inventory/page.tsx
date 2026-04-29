@@ -3,17 +3,34 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Building2, SlidersHorizontal, X, Download } from 'lucide-react';
+import { Plus, Building2, SlidersHorizontal, X, Download, Upload } from 'lucide-react';
 
 import { Loader } from '@/components/common/Loader';
 import { PropertyTable } from '@/components/properties/PropertyTable';
 import { PropertyFilters, type PropertyFilterValues } from '@/components/properties/PropertyFilters';
 import { useAuth } from '@/hooks/useAuth';
+import { useFeature } from '@/hooks/useFeature';
 import { Alert } from '@/components/common/Alert';
 import { Pagination } from '@/components/common/Pagination';
 import { Button } from '@/components/common/Button';
+import { TabStrip } from '@/components/common/TabStrip';
+import { PropertyBulkImportModal } from '@/components/properties/PropertyBulkImportModal';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 
 import type { Property } from '@/lib/types';
+
+/**
+ * Tab id → API filter params applied when the tab is active. Mirrors the
+ * leads-page TAB_FILTERS exactly so the UX feels uniform across the two
+ * list pages. Tab takes precedence over the corresponding granular filter
+ * (filter is silently ignored on a tab that pins the same field) so the
+ * URL → results mapping is unambiguous.
+ */
+const TAB_FILTERS: Record<string, Record<string, string>> = {
+  selling: { listingType: 'sale' },
+  rental:  { listingType: 'rent' },
+  dead:    { status: 'Sold' },
+};
 
 const EMPTY_FILTERS: PropertyFilterValues = {
   status: '',
@@ -43,6 +60,10 @@ export default function PropertiesPage() {
   }, [authLoading, user, router]);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const canShowInventoryTabs = useFeature('feature.inventory_tabs');
+  const canBulkImportInventory = useFeature('feature.bulk_inventory');
+  const confirm = useConfirm();
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +88,10 @@ export default function PropertiesPage() {
     search: searchParams.get('search') || '',
   };
   const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
+  // F5 — tab is a coarse preset that pins one or two fields. The granular
+  // filter for the same field is silently ignored on the matching tab so
+  // the two can't conflict. `''` means "All Inventory".
+  const tabFromUrl = searchParams.get('tab') || '';
 
   const [filters, setFilters] = useState<PropertyFilterValues>(filtersFromUrl);
 
@@ -91,7 +116,11 @@ export default function PropertiesPage() {
   }, [isAdmin, user?.companyId]);
 
   const handleFilterChange = (newFilters: PropertyFilterValues) => {
+    // Preserve the active `tab` so applying a filter while on Selling /
+    // Rental / Dead Inventory stays on that tab — only an explicit tab
+    // click changes tabs. Same convention as the leads page.
     const params = new URLSearchParams();
+    if (tabFromUrl) params.set('tab', tabFromUrl);
     for (const key of FILTER_KEYS) {
       if (newFilters[key]) params.set(key, newFilters[key]);
     }
@@ -114,9 +143,17 @@ export default function PropertiesPage() {
     setLoading(true);
     setError(null);
     try {
+      // Tab pins take precedence over the granular filter for the same
+      // field so the UI and the data stay in sync. We rebuild the params
+      // by starting from the user's filter choices and then overwriting
+      // the tab-pinned fields.
+      const tabFilter = TAB_FILTERS[tabFromUrl] ?? {};
       const params = new URLSearchParams();
       for (const key of FILTER_KEYS) {
         if (filtersFromUrl[key]) params.set(key, filtersFromUrl[key]);
+      }
+      for (const [k, v] of Object.entries(tabFilter)) {
+        params.set(k, v);
       }
       params.set('page', String(pageFromUrl));
 
@@ -143,7 +180,13 @@ export default function PropertiesPage() {
   const handleEdit = (id: string) => router.push(`/dashboard/inventory/${id}`);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this property? This action cannot be undone.')) return;
+    const ok = await confirm({
+      title: 'Delete this inventory item?',
+      message: 'This soft-deletes the listing — it will no longer appear in inventory or matches. Recoverable from the database, but not from the app UI.',
+      tone: 'danger',
+      confirmText: 'Delete inventory',
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/properties/${id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) {
@@ -192,10 +235,10 @@ export default function PropertiesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold font-display text-gray-900 tracking-tight">
-            Properties
+            Inventory
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-            Manage all property listings with owner details
+            Manage all inventory listings with owner details
             {!loading && totalCount > 0 && (
               <span className="ml-1.5 text-gray-400">— {totalCount} total</span>
             )}
@@ -219,7 +262,23 @@ export default function PropertiesPage() {
             )}
           </button>
 
+          {/* F13 — Bulk import button. Hidden when feature.bulk_inventory
+              is off; the API also rejects so direct URL hits 403. */}
+          {canBulkImportInventory && (
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5
+                text-sm font-semibold text-gray-700 bg-white border border-gray-200
+                hover:bg-gray-50 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+            >
+              <Upload size={15} />
+              <span className="hidden sm:inline">Import</span>
+            </button>
+          )}
+
           <button
+            type="button"
             onClick={handleExport}
             disabled={exporting || loading}
             className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5
@@ -236,7 +295,7 @@ export default function PropertiesPage() {
               text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
               rounded-xl shadow-sm transition-colors whitespace-nowrap">
               <Plus size={15} />
-              <span className="hidden sm:inline">Add Property</span>
+              <span className="hidden sm:inline">Add Inventory</span>
               <span className="sm:hidden">Add</span>
             </button>
           </Link>
@@ -279,6 +338,36 @@ export default function PropertiesPage() {
         </div>
       </div>
 
+      {/* ══ TAB STRIP ══
+          Coarse listing-type / lifecycle presets. Tabs pin one or two
+          fields and the matching granular filter is silently ignored on
+          that tab. Hidden when feature.inventory_tabs is off. */}
+      <TabStrip
+        ariaLabel="Inventory view"
+        activeTab={tabFromUrl}
+        tabs={[
+          { id: '',        label: 'All Inventory' },
+          { id: 'selling', label: 'All Selling Inventory', visible: canShowInventoryTabs },
+          { id: 'rental',  label: 'All Rental Inventory',  visible: canShowInventoryTabs },
+          { id: 'dead',    label: 'Dead Inventory',        visible: canShowInventoryTabs },
+        ]}
+        onSelect={(nextTab) => {
+          const params = new URLSearchParams(searchParams.toString());
+          if (nextTab) params.set('tab', nextTab);
+          else params.delete('tab');
+          // Reset paging on tab change.
+          params.set('page', '1');
+          // Tab and granular filter are mutually exclusive when they pin
+          // the same field; clear those granular params on tab switch so
+          // the new tab's slice isn't muddled by stale chips.
+          params.delete('listingType');
+          params.delete('priceMin');
+          params.delete('priceMax');
+          if (nextTab === 'dead') params.delete('status');
+          router.push(`/dashboard/inventory?${params.toString()}`);
+        }}
+      />
+
       {/* TABLE CARD */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
@@ -289,7 +378,7 @@ export default function PropertiesPage() {
               <Building2 size={14} className="text-blue-500" />
             </div>
             <h3 className="text-sm font-semibold text-gray-700">
-              Properties
+              Inventory
               {!loading && (
                 <span className="ml-2 text-xs font-medium text-gray-400 bg-gray-100
                   px-2 py-0.5 rounded-full">
@@ -321,7 +410,7 @@ export default function PropertiesPage() {
 
         {loading ? (
           <div className="py-12 sm:py-16">
-            <Loader message="Loading properties..." />
+            <Loader message="Loading inventory..." />
           </div>
         ) : properties.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-3 px-4">
@@ -331,10 +420,19 @@ export default function PropertiesPage() {
             </div>
             <div className="text-center">
               <p className="text-gray-500 text-sm font-medium">
-                {filtersFromUrl.search ? `No results for "${filtersFromUrl.search}"` : 'No properties yet'}
+                {filtersFromUrl.search
+                  ? `No results for "${filtersFromUrl.search}"`
+                  : tabFromUrl === 'selling'
+                  ? 'No selling inventory'
+                  : tabFromUrl === 'rental'
+                  ? 'No rental inventory'
+                  : tabFromUrl === 'dead'
+                  ? 'No sold inventory'
+                  : 'No inventory yet'}
               </p>
-              {activeFilterCount > 0 && (
+              {(activeFilterCount > 0 || tabFromUrl) && (
                 <button
+                  type="button"
                   onClick={() => router.push('/dashboard/inventory')}
                   className="mt-1 text-xs text-blue-600 hover:underline"
                 >
@@ -342,10 +440,10 @@ export default function PropertiesPage() {
                 </button>
               )}
             </div>
-            {!filtersFromUrl.search && activeFilterCount === 0 && (
+            {!filtersFromUrl.search && activeFilterCount === 0 && !tabFromUrl && (
               <Link href="/dashboard/inventory/add">
-                <button className="text-xs text-blue-600 hover:underline font-semibold">
-                  + Add your first property
+                <button type="button" className="text-xs text-blue-600 hover:underline font-semibold">
+                  + Add your first inventory item
                 </button>
               </Link>
             )}
@@ -373,6 +471,18 @@ export default function PropertiesPage() {
           </>
         )}
       </div>
+
+      {/* F13 — Bulk import modal. Mounted only when the feature is on so
+          the heavy exceljs import isn't pulled into the bundle for plans
+          that don't have access. */}
+      {canBulkImportInventory && (
+        <PropertyBulkImportModal
+          open={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImported={() => fetchProperties()}
+        />
+      )}
     </div>
   );
 }
+

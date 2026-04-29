@@ -1,9 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { useForm, SubmitHandler, useWatch } from 'react-hook-form';
 import { PropertyType, PropertyStatus, BHK_TYPE_OPTIONS, PROPERTY_TYPES_WITH_BHK } from '@/lib/types';
+import {
+  PROPERTY_STATUSES,
+  PAYMENT_STATUSES,
+  CASE_TYPES,
+  LOAN_STATUSES,
+} from '@/lib/constants';
+import { useFeature } from '@/hooks/useFeature';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
+import { MultiPhoneInput } from './MultiPhoneInput';
 
 export interface PropertyFormValues {
   propertyName: string;
@@ -16,8 +25,22 @@ export interface PropertyFormValues {
   area?: string;
   description?: string;
   status: string;
+  // F10 — project identity (free-text strings to keep the form lightweight)
+  projectName?: string;
+  sectorNo?: string;
+  unitNo?: string;
+  towerNo?: string;
+  typology?: string;
+  // F11 — deal flow
+  demand?: string;
+  paymentStatus?: string;
+  caseType?: string;
+  loanStatus?: string;
   ownerName: string;
   ownerPhone: string;
+  /** F12 — extra phone numbers beyond the primary. Server merges with
+   * ownerPhone and dedupes; `ownerPhones[0]` always equals `ownerPhone`. */
+  ownerPhones?: string[];
   ownerEmail?: string;
 }
 
@@ -51,21 +74,74 @@ export function PropertyForm({
       area: initialData?.area || '',
       description: initialData?.description || '',
       status: initialData?.status || 'Available',
+      // F10 defaults
+      projectName: initialData?.projectName || '',
+      sectorNo:    initialData?.sectorNo || '',
+      unitNo:      initialData?.unitNo || '',
+      towerNo:     initialData?.towerNo || '',
+      typology:    initialData?.typology || '',
+      // F11 defaults
+      demand:        initialData?.demand?.toString() || '',
+      paymentStatus: initialData?.paymentStatus || '',
+      caseType:      initialData?.caseType || '',
+      loanStatus:    initialData?.loanStatus || '',
       ownerName: initialData?.ownerName || '',
       ownerPhone: initialData?.ownerPhone || '',
       ownerEmail: initialData?.ownerEmail || '',
     },
   });
 
+  // F10 / F11 feature gates — when off, the form drops the matching
+  // sections so an existing-plan customer's UI is unchanged.
+  const showProjectFields = useFeature('feature.inventory_project_fields');
+  const showDealFields = useFeature('feature.inventory_deal_fields');
+  const showMultiPhone = useFeature('feature.multi_phone');
+
+  // F12 — Local state for owner phones beyond the primary. The primary
+  // (required) phone stays bound to react-hook-form via register('ownerPhone').
+  // Extras are merged into the submitted payload below so the server gets
+  // the full list as `ownerPhones`.
+  const [extraPhones, setExtraPhones] = useState<string[]>([]);
+  // Initial extras from existing data — slice(1) drops the primary which
+  // is already wired to the react-hook-form input.
+  const initialExtras = (initialData?.ownerPhones ?? []).slice(1);
+
   // Watch propertyType to conditionally show BHK selector
   const selectedPropertyType = useWatch({ control, name: 'propertyType' });
   const showBHK = PROPERTY_TYPES_WITH_BHK.includes(selectedPropertyType);
+
+  // F7 — extended property-status taxonomy. When the company doesn't have
+  // the feature, fall back to the legacy 4-value PropertyStatus enum so
+  // existing behaviour is preserved.
+  const useExtendedPropertyStatuses = useFeature('feature.extended_property_statuses');
+  const statusValues: ReadonlyArray<string> = useExtendedPropertyStatuses
+    ? PROPERTY_STATUSES
+    : Object.values(PropertyStatus);
+  // Always preserve the current value as a selectable option even if it's
+  // not in the active list — protects legacy rows from silent coercion.
+  const initialStatus = initialData?.status ?? 'Available';
+  const statusOptions = statusValues.includes(initialStatus)
+    ? statusValues
+    : [initialStatus, ...statusValues];
 
   const submitHandler: SubmitHandler<PropertyFormValues> = async (data) => {
     // Clear bhkType and vacateDate if property type doesn't support it
     if (!PROPERTY_TYPES_WITH_BHK.includes(data.propertyType)) {
       data.bhkType = undefined;
       data.vacateDate = undefined;
+    }
+    // F12 — merge primary phone with the extras into a single deduped list
+    // before posting. Server also dedupes; doing it here keeps the network
+    // payload minimal and the UI's expectations honest.
+    if (showMultiPhone) {
+      const merged = Array.from(
+        new Set(
+          [data.ownerPhone, ...extraPhones]
+            .map((p) => (p ?? '').trim())
+            .filter(Boolean)
+        )
+      );
+      data.ownerPhones = merged;
     }
     await onSubmit(data);
   };
@@ -196,7 +272,7 @@ export function PropertyForm({
         <div>
           <label className={labelStyle}>Status</label>
           <select {...register('status')} className={selectStyle}>
-            {Object.values(PropertyStatus).map((v) => (
+            {statusOptions.map((v) => (
               <option key={v} value={v}>{v}</option>
             ))}
           </select>
@@ -213,6 +289,92 @@ export function PropertyForm({
         />
       </div>
 
+      {/* F10 — Project / Sector / Unit / Tower / Typology.
+          Section disappears entirely when feature.inventory_project_fields
+          is off so customers without it see no UI change. */}
+      {showProjectFields && (
+        <>
+          <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide border-b pb-2 pt-2">
+            Project Identity
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Project Name"
+              placeholder="e.g. DLF Cyber City"
+              {...register('projectName')}
+            />
+            <Input
+              label="Sector"
+              placeholder="e.g. Sector 24"
+              {...register('sectorNo')}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input
+              label="Tower"
+              placeholder="e.g. Tower B"
+              {...register('towerNo')}
+            />
+            <Input
+              label="Unit No"
+              placeholder="e.g. B-1204"
+              {...register('unitNo')}
+            />
+            <Input
+              label="Typology"
+              placeholder="e.g. 3BHK + Servant"
+              {...register('typology')}
+            />
+          </div>
+        </>
+      )}
+
+      {/* F11 — Deal flow: demand, payment, registry/transfer, loan. */}
+      {showDealFields && (
+        <>
+          <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide border-b pb-2 pt-2">
+            Deal Details
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Owner Demand (₹)"
+              type="number"
+              placeholder="e.g. 24000000"
+              {...register('demand')}
+            />
+            <div>
+              <label className={labelStyle}>Payment Status</label>
+              <select {...register('paymentStatus')} className={selectStyle}>
+                <option value="">—</option>
+                {PAYMENT_STATUSES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelStyle}>Case Type</label>
+              <select {...register('caseType')} className={selectStyle}>
+                <option value="">—</option>
+                {CASE_TYPES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelStyle}>Loan Status</label>
+              <select {...register('loanStatus')} className={selectStyle}>
+                <option value="">—</option>
+                {LOAN_STATUSES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Section: Owner Details */}
       <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide border-b pb-2 pt-2">
         Owner Details
@@ -228,13 +390,23 @@ export function PropertyForm({
           />
         </div>
         <div>
-          <Input
-            label="Owner Phone *"
-            placeholder="+91 XXXXX XXXXX"
-            type="tel"
-            {...register('ownerPhone', { required: 'Owner phone is required' })}
-            error={errors.ownerPhone?.message}
-          />
+          {showMultiPhone ? (
+            <MultiPhoneInput
+              primaryRegister={register('ownerPhone', { required: 'Owner phone is required' })}
+              primaryError={errors.ownerPhone?.message}
+              extras={extraPhones}
+              onChange={setExtraPhones}
+              initialExtras={initialExtras}
+            />
+          ) : (
+            <Input
+              label="Owner Phone *"
+              placeholder="+91 XXXXX XXXXX"
+              type="tel"
+              {...register('ownerPhone', { required: 'Owner phone is required' })}
+              error={errors.ownerPhone?.message}
+            />
+          )}
         </div>
       </div>
 

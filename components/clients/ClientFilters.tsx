@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Search, X, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { LEAD_STATUSES, LEAD_SOURCES, LEAD_STATUS_TONE } from '@/lib/constants';
+import { useFeature } from '@/hooks/useFeature';
 
 // ── Types ──
 export interface ClientFilterValues {
@@ -22,8 +24,11 @@ interface ClientFiltersProps {
 }
 
 // ── Constants ──
-const STATUSES = ['New', 'Interested', 'Contacted', 'Visited', 'DealDone', 'Rejected'];
-const SOURCES = ['WhatsApp', 'Walk-in', 'Referral', 'Website', 'Direct', 'Social Media'];
+// Legacy chip lists shown when the company doesn't have the F6 / F8 feature
+// flags. These match what the page used to ship before plan-based gating
+// landed — touching them would change behaviour for un-upgraded customers.
+const LEGACY_STATUSES = ['New', 'Interested', 'Contacted', 'Visited', 'DealDone', 'Rejected'];
+const LEGACY_SOURCES = ['WhatsApp', 'Walk-in', 'Referral', 'Website', 'Direct', 'Social Media'];
 const FOLLOWUP_OPTIONS = [
   { value: '', label: 'All' },
   { value: 'overdue', label: 'Overdue' },
@@ -31,7 +36,20 @@ const FOLLOWUP_OPTIONS = [
   { value: 'none', label: 'No Follow-up' },
 ];
 
-const STATUS_COLORS: Record<string, string> = {
+// Tone → Tailwind chip colour. Keeps active/selected styling consistent
+// with the LEAD_STATUS_TONE map (the source of truth in lib/constants.ts).
+const TONE_TO_CHIP: Record<string, string> = {
+  red:     'bg-red-100 text-red-700 border-red-200',
+  amber:   'bg-amber-100 text-amber-700 border-amber-200',
+  blue:    'bg-blue-100 text-blue-700 border-blue-200',
+  emerald: 'bg-green-100 text-green-700 border-green-200',
+  gray:    'bg-gray-100 text-gray-700 border-gray-200',
+  slate:   'bg-slate-100 text-slate-700 border-slate-200',
+};
+
+// Legacy chip palette — kept verbatim so customers without F6 see the
+// exact same colours they're used to.
+const LEGACY_STATUS_COLORS: Record<string, string> = {
   New: 'bg-blue-100 text-blue-700 border-blue-200',
   Interested: 'bg-amber-100 text-amber-700 border-amber-200',
   Contacted: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -42,6 +60,18 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function ClientFilters({ filters, onFilterChange, counts = {} }: ClientFiltersProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Feature-aware chip lists. When extended_lead_statuses is on the chip
+  // strip uses the canonical 8-status taxonomy; otherwise the legacy 6.
+  // Same shape for sources via F8.
+  const useExtendedStatuses = useFeature('feature.extended_lead_statuses');
+  const useSourcePresets = useFeature('feature.source_presets');
+  const STATUSES: ReadonlyArray<string> = useExtendedStatuses
+    ? LEAD_STATUSES
+    : LEGACY_STATUSES;
+  const SOURCES: ReadonlyArray<string> = useSourcePresets
+    ? LEAD_SOURCES
+    : LEGACY_SOURCES;
 
   // Parse multi-select values (comma-separated in URL)
   const selectedStatuses = filters.status ? filters.status.split(',') : [];
@@ -137,7 +167,13 @@ export function ClientFilters({ filters, onFilterChange, counts = {} }: ClientFi
         {STATUSES.map((s) => {
           const isActive = selectedStatuses.includes(s);
           const count = counts[s] ?? 0;
-          const colorClass = isActive ? STATUS_COLORS[s] : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400';
+          // Resolve the active-chip colour from whichever palette is in
+          // effect — extended palette goes through tone → chip lookup,
+          // legacy palette is a direct map. Inactive chips share styling.
+          const activeChipColor = useExtendedStatuses
+            ? TONE_TO_CHIP[LEAD_STATUS_TONE[s as keyof typeof LEAD_STATUS_TONE] ?? 'gray'] ?? 'bg-gray-100 text-gray-700 border-gray-200'
+            : LEGACY_STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-700 border-gray-200';
+          const colorClass = isActive ? activeChipColor : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400';
           return (
             <button
               key={s}

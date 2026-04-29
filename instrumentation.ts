@@ -8,13 +8,25 @@
  *
  * Browser/client init lives in `instrumentation-client.ts` (auto-loaded
  * by Next, no manual hookup needed).
+ *
+ * The dynamic imports are wrapped in try/catch because `.next` cache
+ * corruption — usually a webpack chunk getting evicted mid-HMR — can
+ * leave the runtime-specific bundle missing on disk while `register()`
+ * still fires. Without this guard, a missing chunk takes down every
+ * request with `ENOENT: edge-instrumentation.js`. Skipping init means
+ * we lose Sentry telemetry until the next clean boot, which is strictly
+ * better than a fully unusable dev server.
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
-    await import('./sentry.server.config');
-  }
-  if (process.env.NEXT_RUNTIME === 'edge') {
-    await import('./sentry.edge.config');
+  try {
+    if (process.env.NEXT_RUNTIME === 'nodejs') {
+      await import('./sentry.server.config');
+    } else if (process.env.NEXT_RUNTIME === 'edge') {
+      await import('./sentry.edge.config');
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[instrumentation] Sentry init skipped:', err);
   }
 }
 

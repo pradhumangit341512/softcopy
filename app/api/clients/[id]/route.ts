@@ -89,14 +89,17 @@ export async function PUT(
 
     if (body.status !== undefined) updateData.status = body.status;
 
-    // Admin can reassign the client to another team member
+    // Admin can reassign the lead to another teammate. After F2, reassign
+    // updates `ownedBy` (current owner) rather than `createdBy` (audit anchor)
+    // so capture history is preserved. Goes through the same audit trail
+    // as a transfer would.
     if (body.assignedTo && isAdminRole(payload.role) && isValidObjectId(body.assignedTo as string)) {
       const targetUser = await db.user.findFirst({
         where: { id: body.assignedTo as string, companyId: payload.companyId, deletedAt: null },
         select: { id: true },
       });
       if (targetUser) {
-        updateData.createdBy = body.assignedTo;
+        updateData.ownedBy = body.assignedTo;
       }
     }
 
@@ -109,7 +112,14 @@ export async function PUT(
       companyId: payload.companyId,
       deletedAt: null,
     };
-    if (isTeamMember(payload.role)) where.createdBy = payload.userId;
+    // Team members can only mutate leads they currently own. We OR on
+    // createdBy for legacy rows where ownedBy is still null pre-migration 008.
+    if (isTeamMember(payload.role)) {
+      where.OR = [
+        { ownedBy: payload.userId },
+        { ownedBy: null, createdBy: payload.userId },
+      ];
+    }
 
     const result = await db.client.updateMany({ where, data: updateData });
     if (result.count === 0) {
@@ -148,7 +158,13 @@ export async function DELETE(
       companyId: payload.companyId,
       deletedAt: null,
     };
-    if (isTeamMember(payload.role)) where.createdBy = payload.userId;
+    // Same ownership scope as PUT — current owner OR creator-on-legacy-rows.
+    if (isTeamMember(payload.role)) {
+      where.OR = [
+        { ownedBy: payload.userId },
+        { ownedBy: null, createdBy: payload.userId },
+      ];
+    }
 
     const result = await db.client.updateMany({
       where,

@@ -36,8 +36,24 @@ type SourceData = {
 /* ================= FORMATTERS ================= */
 
 const currencyFormatter = (value: unknown) => {
-  if (typeof value !== 'number') return '₹0';
-  return `₹${(value / 100000).toFixed(2)}L`;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '₹0';
+  return `₹${(num / 100000).toFixed(2)}L`;
+};
+
+/**
+ * Compact axis tick formatter — renders 1.2k / 1.2L / 1.2Cr so Y-axis
+ * labels stay readable at narrow chart widths. Treats NaN/non-numeric as
+ * 0 so the axis never prints the literal string "NaN".
+ */
+const inrAxisTickFormatter = (v: unknown): string => {
+  const num = Number(v);
+  if (!Number.isFinite(num)) return '₹0';
+  const abs = Math.abs(num);
+  if (abs >= 1e7) return `₹${(num / 1e7).toFixed(1)}Cr`;
+  if (abs >= 1e5) return `₹${(num / 1e5).toFixed(1)}L`;
+  if (abs >= 1e3) return `₹${(num / 1e3).toFixed(0)}k`;
+  return `₹${num}`;
 };
 
 /* ================= COMPONENT ================= */
@@ -154,48 +170,60 @@ export function RevenueGraph() {
 
       {/* REVENUE VS TARGET */}
       <ChartCard title="Revenue vs Target">
-        <ResponsiveContainer width="100%" height={320}>
-          <ComposedChart data={revenueData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip formatter={currencyFormatter} />
-            <Legend />
-            <Area dataKey="revenue" fill="#3b82f6" stroke="#1e3a8a" />
-            <Line dataKey="target" stroke="#ef4444" strokeDasharray="4 4" />
-          </ComposedChart>
-        </ResponsiveContainer>
+        {revenueData.length === 0 ? (
+          <RevenueChartEmpty />
+        ) : (
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={revenueData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis tickFormatter={inrAxisTickFormatter} width={70} />
+              <Tooltip formatter={currencyFormatter} />
+              <Legend />
+              <Area dataKey="revenue" fill="#3b82f6" stroke="#1e3a8a" />
+              <Line dataKey="target" stroke="#ef4444" strokeDasharray="4 4" />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
       </ChartCard>
 
       {/* PROFIT / EXPENSE */}
       <ChartCard title="Profit vs Expenses">
-        <ResponsiveContainer width="100%" height={320}>
-          <BarChart data={revenueData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip formatter={currencyFormatter} />
-            <Legend />
-            <Bar dataKey="profit" fill="#10b981" />
-            <Bar dataKey="expenses" fill="#f59e0b" />
-          </BarChart>
-        </ResponsiveContainer>
+        {revenueData.length === 0 ? (
+          <RevenueChartEmpty />
+        ) : (
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={revenueData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis tickFormatter={inrAxisTickFormatter} width={70} />
+              <Tooltip formatter={currencyFormatter} />
+              <Legend />
+              <Bar dataKey="profit" fill="#10b981" />
+              <Bar dataKey="expenses" fill="#f59e0b" />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </ChartCard>
 
       {/* REVENUE TREND */}
       <ChartCard title="Revenue Trend">
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={revenueData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip formatter={currencyFormatter} />
-            <Legend />
-            <Line dataKey="revenue" stroke="#3b82f6" />
-            <Line dataKey="profit" stroke="#10b981" />
-            <Line dataKey="expenses" stroke="#f59e0b" />
-          </LineChart>
-        </ResponsiveContainer>
+        {revenueData.length === 0 ? (
+          <RevenueChartEmpty />
+        ) : (
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={revenueData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis tickFormatter={inrAxisTickFormatter} width={70} />
+              <Tooltip formatter={currencyFormatter} />
+              <Legend />
+              <Line dataKey="revenue" stroke="#3b82f6" />
+              <Line dataKey="profit" stroke="#10b981" />
+              <Line dataKey="expenses" stroke="#f59e0b" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </ChartCard>
     </div>
   );
@@ -217,6 +245,19 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="font-semibold mb-4">{title}</h2>
       {children}
+    </div>
+  );
+}
+
+/** Centred placeholder shown when a revenue chart has no rows. Matches
+ * the chart's height (320px) so the page doesn't jump on data load. */
+function RevenueChartEmpty({ message = 'No revenue data for this window yet.' }: { message?: string }) {
+  return (
+    <div
+      className="flex items-center justify-center text-sm text-gray-400"
+      style={{ height: 320 }}
+    >
+      {message}
     </div>
   );
 }

@@ -146,7 +146,7 @@ function CompaniesTable({ companies }: { companies: CompanyRow[] }) {
             <th className="px-4 py-3 font-medium">Plan</th>
             <th className="px-4 py-3 font-medium">Status</th>
             <th className="px-4 py-3 font-medium">Seats</th>
-            <th className="px-4 py-3 font-medium">Clients</th>
+            <th className="px-4 py-3 font-medium">Leads</th>
             <th className="px-4 py-3 font-medium">Expires</th>
             <th className="px-4 py-3 font-medium">Fee</th>
             <th className="px-4 py-3"></th>

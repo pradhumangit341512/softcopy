@@ -6,13 +6,18 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardBody, CardHeader } from '@/components/common/Card';
 import { PropertyForm, type PropertyFormValues } from '@/components/properties/PropertyForm';
+import { AddPropertyWizard } from '@/components/properties/AddPropertyWizard';
 import { useToast } from '@/components/common/Toast';
 import { Loader } from '@/components/common/Loader';
 import { Button } from '@/components/common/Button';
+import { useFeature } from '@/hooks/useFeature';
 
 export default function AddPropertyPage() {
   const router = useRouter();
   const { addToast } = useToast();
+  // F9 — when enabled, the 3-step wizard replaces the single-page form.
+  // Both forms share the same PropertyFormValues shape so onSubmit is identical.
+  const useWizard = useFeature('feature.inventory_wizard');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (data: PropertyFormValues) => {
@@ -27,17 +32,17 @@ export default function AddPropertyPage() {
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Failed to add property');
+        throw new Error(err.error || 'Failed to add inventory');
       }
 
       addToast({
         type: 'success',
-        message: 'Property added successfully!',
+        message: 'Inventory added successfully!',
       });
       router.push('/dashboard/inventory');
       return true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to add property';
+      const msg = err instanceof Error ? err.message : 'Failed to add inventory';
       addToast({
         type: 'error',
         message: msg,
@@ -58,19 +63,21 @@ export default function AddPropertyPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Add New Property</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Add New Inventory</h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
             Fill in the property and owner details
           </p>
         </div>
       </div>
 
-      {/* Form Card */}
+      {/* Form Card — wizard or single-page form depending on feature gate */}
       <Card>
-        <CardHeader title="Property Information" />
+        <CardHeader title="Inventory Information" />
         <CardBody>
           {loading ? (
             <Loader size="md" message="Saving..." />
+          ) : useWizard ? (
+            <AddPropertyWizard onSubmit={handleSubmit} isLoading={loading} />
           ) : (
             <PropertyForm onSubmit={handleSubmit} isLoading={loading} />
           )}

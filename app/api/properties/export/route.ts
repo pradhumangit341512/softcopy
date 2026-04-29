@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
     });
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Properties");
+    const worksheet = workbook.addWorksheet("Inventory");
 
     worksheet.columns = [
       { header: "Property Name", key: "propertyName", width: 25 },

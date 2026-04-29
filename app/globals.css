@@ -44,3 +44,15 @@ body {
     border-radius: 4px;
   }
 }
+
+/* Tab strips — invisible scrollbar across browsers + smooth touch scroll.
+ * Scoped to role="tablist" so other overflow-x-auto regions are unaffected. */
+[role='tablist'] {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* IE / old Edge */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+[role='tablist']::-webkit-scrollbar {
+  display: none;                   /* Chrome / Safari */
+}

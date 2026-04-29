@@ -17,7 +17,17 @@ export interface User {
     logo?: string;
     subscriptionType: string;
     subscriptionExpiry: string;
+    plan?: string;
+    subscriptionUntil?: string | null;
+    status?: string;
   };
+  /**
+   * Pre-resolved feature keys this caller's company can use right now.
+   * Server computes via lib/entitlements.ts effectiveFeatures(); client
+   * reads via useFeature(key) — never check this array directly so the
+   * resolution logic stays in one place.
+   */
+  features?: string[];
 }
 
 export interface AuthState {

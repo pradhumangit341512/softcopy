@@ -74,7 +74,7 @@ export default function EditPropertyPage() {
   if (loading) {
     return (
       <div className="py-4 sm:py-6 lg:py-8 flex items-center justify-center min-h-[40vh]">
-        <Loader size="lg" message="Loading property..." />
+        <Loader size="lg" message="Loading inventory..." />
       </div>
     );
   }
@@ -82,10 +82,10 @@ export default function EditPropertyPage() {
   if (error || !property) {
     return (
       <div className="py-4 sm:py-6 lg:py-8 space-y-4">
-        <Alert type="error" title="Error" message={error || 'Property not found'} />
+        <Alert type="error" title="Error" message={error || 'Inventory item not found'} />
         <Link href="/dashboard/inventory">
           <Button variant="outline" size="sm" icon={<ArrowLeft size={18} />}>
-            Back to Properties
+            Back to Inventory
           </Button>
         </Link>
       </div>
@@ -102,7 +102,7 @@ export default function EditPropertyPage() {
         </Link>
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
-            Edit Property
+            Edit Inventory
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
             {property.propertyName} — {property.propertyType}
@@ -111,7 +111,7 @@ export default function EditPropertyPage() {
       </div>
 
       <Card>
-        <CardHeader title="Property Information" />
+        <CardHeader title="Inventory Information" />
         <CardBody>
           <PropertyForm
             onSubmit={handleSubmit}
@@ -121,6 +121,9 @@ export default function EditPropertyPage() {
               status: property.status as string,
               askingRent: property.askingRent != null ? String(property.askingRent) : undefined,
               sellingPrice: property.sellingPrice != null ? String(property.sellingPrice) : undefined,
+              // F11 — demand is stored as number; the form input is text, so
+              // coerce on hydration. undefined keeps the field empty.
+              demand: property.demand != null ? String(property.demand) : undefined,
             } : undefined}
             isLoading={saving}
           />

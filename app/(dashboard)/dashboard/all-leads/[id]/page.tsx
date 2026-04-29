@@ -113,9 +113,9 @@ export default function EditClientPage() {
           <h1 className="text-xl font-bold text-gray-900">Client Not Found</h1>
         </div>
         <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3">
-          <p className="text-gray-500">{fetchError || 'Could not find this client.'}</p>
+          <p className="text-gray-500">{fetchError || 'Could not find this lead.'}</p>
           <Link href="/dashboard/all-leads">
-            <Button variant="outline">Back to Clients</Button>
+            <Button variant="outline">Back to Leads</Button>
           </Link>
         </div>
       </div>
@@ -133,7 +133,7 @@ export default function EditClientPage() {
         </Link>
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
-            Edit Client
+            Edit Lead
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
             Update details for {client.clientName}

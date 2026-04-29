@@ -162,7 +162,7 @@ export default function TeamPage() {
     const action = newStatus === 'active' ? 'activate' : 'deactivate';
     if (!confirm(`${action === 'activate' ? 'Activate' : 'Deactivate'} ${name}? ${
       action === 'deactivate'
-        ? 'They will not be able to log in, but all their data (clients, properties, commissions) will be preserved.'
+        ? 'They will not be able to log in, but all their data (clients, Inventory, commissions) will be preserved.'
         : 'They will be able to log in again.'
     }`)) return;
 
