@@ -1,16 +1,26 @@
 'use client';
 
-import { ChevronDown, ChevronUp, Building2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Building2, Percent, IndianRupee } from 'lucide-react';
 import { ClientSearchInput, type SelectedClient } from '@/components/common/ClientSearchInput';
 
 const fmt = (n: number) => `₹${(n || 0).toLocaleString('en-IN')}`;
+
+export type CommissionMode = 'percent' | 'flat';
 
 export interface DealSectionState {
   selectedClient: SelectedClient | null;
   builderName: string;
   salesPersonName: string;
   dealAmount: string;
+  /**
+   * 'percent' — broker enters a % of the deal; commission = deal × pct / 100
+   * 'flat'    — broker enters a fixed ₹ amount; we back-compute pct so the
+   *             API contract (which stores both fields) stays unchanged.
+   */
+  commissionMode: CommissionMode;
   commissionPercentage: string;
+  /** Used only when commissionMode === 'flat'. Free-form rupee amount. */
+  commissionFlatAmount: string;
   paymentReference: string;
 }
 
@@ -57,10 +67,21 @@ export function DealSection({
   dirty,
   onSave,
 }: DealSectionProps) {
+  const dealNum = Number(state.dealAmount) || 0;
+  const pctNum = Number(state.commissionPercentage) || 0;
+  const flatNum = Number(state.commissionFlatAmount) || 0;
   const computedCommission =
-    state.dealAmount && state.commissionPercentage
-      ? (Number(state.dealAmount) * Number(state.commissionPercentage)) / 100
+    state.commissionMode === 'flat'
+      ? flatNum
+      : dealNum && pctNum
+        ? (dealNum * pctNum) / 100
+        : 0;
+  /** Implied % shown next to the flat amount so brokers see the equivalent rate. */
+  const impliedPercent =
+    state.commissionMode === 'flat' && dealNum > 0 && flatNum > 0
+      ? (flatNum / dealNum) * 100
       : 0;
+  const flatExceedsDeal = state.commissionMode === 'flat' && flatNum > dealNum && dealNum > 0;
 
   // Team members can't edit deal metadata in manage mode (admin-only PUT).
   const fieldsLocked = mode === 'manage' && !isAdmin;
@@ -152,12 +173,75 @@ export function DealSection({
             />
           </div>
 
-          {/* DEAL AMOUNT + COMMISSION % */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                Deal Amount (₹) {mode === 'add' && <span className="text-red-500">*</span>}
-              </label>
+          {/* DEAL AMOUNT */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Deal Amount (₹) {mode === 'add' && <span className="text-red-500">*</span>}
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                ₹
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={state.dealAmount}
+                onChange={(e) => onFieldChange('dealAmount', e.target.value)}
+                placeholder="0"
+                min="0"
+                disabled={fieldsLocked}
+                className="w-full pl-7 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl
+                  focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                  text-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+          </div>
+
+          {/* COMMISSION MODE TOGGLE — Percent vs Flat ₹ */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="block text-xs font-semibold text-gray-600">
+                Commission
+              </span>
+              <div
+                role="tablist"
+                aria-label="Commission mode"
+                className="inline-flex bg-gray-100 rounded-lg p-0.5"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={state.commissionMode !== 'flat'}
+                  disabled={fieldsLocked}
+                  onClick={() => onFieldChange('commissionMode', 'percent')}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md flex items-center gap-1
+                    transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                      state.commissionMode !== 'flat'
+                        ? 'bg-white text-blue-700 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                  <Percent size={11} /> Percent
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={state.commissionMode === 'flat'}
+                  disabled={fieldsLocked}
+                  onClick={() => onFieldChange('commissionMode', 'flat')}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md flex items-center gap-1
+                    transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                      state.commissionMode === 'flat'
+                        ? 'bg-white text-emerald-700 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                  <IndianRupee size={11} /> Flat ₹
+                </button>
+              </div>
+            </div>
+
+            {state.commissionMode === 'flat' ? (
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                   ₹
@@ -165,21 +249,18 @@ export function DealSection({
                 <input
                   type="number"
                   inputMode="decimal"
-                  value={state.dealAmount}
-                  onChange={(e) => onFieldChange('dealAmount', e.target.value)}
-                  placeholder="0"
+                  value={state.commissionFlatAmount}
+                  onChange={(e) => onFieldChange('commissionFlatAmount', e.target.value)}
+                  placeholder="e.g. 50000"
                   min="0"
+                  step="1"
                   disabled={fieldsLocked}
                   className="w-full pl-7 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl
-                    focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                    focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400
                     text-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                Commission %
-              </label>
+            ) : (
               <div className="relative">
                 <input
                   type="number"
@@ -199,7 +280,24 @@ export function DealSection({
                   %
                 </span>
               </div>
-            </div>
+            )}
+
+            {flatExceedsDeal && (
+              <p className="text-[11px] text-red-500 font-medium mt-1.5">
+                Flat amount can't exceed the deal amount.
+              </p>
+            )}
+            {state.commissionMode === 'flat' && impliedPercent > 0 && !flatExceedsDeal && (
+              <p className="text-[11px] text-gray-500 mt-1.5">
+                ≈ {impliedPercent.toFixed(2)}% of deal amount
+              </p>
+            )}
+            {state.commissionMode === 'percent' && (
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                Switch to <span className="font-semibold">Flat ₹</span> if your deal is on a
+                fixed-fee basis.
+              </p>
+            )}
           </div>
 
           {/* AUTO COMMISSION DISPLAY */}

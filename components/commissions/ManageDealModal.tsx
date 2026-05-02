@@ -69,7 +69,9 @@ const emptyDealState = (): DealSectionState => ({
   builderName: '',
   salesPersonName: '',
   dealAmount: '',
+  commissionMode: 'percent',
   commissionPercentage: '5',
+  commissionFlatAmount: '',
   paymentReference: '',
 });
 
@@ -152,7 +154,12 @@ export function ManageDealModal({
         builderName: commission.builderName ?? '',
         salesPersonName: commission.salesPersonName ?? '',
         dealAmount: String(commission.dealAmount),
+        // Existing rows always opened in percent mode — pct + commissionAmount
+        // are already in sync on the server, and the user can flip the toggle
+        // to Flat ₹ if they want to edit the rupee amount directly.
+        commissionMode: 'percent',
         commissionPercentage: String(commission.commissionPercentage),
+        commissionFlatAmount: String(commission.commissionAmount),
         paymentReference: commission.paymentReference ?? '',
       });
       setSummary({
@@ -200,6 +207,22 @@ export function ManageDealModal({
     };
   }, [open, onClose]);
 
+  /**
+   * Resolve the deal section's commission inputs into the canonical pair
+   * (commissionPercentage, commissionAmount) the API expects. Flat-mode
+   * back-computes pct from (flat / deal × 100); percent-mode passes through.
+   */
+  const resolvedCommission = useMemo(() => {
+    const dealAmt = Number(deal.dealAmount) || 0;
+    if (deal.commissionMode === 'flat') {
+      const flat = Number(deal.commissionFlatAmount) || 0;
+      const pct = dealAmt > 0 ? (flat / dealAmt) * 100 : 0;
+      return { amount: flat, pct };
+    }
+    const pct = Number(deal.commissionPercentage) || 0;
+    return { amount: (dealAmt * pct) / 100, pct };
+  }, [deal.commissionMode, deal.dealAmount, deal.commissionPercentage, deal.commissionFlatAmount]);
+
   /** Whether the deal section diverges from its initial loaded state. */
   const dealDirty = useMemo(() => {
     if (mode !== 'manage' || !commission) return false;
@@ -207,17 +230,13 @@ export function ManageDealModal({
       (deal.builderName || '') !== (commission.builderName ?? '') ||
       (deal.salesPersonName || '') !== (commission.salesPersonName ?? '') ||
       Number(deal.dealAmount) !== commission.dealAmount ||
-      Number(deal.commissionPercentage) !== commission.commissionPercentage ||
+      Math.abs(resolvedCommission.amount - commission.commissionAmount) > 0.005 ||
       (deal.paymentReference || '') !== (commission.paymentReference ?? '')
     );
-  }, [deal, commission, mode]);
+  }, [deal, commission, mode, resolvedCommission.amount]);
 
   /** Computed commission ₹ for the add-mode initial-payment guards. */
-  const computedCommission = useMemo(() => {
-    const d = Number(deal.dealAmount) || 0;
-    const p = Number(deal.commissionPercentage) || 0;
-    return (d * p) / 100;
-  }, [deal.dealAmount, deal.commissionPercentage]);
+  const computedCommission = resolvedCommission.amount;
 
   const initialAmt = Number(initial.amount) || 0;
   const initialOverMax =
@@ -251,6 +270,13 @@ export function ManageDealModal({
       addToast({ type: 'error', message: 'Deal Amount is required.' });
       return;
     }
+    if (resolvedCommission.amount > Number(deal.dealAmount) + 0.005) {
+      addToast({
+        type: 'error',
+        message: "Commission can't exceed the deal amount.",
+      });
+      return;
+    }
     if (initialOverMax) {
       addToast({
         type: 'error',
@@ -265,7 +291,7 @@ export function ManageDealModal({
         salesPersonName: deal.salesPersonName.trim() || null,
         builderName: deal.builderName.trim() || null,
         dealAmount: Number(deal.dealAmount),
-        commissionPercentage: Number(deal.commissionPercentage),
+        commissionPercentage: resolvedCommission.pct,
         paymentReference: deal.paymentReference.trim() || undefined,
       };
       if (initialAmt > 0) {
@@ -312,6 +338,13 @@ export function ManageDealModal({
       addToast({ type: 'error', message: 'Deal Amount is required.' });
       return;
     }
+    if (resolvedCommission.amount > Number(deal.dealAmount) + 0.005) {
+      addToast({
+        type: 'error',
+        message: "Commission can't exceed the deal amount.",
+      });
+      return;
+    }
     setSavingDeal(true);
     try {
       const res = await fetch(`/api/commissions/${commission.id}`, {
@@ -322,7 +355,7 @@ export function ManageDealModal({
           salesPersonName: deal.salesPersonName.trim() || null,
           builderName: deal.builderName.trim() || null,
           dealAmount: Number(deal.dealAmount),
-          commissionPercentage: Number(deal.commissionPercentage),
+          commissionPercentage: resolvedCommission.pct,
           paymentReference: deal.paymentReference.trim() || undefined,
         }),
       });
