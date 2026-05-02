@@ -949,7 +949,7 @@ html { scroll-behavior: smooth; }
 
 .b360 .security {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 .b360 .sec-card {
@@ -1320,7 +1320,9 @@ html { scroll-behavior: smooth; }
 
 .b360 .foot {
   border-top: 1px solid var(--line);
-  padding: 80px 32px 40px;
+  /* Tightened from 80/40 — the giant watermark already adds visual weight,
+     so we don't need fat top/bottom padding on top of it. */
+  padding: 56px 32px 28px;
   position: relative;
   overflow: hidden;
   background: var(--bg-alt);
@@ -1331,13 +1333,15 @@ html { scroll-behavior: smooth; }
   display: grid;
   /* 5 columns: brand + Product / Company / Account / Legal. */
   grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
-  gap: 48px;
+  gap: 36px;
+  align-items: start;
 }
 .b360 .foot__brand p {
   color: var(--ink-dim);
-  font-size: 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
   max-width: 320px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 .b360 .foot__col h4 {
   font-family: var(--font-jetbrains-mono), monospace;
@@ -1345,22 +1349,24 @@ html { scroll-behavior: smooth; }
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--ink-dim);
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   font-weight: 600;
 }
 .b360 .foot__col a {
   display: block;
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--ink);
-  padding: 6px 0;
+  padding: 4px 0;
   transition: color 0.2s;
   font-weight: 500;
+  line-height: 1.45;
 }
 .b360 .foot__col a:hover { color: var(--blue); }
 
 .b360 .foot__watermark {
   text-align: center;
-  margin: 40px 0;
+  /* Halved — the watermark was the single biggest height contributor. */
+  margin: 24px 0 16px;
   pointer-events: none;
   user-select: none;
 }
@@ -1368,7 +1374,8 @@ html { scroll-behavior: smooth; }
   font-family: var(--font-fraunces), serif;
   font-style: italic;
   font-weight: 400;
-  font-size: clamp(80px, 16vw, 220px);
+  /* Was clamp(80, 16vw, 220) — too dominant; now caps at 140px desktop. */
+  font-size: clamp(56px, 11vw, 140px);
   line-height: 1;
   letter-spacing: -0.05em;
   background: linear-gradient(180deg, rgba(11, 16, 32, 0.08), rgba(11, 16, 32, 0.01));
@@ -1380,16 +1387,22 @@ html { scroll-behavior: smooth; }
 .b360 .foot__bar {
   max-width: 1240px;
   margin: 0 auto;
-  padding-top: 24px;
+  padding-top: 18px;
   border-top: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 11px;
   color: var(--ink-dim);
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px 18px;
 }
+.b360 .foot__bar a {
+  color: var(--ink-dim);
+  transition: color 0.2s;
+}
+.b360 .foot__bar a:hover { color: var(--blue); }
 
 .b360 .fade-up {
   opacity: 0;
@@ -1411,8 +1424,8 @@ html { scroll-behavior: smooth; }
   .b360 .bento { gap: 14px; }
   .b360 .prices { gap: 14px; }
   .b360 .modules { gap: 14px; }
-  .b360 .foot { padding: 72px 28px 36px; }
-  .b360 .foot__grid { gap: 40px; }
+  .b360 .foot { padding: 48px 28px 24px; }
+  .b360 .foot__grid { gap: 32px; }
 }
 
 @media (max-width: 1024px) {
@@ -1514,7 +1527,10 @@ html { scroll-behavior: smooth; }
 
   .b360 .contact { grid-template-columns: 1fr; gap: 36px; max-width: 620px; }
 
-  .b360 .foot__grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+  .b360 .foot__grid { grid-template-columns: repeat(2, 1fr); gap: 24px 28px; }
+  /* On tablet, the brand column spans both so it doesn't get squeezed. */
+  .b360 .foot__brand { grid-column: 1 / -1; }
+  .b360 .foot__brand p { max-width: 540px; }
 
   .b360 .section { padding: 80px 24px; }
   .b360 .section--alt > * { padding-left: 24px; padding-right: 24px; }
@@ -1561,8 +1577,9 @@ html { scroll-behavior: smooth; }
   .b360 .contact__card { padding: 28px; }
   .b360 .contact__benefits { gap: 8px; }
 
-  .b360 .foot { padding: 64px 22px 32px; }
-  .b360 .foot__grid { gap: 28px; }
+  .b360 .foot { padding: 44px 22px 22px; }
+  .b360 .foot__grid { gap: 22px 24px; }
+  .b360 .foot__watermark { margin: 20px 0 12px; }
 }
 
 @media (max-width: 560px) {
@@ -1619,14 +1636,23 @@ html { scroll-behavior: smooth; }
   .b360 .contact__already { flex-direction: column; align-items: flex-start; gap: 10px; }
   .b360 .contact__already .btn { width: 100%; }
 
-  .b360 .foot { padding: 56px 20px 28px; }
-  .b360 .foot__grid { grid-template-columns: 1fr; gap: 28px; }
-  .b360 .foot__watermark { margin: 32px 0; }
-  .b360 .foot__watermark em { font-size: clamp(64px, 22vw, 140px); }
+  /* Phone footer: stack the link columns into a 2-col grid (Product/Company,
+     Account/Legal) so they read in pairs instead of one big single-column
+     run. The brand block stays full-width on top. */
+  .b360 .foot { padding: 36px 20px 20px; }
+  .b360 .foot__grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px 20px;
+  }
+  .b360 .foot__brand { grid-column: 1 / -1; margin-bottom: 4px; }
+  .b360 .foot__watermark { margin: 16px 0 10px; }
+  .b360 .foot__watermark em { font-size: clamp(48px, 18vw, 96px); }
   .b360 .foot__bar {
     flex-direction: column;
     align-items: flex-start;
     text-align: left;
+    gap: 6px;
+    padding-top: 14px;
   }
 }
 
@@ -1660,8 +1686,13 @@ html { scroll-behavior: smooth; }
 
   .b360 .contact__card { padding: 20px; border-radius: 18px; }
 
-  .b360 .foot { padding: 48px 16px 24px; }
-  .b360 .foot__watermark em { font-size: clamp(56px, 24vw, 110px); }
+  /* Tiny phones (<380): one-column footer columns again so each link gets
+     full width. Watermark scaled down further. */
+  .b360 .foot { padding: 30px 16px 18px; }
+  .b360 .foot__grid { grid-template-columns: 1fr; gap: 18px; }
+  .b360 .foot__brand p { max-width: none; }
+  .b360 .foot__watermark { margin: 14px 0 8px; }
+  .b360 .foot__watermark em { font-size: clamp(40px, 18vw, 72px); }
 }
 
 @media (max-width: 900px) and (orientation: landscape) and (max-height: 520px) {
@@ -1676,7 +1707,9 @@ html { scroll-behavior: smooth; }
 @media (hover: none) and (pointer: coarse) {
   .b360 .btn { min-height: 44px; }
   .b360 .nav__links a { min-height: 44px; display: inline-flex; align-items: center; }
-  .b360 .foot__col a { padding: 9px 0; }
+  /* Touch targets: bump padding for the 44px-min recommendation, but only
+     enough to clear the bar — don't double the row height. */
+  .b360 .foot__col a { padding: 7px 0; }
 }
 
 /* ─── FAQ (between pricing and onboarding) ───────────────────────

@@ -230,7 +230,6 @@ export const MODULES: ModuleItem[] = [
   { icon: '▭', title: 'Notifications',       copy: 'Bell alerts, dashboard banners, and a weekly email report.' },
   { icon: '▮', title: 'WhatsApp',            copy: 'Inbound webhook capture + scheduled reminder automations.' },
   { icon: '▯', title: 'Activity Log',        copy: 'Searchable audit trail for every sensitive action.' },
-  { icon: '▰', title: 'Superadmin',          copy: 'Multi-tenant console: per-company plan + per-feature overrides.' },
   { icon: '▱', title: 'Subscriptions',       copy: 'Plan management, renewals, and billing trail.' },
   { icon: '◙', title: 'Permissions',         copy: 'Role baseline plus per-member grants and revokes (Enterprise).' },
 ];
