@@ -76,6 +76,9 @@ export function DealSection({
       : dealNum && pctNum
         ? (dealNum * pctNum) / 100
         : 0;
+  // Commission is additive to the deal amount — what the client ultimately
+  // owes is Deal + Commission, not the deal alone.
+  const totalReceivable = dealNum + computedCommission;
   /** Implied % shown next to the flat amount so brokers see the equivalent rate. */
   const impliedPercent =
     state.commissionMode === 'flat' && dealNum > 0 && flatNum > 0
@@ -283,8 +286,8 @@ export function DealSection({
             )}
 
             {flatExceedsDeal && (
-              <p className="text-[11px] text-red-500 font-medium mt-1.5">
-                Flat amount can't exceed the deal amount.
+              <p className="text-[11px] text-amber-600 font-medium mt-1.5">
+                Heads up: flat commission is larger than the deal amount — double-check the figures.
               </p>
             )}
             {state.commissionMode === 'flat' && impliedPercent > 0 && !flatExceedsDeal && (
@@ -300,16 +303,27 @@ export function DealSection({
             )}
           </div>
 
-          {/* AUTO COMMISSION DISPLAY */}
-          {computedCommission > 0 && (
-            <div
-              className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3
-                flex items-center justify-between"
-            >
-              <span className="text-xs font-medium text-emerald-700">Commission Amount</span>
-              <span className="text-base font-bold text-emerald-700">
-                {fmt(computedCommission)}
-              </span>
+          {/* RECEIVABLE BREAKDOWN — commission is additive to deal amount.
+              Shows broker the total figure to communicate to the client:
+              Deal + Commission = Total receivable. */}
+          {(dealNum > 0 || computedCommission > 0) && (
+            <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-emerald-800">
+                <span>Deal amount</span>
+                <span className="font-semibold">{fmt(dealNum)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-emerald-800">
+                <span>+ Commission</span>
+                <span className="font-semibold">{fmt(computedCommission)}</span>
+              </div>
+              <div className="border-t border-emerald-200 pt-1.5 flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-700">
+                  Total receivable from client
+                </span>
+                <span className="text-base font-bold text-emerald-700">
+                  {fmt(totalReceivable)}
+                </span>
+              </div>
             </div>
           )}
 
