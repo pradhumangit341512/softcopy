@@ -175,21 +175,23 @@ export interface Property extends BaseModel {
   description?: string;
   status: PropertyStatus;
 
-  // F10 — structured project identity (all optional)
+  // Structured project identity (all optional). No longer surfaced by the
+  // single-property form/wizard; bulk import + matcher still read these.
   projectName?: string;
   sectorNo?: string;
   unitNo?: string;
   towerNo?: string;
   typology?: string;
 
-  // F11 — deal-flow fields (all optional)
+  // Deal-flow fields (all optional). No longer surfaced by the single-property
+  // form/wizard; retained for bulk-imported records.
   /** Owner's asked price — usually higher than sellingPrice. */
   demand?: number;
-  /** 'Pending' | 'Partial' | 'Completed' — see PAYMENT_STATUSES. */
+  /** 'Pending' | 'Partial' | 'Completed'. */
   paymentStatus?: string;
-  /** 'Registry' | 'Transfer' | 'NewLaunch' — see CASE_TYPES. */
+  /** 'Registry' | 'Transfer' | 'NewLaunch'. */
   caseType?: string;
-  /** 'NotApplied' | 'Applied' | 'Sanctioned' | 'Disbursed' — see LOAN_STATUSES. */
+  /** 'NotApplied' | 'Applied' | 'Sanctioned' | 'Disbursed'. */
   loanStatus?: string;
 
   // Owner details

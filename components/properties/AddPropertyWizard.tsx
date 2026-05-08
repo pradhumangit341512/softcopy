@@ -1,26 +1,20 @@
 'use client';
 
 /**
- * AddPropertyWizard — F9
+ * AddPropertyWizard
  *
  * 3-step guided flow for capturing a new inventory item. Reuses the same
  * `PropertyFormValues` shape as the single-page form so the parent's
  * onSubmit handler doesn't need to know which form mode shipped the data.
  *
  * Steps
- * ─────
- *   1. Seller Details   — owner identity + F11 deal-flow fields
- *   2. Property Details — address + F10 project identity + size / type / status
- *   3. Source/Assignment — description + transfer-style notes
+ *   1. Seller Details   — owner identity
+ *   2. Property Details — address + size / type / status
+ *   3. Source / Notes   — description (room for future capture metadata)
  *
- * F10 (project fields) and F11 (deal fields) collapse out of step 1/2 if
- * those sub-features are off — same gating the single-page form uses.
- *
- * Validation
- * ──────────
- *   We validate per-step on Next click (only the fields visible on that
- *   step) so users don't see "fix something on step 3" before they've
- *   even reached it. Final submit re-validates everything.
+ * Validation runs per-step on Next click against just the fields visible
+ * on that step, so users don't see "fix something on step 3" before they
+ * reach it. Final submit re-validates everything.
  */
 
 import { useState } from 'react';
@@ -33,12 +27,7 @@ import {
   BHK_TYPE_OPTIONS,
   PROPERTY_TYPES_WITH_BHK,
 } from '@/lib/types';
-import {
-  PROPERTY_STATUSES,
-  PAYMENT_STATUSES,
-  CASE_TYPES,
-  LOAN_STATUSES,
-} from '@/lib/constants';
+import { PROPERTY_STATUSES } from '@/lib/constants';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { MultiPhoneInput } from './MultiPhoneInput';
@@ -60,11 +49,10 @@ type StepId = (typeof STEPS)[number]['id'];
 
 // Field-name groups per step — used for per-step validation triggers.
 const STEP_FIELDS: Record<StepId, ReadonlyArray<keyof PropertyFormValues>> = {
-  1: ['ownerName', 'ownerPhone', 'ownerEmail', 'demand', 'paymentStatus', 'caseType', 'loanStatus'],
+  1: ['ownerName', 'ownerPhone', 'ownerEmail'],
   2: [
     'propertyName', 'address', 'propertyType', 'bhkType', 'area', 'vacateDate',
     'askingRent', 'sellingPrice', 'status',
-    'projectName', 'sectorNo', 'unitNo', 'towerNo', 'typology',
   ],
   3: ['description'],
 };
@@ -77,8 +65,6 @@ const errorStyle = 'text-red-500 text-xs mt-1';
 export function AddPropertyWizard({ onSubmit, initialData, isLoading = false }: AddPropertyWizardProps) {
   const [step, setStep] = useState<StepId>(1);
 
-  const showProjectFields = useFeature('feature.inventory_project_fields');
-  const showDealFields = useFeature('feature.inventory_deal_fields');
   const useExtendedPropertyStatuses = useFeature('feature.extended_property_statuses');
   const showMultiPhone = useFeature('feature.multi_phone');
 
@@ -114,15 +100,6 @@ export function AddPropertyWizard({ onSubmit, initialData, isLoading = false }: 
       area: initialData?.area || '',
       description: initialData?.description || '',
       status: initialStatus,
-      projectName: initialData?.projectName || '',
-      sectorNo:    initialData?.sectorNo || '',
-      unitNo:      initialData?.unitNo || '',
-      towerNo:     initialData?.towerNo || '',
-      typology:    initialData?.typology || '',
-      demand:        initialData?.demand?.toString() || '',
-      paymentStatus: initialData?.paymentStatus || '',
-      caseType:      initialData?.caseType || '',
-      loanStatus:    initialData?.loanStatus || '',
       ownerName: initialData?.ownerName || '',
       ownerPhone: initialData?.ownerPhone || '',
       ownerEmail: initialData?.ownerEmail || '',
@@ -202,51 +179,6 @@ export function AddPropertyWizard({ onSubmit, initialData, isLoading = false }: 
             {...register('ownerEmail')}
             error={errors.ownerEmail?.message}
           />
-
-          {showDealFields && (
-            <>
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">
-                Deal Details
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="Owner Demand (₹)"
-                  type="number"
-                  placeholder="e.g. 24000000"
-                  {...register('demand')}
-                />
-                <div>
-                  <label className={labelStyle}>Payment Status</label>
-                  <select {...register('paymentStatus')} className={selectStyle}>
-                    <option value="">—</option>
-                    {PAYMENT_STATUSES.map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelStyle}>Case Type</label>
-                  <select {...register('caseType')} className={selectStyle}>
-                    <option value="">—</option>
-                    {CASE_TYPES.map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelStyle}>Loan Status</label>
-                  <select {...register('loanStatus')} className={selectStyle}>
-                    <option value="">—</option>
-                    {LOAN_STATUSES.map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </>
-          )}
         </section>
       )}
 
@@ -267,23 +199,6 @@ export function AddPropertyWizard({ onSubmit, initialData, isLoading = false }: 
             {...register('address', { required: 'Address is required' })}
             error={errors.address?.message}
           />
-
-          {showProjectFields && (
-            <>
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">
-                Project Identity
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Project Name" placeholder="e.g. DLF Cyber City" {...register('projectName')} />
-                <Input label="Sector"       placeholder="e.g. Sector 24"      {...register('sectorNo')} />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Input label="Tower"     placeholder="e.g. Tower B"  {...register('towerNo')} />
-                <Input label="Unit No"   placeholder="e.g. B-1204"   {...register('unitNo')} />
-                <Input label="Typology"  placeholder="e.g. 3BHK"     {...register('typology')} />
-              </div>
-            </>
-          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

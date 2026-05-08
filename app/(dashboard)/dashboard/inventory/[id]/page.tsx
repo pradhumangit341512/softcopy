@@ -116,14 +116,20 @@ export default function EditPropertyPage() {
           <PropertyForm
             onSubmit={handleSubmit}
             initialData={property ? {
-              ...property,
+              propertyName: property.propertyName,
+              address: property.address,
               propertyType: property.propertyType as string,
+              bhkType: property.bhkType,
+              vacateDate: property.vacateDate,
+              area: property.area,
+              description: property.description,
               status: property.status as string,
               askingRent: property.askingRent != null ? String(property.askingRent) : undefined,
               sellingPrice: property.sellingPrice != null ? String(property.sellingPrice) : undefined,
-              // F11 — demand is stored as number; the form input is text, so
-              // coerce on hydration. undefined keeps the field empty.
-              demand: property.demand != null ? String(property.demand) : undefined,
+              ownerName: property.ownerName,
+              ownerPhone: property.ownerPhone,
+              ownerPhones: property.ownerPhones,
+              ownerEmail: property.ownerEmail,
             } : undefined}
             isLoading={saving}
           />
