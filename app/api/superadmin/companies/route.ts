@@ -152,10 +152,13 @@ export async function POST(req: NextRequest) {
         role: 'admin',
         companyId: company.id,
         emailVerified: new Date(), // pre-verified — superadmin vouched for this account
+        // Demo accounts skip the login OTP. Set only when explicitly requested
+        // by the superadmin form; otherwise this remains false.
+        isDemo: data.isDemo ?? false,
         deletedAt: null,
         tokenVersion: 0,
       },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, isDemo: true },
     });
   } catch (err) {
     // Clean up the orphan company so a retry can use the same companyName.

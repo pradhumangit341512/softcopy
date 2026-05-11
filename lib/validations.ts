@@ -476,6 +476,8 @@ export const createCompanyWithAdminSchema = z.object({
   adminPhone: phoneSchema,
   // Optional: caller can provide a temp password; otherwise we generate one.
   adminTempPassword: passwordSchema.optional(),
+  // Demo accounts skip the login OTP step. Default false; explicit opt-in only.
+  isDemo: z.boolean().optional().default(false),
 }).strict();
 
 export const updateCompanyBySuperAdminSchema = z.object({

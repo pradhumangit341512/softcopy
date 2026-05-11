@@ -72,6 +72,10 @@ model User {
   companyId    String?      @db.ObjectId
   profilePhoto String?
   status       String       @default("active")
+  // Demo accounts skip the login OTP step. Provisioned by superadmin only;
+  // never set via signup. Used to hand out evaluation logins where the demo
+  // user does not have access to the account's email inbox.
+  isDemo       Boolean      @default(false)
   // null  = never verified (e.g. new signup awaiting email-link click)
   // Date  = verified at this timestamp
   emailVerified     DateTime?

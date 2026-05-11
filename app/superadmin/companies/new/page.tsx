@@ -32,6 +32,9 @@ export default function NewCompanyPage() {
     // Leave blank → server auto-generates a memorable temp password (e.g. "Mango-7421")
     // Type a value → server uses YOUR password as the broker's initial password
     adminTempPassword: '',
+    // Demo accounts skip the login OTP step. Use only for accounts you hand
+    // out to prospects/investors who don't have access to the email inbox.
+    isDemo: false,
   });
 
   function update<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
@@ -59,6 +62,7 @@ export default function NewCompanyPage() {
           // Only send the password field if the user actually typed one,
           // so the server falls back to its generator when blank.
           ...(form.adminTempPassword ? { adminTempPassword: form.adminTempPassword } : {}),
+          isDemo: form.isDemo,
         }),
       });
       const j = await res.json();
@@ -230,6 +234,25 @@ export default function NewCompanyPage() {
               be 6+ chars with at least one uppercase, lowercase, and number.
             </p>
           </div>
+
+          <label className="flex items-start gap-3 p-3 border border-amber-200 bg-amber-50 rounded cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.isDemo}
+              onChange={(e) => update('isDemo', e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+            />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-900">
+                Demo account — skip login OTP
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Logs in with email + password only; no verification code is sent.
+                Use this for prospects, investors, or evaluators who don&apos;t
+                have access to the account&apos;s email inbox.
+              </p>
+            </div>
+          </label>
         </section>
 
         {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">{error}</div>}

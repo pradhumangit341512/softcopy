@@ -137,6 +137,17 @@ export async function POST(req: NextRequest) {
     }
 
     // ═════════════════════════════════════════════
+    // DEMO ACCOUNT → skip OTP entirely, issue JWT directly
+    // Demo flag is provisioned by superadmin only (never via signup).
+    // Single-session enforcement still applies.
+    // ═════════════════════════════════════════════
+    if (user.isDemo) {
+      const response = await completeLogin(user, req, requestId);
+      log.info({ userId: user.id, path: 'demo-bypass' }, 'login success (demo OTP-skip)');
+      return response;
+    }
+
+    // ═════════════════════════════════════════════
     // OTP PROVIDED → verify + issue JWT (single session)
     // ═════════════════════════════════════════════
     if (otp) {
