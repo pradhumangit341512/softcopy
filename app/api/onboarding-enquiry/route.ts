@@ -24,7 +24,7 @@ export const runtime = 'nodejs';
  *   - On any error we still return a generic 500 — never leak internals.
  */
 
-const ADMIN_NOTIFY_TO = process.env.ONBOARDING_NOTIFY_EMAIL || 'hello@broker365.in';
+const ADMIN_NOTIFY_TO = process.env.ONBOARDING_NOTIFY_EMAIL || 'broker365.support@gmail.com';
 
 /** Best-effort notify to the admin inbox. Logs and swallows errors —
  *  we never fail the user's submission because the SMTP is slow. */

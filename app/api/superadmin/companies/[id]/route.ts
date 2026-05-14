@@ -76,6 +76,8 @@ export async function GET(
       admins: company.users.filter((u) => u.role === 'admin').length,
       seatsUsed: company.users.filter((u) => u.role === 'user').length,
       seatsLimit: company.seatLimit,
+      adminsUsed: company.users.filter((u) => u.role === 'admin').length,
+      adminsLimit: company.adminSeatLimit,
     },
   });
 }

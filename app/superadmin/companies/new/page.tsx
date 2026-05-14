@@ -23,6 +23,7 @@ export default function NewCompanyPage() {
     companyName: '',
     plan: 'standard' as Plan,
     seatLimit: 5,
+    adminSeatLimit: 2,
     monthlyFee: '',
     subscriptionUntil: defaultExpiry(),
     notes: '',
@@ -53,6 +54,7 @@ export default function NewCompanyPage() {
           companyName: form.companyName,
           plan: form.plan,
           seatLimit: Number(form.seatLimit),
+          adminSeatLimit: Number(form.adminSeatLimit),
           monthlyFee: form.monthlyFee ? Number(form.monthlyFee) : null,
           subscriptionUntil: form.subscriptionUntil,
           notes: form.notes || null,
@@ -175,14 +177,23 @@ export default function NewCompanyPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Input
-              label="Seat limit"
+              label="Team member seats"
               type="number"
               value={String(form.seatLimit)}
               onChange={(v) => update('seatLimit', Number(v))}
               min={1}
               max={1000}
+              required
+            />
+            <Input
+              label="Admin seats (partners)"
+              type="number"
+              value={String(form.adminSeatLimit)}
+              onChange={(v) => update('adminSeatLimit', Number(v))}
+              min={1}
+              max={50}
               required
             />
             <Input

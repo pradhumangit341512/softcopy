@@ -464,6 +464,7 @@ export const createCompanyWithAdminSchema = z.object({
   companyName: z.string().trim().min(2, 'Company name is required'),
   plan: z.enum(['basic', 'standard', 'pro', 'enterprise']).default('standard'),
   seatLimit: z.number().int().min(1).max(1000).default(5),
+  adminSeatLimit: z.number().int().min(1).max(50).default(2),
   monthlyFee: z.number().nonnegative().nullable().optional(),
   subscriptionUntil: z
     .union([z.string(), z.date()])
@@ -484,6 +485,7 @@ export const updateCompanyBySuperAdminSchema = z.object({
   companyName: z.string().trim().min(2).optional(),
   plan: z.enum(['basic', 'standard', 'pro', 'enterprise']).optional(),
   seatLimit: z.number().int().min(1).max(1000).optional(),
+  adminSeatLimit: z.number().int().min(1).max(50).optional(),
   monthlyFee: z.number().nonnegative().nullable().optional(),
   subscriptionUntil: z
     .union([z.string(), z.date()])

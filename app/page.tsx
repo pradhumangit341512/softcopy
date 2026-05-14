@@ -696,6 +696,24 @@ export default async function LandingPage() {
                   Sign in <span aria-hidden>→</span>
                 </Link>
               </div>
+
+              <div className="contact__direct" style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <a href="mailto:broker365.support@gmail.com" className="btn btn--ghost" aria-label="Email Broker365 support">
+                  <span aria-hidden>✉️</span> broker365.support@gmail.com
+                </a>
+                <a href="tel:+916367766573" className="btn btn--ghost" aria-label="Call Broker365">
+                  <span aria-hidden>📞</span> +91 63677 66573
+                </a>
+                <a
+                  href="https://wa.me/916367766573?text=Hi%20Broker365%20%E2%80%94%20I%27d%20like%20to%20know%20more%20about%20onboarding%20my%20brokerage."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn--ghost"
+                  aria-label="WhatsApp Broker365"
+                >
+                  <span aria-hidden>💬</span> WhatsApp
+                </a>
+              </div>
             </div>
 
             <div className="contact__card">
@@ -737,7 +755,19 @@ export default async function LandingPage() {
             <h4>Account</h4>
             <Link href="/login">Sign in</Link>
             <a href="#contact">Request onboarding</a>
-            <a href="mailto:hello@broker365.in">Support</a>
+            <a href="mailto:broker365.support@gmail.com">Support</a>
+          </div>
+          <div className="foot__col">
+            <h4>Reach us</h4>
+            <a href="mailto:broker365.support@gmail.com">broker365.support@gmail.com</a>
+            <a href="tel:+916367766573">+91 63677 66573</a>
+            <a
+              href="https://wa.me/916367766573?text=Hi%20Broker365%20%E2%80%94%20I%27d%20like%20to%20know%20more%20about%20onboarding%20my%20brokerage."
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              WhatsApp us
+            </a>
           </div>
           <div className="foot__col">
             <h4>Legal</h4>

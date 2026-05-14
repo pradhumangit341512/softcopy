@@ -117,7 +117,7 @@ export default function PrivacyPage() {
           Under the Digital Personal Data Protection Act 2023 you can ask us to
           access, correct, or delete your personal data, and to nominate a person
           to act on your behalf in the event of incapacity. Email{' '}
-          <a href="mailto:hello@broker365.in">hello@broker365.in</a> and we&apos;ll
+          <a href="mailto:broker365.support@gmail.com">broker365.support@gmail.com</a> and we&apos;ll
           respond within 30 days.
         </p>
       </section>
@@ -135,7 +135,7 @@ export default function PrivacyPage() {
         <h2>8. Contact</h2>
         <p>
           Privacy questions:{' '}
-          <a href="mailto:hello@broker365.in">hello@broker365.in</a>.
+          <a href="mailto:broker365.support@gmail.com">broker365.support@gmail.com</a>.
         </p>
         <p className="legal-note">
           This is an early draft. Please review with a lawyer before publication

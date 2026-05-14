@@ -43,7 +43,7 @@ export default function TermsPage() {
           You are responsible for everything that happens under your account.
           Keep your password and OTP codes private, enable device-trust only on
           devices you control, and tell us immediately at{' '}
-          <a href="mailto:hello@broker365.in">hello@broker365.in</a> if you
+          <a href="mailto:broker365.support@gmail.com">broker365.support@gmail.com</a> if you
           suspect unauthorised access.
         </p>
       </section>
@@ -129,7 +129,7 @@ export default function TermsPage() {
       <section>
         <h2>11. Contact</h2>
         <p>
-          Email <a href="mailto:hello@broker365.in">hello@broker365.in</a> for
+          Email <a href="mailto:broker365.support@gmail.com">broker365.support@gmail.com</a> for
           anything — billing, legal, bugs, or a human to talk to.
         </p>
         <p className="legal-note">

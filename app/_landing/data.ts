@@ -422,13 +422,24 @@ export function buildLandingJsonLd(opts: {
         '@id': 'https://broker365.in/#org',
         name: 'Broker365',
         url: 'https://broker365.in',
-        email: 'hello@broker365.in',
+        email: 'broker365.support@gmail.com',
+        telephone: '+91-63677-66573',
         description:
           'Invite-only CRM for Indian real estate brokers — leads, inventory, commissions, and team performance on one dashboard.',
         areaServed: 'IN',
         address: [
           { '@type': 'PostalAddress', addressLocality: 'Jaipur', addressCountry: 'IN' },
           { '@type': 'PostalAddress', addressLocality: 'Bengaluru', addressCountry: 'IN' },
+        ],
+        contactPoint: [
+          {
+            '@type': 'ContactPoint',
+            telephone: '+91-63677-66573',
+            email: 'broker365.support@gmail.com',
+            contactType: 'customer support',
+            areaServed: 'IN',
+            availableLanguage: ['en', 'hi'],
+          },
         ],
       },
       {

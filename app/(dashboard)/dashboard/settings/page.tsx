@@ -84,7 +84,7 @@ interface Session {
 }
 
 export default function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, setUser } = useAuth();
   const { addToast } = useToast();
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -191,18 +191,35 @@ export default function SettingsPage() {
   // only superadmin can change an admin's email.
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
+
+    // Only send fields that actually changed so an unchanged phone stored
+    // in an older format doesn't block a simple name update.
+    const updates: Record<string, string> = {};
+    if (formData.name !== user.name) updates.name = formData.name;
+    if (formData.phone !== user.phone) updates.phone = formData.phone;
+
+    if (Object.keys(updates).length === 0) {
+      addToast({ type: 'info', message: 'No changes to save.' });
+      setIsEditing(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await fetch(`/api/users/${user?.id}`, {
+      const response = await fetch(`/api/users/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ name: formData.name, phone: formData.phone }),
+        body: JSON.stringify(updates),
       });
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to update profile');
       }
+      // Sync the auth store so the header, sidebar, and future visits
+      // to this page all reflect the updated name/phone immediately.
+      setUser({ ...user, ...updates });
       addToast({ type: 'success', message: 'Profile updated successfully!' });
       setIsEditing(false);
     } catch (err) {

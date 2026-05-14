@@ -16,6 +16,7 @@ import { db } from '@/lib/db';
 import { verifyAuth } from '@/lib/auth';
 import { parseBody, upsertDailyPlanSchema } from '@/lib/validations';
 import { requireFeature } from '@/lib/require-feature';
+import { computeDailyPlanStreak } from '@/lib/daily-plan';
 
 export const runtime = 'nodejs';
 
@@ -50,13 +51,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
   }
 
-  const plan = await db.dailyPlan.findUnique({
-    where: { userId_dateKey: { userId: payload.userId, dateKey } },
-  });
+  const [plan, streak] = await Promise.all([
+    db.dailyPlan.findUnique({
+      where: { userId_dateKey: { userId: payload.userId, dateKey } },
+    }),
+    computeDailyPlanStreak(payload.userId, todayKey()),
+  ]);
 
   return NextResponse.json({
     dateKey,
     plan: plan ?? null,
+    streak,
   });
 }
 

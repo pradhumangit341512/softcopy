@@ -16,7 +16,7 @@ interface PaymentRow {
 }
 interface Company {
   id: string; companyName: string; plan: string; status: string;
-  seatLimit: number; monthlyFee: number | null;
+  seatLimit: number; adminSeatLimit: number; monthlyFee: number | null;
   subscriptionUntil: string | null; subscriptionExpiry: string | null;
   notes: string | null; createdAt: string;
   users: UserRow[];
@@ -26,6 +26,7 @@ interface Stats {
   activeClients: number; activeProperties: number; totalCommissions: number;
   totalCommissionAmount: number; totalDealVolume: number;
   teamMembers: number; admins: number; seatsUsed: number; seatsLimit: number;
+  adminsUsed: number; adminsLimit: number;
 }
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -39,7 +40,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
   // edit form state
   const [edit, setEdit] = useState({
-    plan: '', seatLimit: 0, monthlyFee: '', subscriptionUntil: '', status: '', notes: '',
+    plan: '', seatLimit: 0, adminSeatLimit: 2, monthlyFee: '', subscriptionUntil: '', status: '', notes: '',
   });
 
   function load() {
@@ -51,6 +52,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         setEdit({
           plan: j.company.plan,
           seatLimit: j.company.seatLimit,
+          adminSeatLimit: j.company.adminSeatLimit ?? 2,
           monthlyFee: j.company.monthlyFee?.toString() ?? '',
           subscriptionUntil: j.company.subscriptionUntil
             ? new Date(j.company.subscriptionUntil).toISOString().slice(0, 10)
@@ -76,6 +78,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({
           plan: edit.plan,
           seatLimit: Number(edit.seatLimit),
+          adminSeatLimit: Number(edit.adminSeatLimit),
           monthlyFee: edit.monthlyFee ? Number(edit.monthlyFee) : null,
           subscriptionUntil: edit.subscriptionUntil,
           status: edit.status,
@@ -172,8 +175,9 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat label="Seats used" value={`${stats.seatsUsed} / ${stats.seatsLimit}`} />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Stat label="Admin seats" value={`${stats.adminsUsed} / ${stats.adminsLimit}`} />
+        <Stat label="Team seats" value={`${stats.seatsUsed} / ${stats.seatsLimit}`} />
         <Stat label="Active leads" value={stats.activeClients.toString()} />
         <Stat label="Active inventory" value={stats.activeProperties.toString()} />
         <Stat label="Commission booked" value={`₹${stats.totalCommissionAmount.toLocaleString('en-IN')}`} />
@@ -197,7 +201,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         {!editing ? (
           <dl className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
             <Row label="Plan" value={company.plan} />
-            <Row label="Seat limit" value={String(company.seatLimit)} />
+            <Row label="Team seat limit" value={String(company.seatLimit)} />
+            <Row label="Admin seat limit" value={String(company.adminSeatLimit)} />
             <Row label="Monthly fee" value={company.monthlyFee ? `₹${company.monthlyFee.toLocaleString('en-IN')}` : '—'} />
             <Row label="Status" value={company.status} />
             <Row label="Subscription until" value={company.subscriptionUntil ? new Date(company.subscriptionUntil).toLocaleDateString() : '—'} />
@@ -206,7 +211,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <SelectField label="Plan" value={edit.plan} onChange={(v) => setEdit({ ...edit, plan: v })} options={['standard','pro','enterprise','custom']} />
-            <NumberField label="Seat limit" value={String(edit.seatLimit)} onChange={(v) => setEdit({ ...edit, seatLimit: Number(v) })} />
+            <NumberField label="Team seat limit" value={String(edit.seatLimit)} onChange={(v) => setEdit({ ...edit, seatLimit: Number(v) })} />
+            <NumberField label="Admin seat limit (partners)" value={String(edit.adminSeatLimit)} onChange={(v) => setEdit({ ...edit, adminSeatLimit: Number(v) })} />
             <NumberField label="Monthly fee (₹)" value={edit.monthlyFee} onChange={(v) => setEdit({ ...edit, monthlyFee: v })} />
             <SelectField label="Status" value={edit.status} onChange={(v) => setEdit({ ...edit, status: v })} options={['active','suspended','expired']} />
             <DateField label="Subscription until" value={edit.subscriptionUntil} onChange={(v) => setEdit({ ...edit, subscriptionUntil: v })} />

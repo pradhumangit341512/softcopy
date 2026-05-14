@@ -35,6 +35,9 @@ model Company {
   // Max number of `role:user` team members the broker admin may create.
   // Enforced at /api/users POST.
   seatLimit          Int             @default(5)
+  // Max number of `role:admin` co-owner/partner logins the company may have.
+  // Controlled exclusively by superadmin. Enforced at /api/users POST.
+  adminSeatLimit     Int             @default(2)
   // What the superadmin (you) charges this customer per cycle.
   monthlyFee         Float?
   // Free-text notes the superadmin keeps about this customer (contract terms,

@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
         plan: true,
         status: true,
         seatLimit: true,
+        adminSeatLimit: true,
         monthlyFee: true,
         subscriptionUntil: true,
         subscriptionExpiry: true,
@@ -132,6 +133,7 @@ export async function POST(req: NextRequest) {
       companyName: data.companyName,
       plan: data.plan,
       seatLimit: data.seatLimit,
+      adminSeatLimit: data.adminSeatLimit,
       monthlyFee: data.monthlyFee ?? null,
       subscriptionUntil: data.subscriptionUntil,
       subscriptionExpiry: data.subscriptionUntil, // keep legacy field in sync
@@ -182,7 +184,7 @@ export async function POST(req: NextRequest) {
     action: 'superadmin.company.create',
     resource: 'Company',
     resourceId: company.id,
-    metadata: { adminUserId: admin.id, adminEmail: admin.email, plan: data.plan, seatLimit: data.seatLimit },
+    metadata: { adminUserId: admin.id, adminEmail: admin.email, plan: data.plan, seatLimit: data.seatLimit, adminSeatLimit: data.adminSeatLimit },
     req,
   });
 

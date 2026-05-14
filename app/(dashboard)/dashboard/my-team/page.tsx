@@ -42,6 +42,7 @@ export default function TeamPage() {
   const { addToast } = useToast();
 
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [seatInfo, setSeatInfo] = useState<{ seatLimit: number; adminSeatLimit: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +79,9 @@ export default function TeamPage() {
       const data = await res.json();
       const list = data.users ?? data;
       setMembers(Array.isArray(list) ? list : []);
+      if (data.seatLimit != null) {
+        setSeatInfo({ seatLimit: data.seatLimit, adminSeatLimit: data.adminSeatLimit ?? 2 });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch team');
     } finally {
@@ -329,6 +333,26 @@ export default function TeamPage() {
           <span className="sm:hidden">Add</span>
         </button>
       </div>
+
+      {/* Seat usage summary */}
+      {seatInfo && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-gray-500">Admin seats (partners)</p>
+            <p className="text-lg font-bold text-gray-900 mt-0.5">
+              {members.filter((m) => m.role === 'admin').length}
+              <span className="text-gray-400 font-normal"> / {seatInfo.adminSeatLimit}</span>
+            </p>
+          </div>
+          <div className="bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-gray-500">Team member seats</p>
+            <p className="text-lg font-bold text-gray-900 mt-0.5">
+              {members.filter((m) => m.role === 'user').length}
+              <span className="text-gray-400 font-normal"> / {seatInfo.seatLimit}</span>
+            </p>
+          </div>
+        </div>
+      )}
 
       {error && (
         <Alert type="error" title="Error" message={error} onClose={() => setError(null)} />

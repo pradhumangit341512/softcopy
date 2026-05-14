@@ -150,7 +150,7 @@ export function OnboardingForm() {
         <h3>Thank you, {form.name.split(' ')[0] || 'friend'}.</h3>
         <p>
           Your enquiry is in. We&rsquo;ll reach out from{' '}
-          <a href="mailto:hello@broker365.in">hello@broker365.in</a> within 24 hours to
+          <a href="mailto:broker365.support@gmail.com">broker365.support@gmail.com</a> within 24 hours to
           schedule your walkthrough.
         </p>
         <button

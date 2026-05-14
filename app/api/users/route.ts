@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       deletedAt: null,
       ...(statusFilter ? { status: statusFilter } : {}),
     };
-    const [users, total] = await Promise.all([
+    const [users, total, company] = await Promise.all([
       db.user.findMany({
         where,
         select: {
@@ -47,10 +47,16 @@ export async function GET(req: NextRequest) {
         take: limit,
       }),
       db.user.count({ where }),
+      db.company.findUnique({
+        where: { id: payload.companyId },
+        select: { seatLimit: true, adminSeatLimit: true },
+      }),
     ]);
 
     return NextResponse.json({
       users,
+      seatLimit: company?.seatLimit ?? 5,
+      adminSeatLimit: company?.adminSeatLimit ?? 2,
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -72,28 +78,25 @@ export async function POST(req: NextRequest) {
     if (!parsed.ok) return parsed.response;
     const data = parsed.data;
 
-    // SEAT-CAP enforcement (only when creating a `user` role; admins
-    // don't count against seat cap because brokers may have multiple
-    // co-owners). Counts ACTIVE non-deleted users in this company.
+    // ── Company status + seat-cap enforcement ──
+    const company = await db.company.findUnique({
+      where: { id: payload.companyId },
+      select: { seatLimit: true, adminSeatLimit: true, status: true },
+    });
+    if (!company) {
+      return NextResponse.json({ error: 'Company not found' }, { status: 404 });
+    }
+    if (company.status !== 'active') {
+      return NextResponse.json(
+        { error: 'Company is suspended; contact support before adding team members.' },
+        { status: 403 }
+      );
+    }
+
     if (data.role === 'user') {
-      const [company, currentSeats] = await Promise.all([
-        db.company.findUnique({
-          where: { id: payload.companyId },
-          select: { seatLimit: true, status: true },
-        }),
-        db.user.count({
-          where: { companyId: payload.companyId, role: 'user', deletedAt: null },
-        }),
-      ]);
-      if (!company) {
-        return NextResponse.json({ error: 'Company not found' }, { status: 404 });
-      }
-      if (company.status !== 'active') {
-        return NextResponse.json(
-          { error: 'Company is suspended; contact support before adding team members.' },
-          { status: 403 }
-        );
-      }
+      const currentSeats = await db.user.count({
+        where: { companyId: payload.companyId, role: 'user', deletedAt: null },
+      });
       if (currentSeats >= company.seatLimit) {
         return NextResponse.json(
           {
@@ -101,6 +104,24 @@ export async function POST(req: NextRequest) {
             error: `Your plan includes ${company.seatLimit} team members. Contact support to increase the limit.`,
             current: currentSeats,
             limit: company.seatLimit,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    if (data.role === 'admin') {
+      const adminLimit = company.adminSeatLimit ?? 2;
+      const currentAdmins = await db.user.count({
+        where: { companyId: payload.companyId, role: 'admin', deletedAt: null },
+      });
+      if (currentAdmins >= adminLimit) {
+        return NextResponse.json(
+          {
+            code: 'admin_seat_limit_reached',
+            error: `Your company allows ${adminLimit} admin(s). Contact support to add more partners.`,
+            current: currentAdmins,
+            limit: adminLimit,
           },
           { status: 403 }
         );

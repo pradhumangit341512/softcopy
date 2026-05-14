@@ -12,16 +12,15 @@
  * `/team`) and on the sign-in routes where a chat bubble would compete
  * with the in-app UI.
  *
- * The phone number literal is intentionally a `91XXXXXXXXXX` placeholder
- * — swap in the real number before public launch OR set
- * `NEXT_PUBLIC_WHATSAPP_NUMBER` in Vercel env and the env value wins.
+ * The fallback number below is the real Broker365 support line. Set
+ * `NEXT_PUBLIC_WHATSAPP_NUMBER` in Vercel env to override per environment.
  */
 
 import { usePathname } from 'next/navigation';
 
-// TODO: replace with the real Broker365 WhatsApp Business number before launch.
-// If you set NEXT_PUBLIC_WHATSAPP_NUMBER in env the env value takes precedence.
-const FALLBACK_NUMBER = '91XXXXXXXXXX';
+// Real Broker365 WhatsApp number (E.164 without the leading '+').
+// Set NEXT_PUBLIC_WHATSAPP_NUMBER in env to override per environment.
+const FALLBACK_NUMBER = '916367766573';
 
 const HIDE_ON_PREFIXES = [
   '/dashboard',
