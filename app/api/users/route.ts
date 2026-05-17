@@ -129,7 +129,11 @@ export async function POST(req: NextRequest) {
     }
 
     const existing = await db.user.findFirst({
-      where: { OR: [{ email: data.email }, { phone: data.phone }] },
+      where: {
+        deletedAt: null,
+        companyId: payload.companyId,
+        OR: [{ email: data.email }, { phone: data.phone }],
+      },
       select: { email: true, phone: true },
     });
     if (existing) {

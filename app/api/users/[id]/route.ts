@@ -185,7 +185,7 @@ export async function DELETE(
 
     const target = await db.user.findFirst({
       where: { id, deletedAt: null },
-      select: { companyId: true, email: true },
+      select: { companyId: true, email: true, phone: true },
     });
     if (!target) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -207,6 +207,7 @@ export async function DELETE(
         deletedAt: new Date(),
         status: "inactive",
         email: `${target.email}${suffix}`,
+        phone: target.phone ? `${target.phone}${suffix}` : undefined,
         tokenVersion: { increment: 1 },
       },
     });
