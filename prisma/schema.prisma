@@ -473,6 +473,11 @@ model Property {
   caseType       String?
   loanStatus     String?
 
+  // Links & media
+  googleMapLink  String?
+  videoPhotoLink String?
+  mediaUrls      String[]   @default([])
+
   // Owner details
   ownerName      String
   // F12 — kept alongside ownerPhones for backward compatibility with code

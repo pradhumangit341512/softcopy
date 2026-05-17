@@ -23,8 +23,11 @@ export enum RequirementType {
   ONE_BHK = '1BHK',
   TWO_BHK = '2BHK',
   THREE_BHK = '3BHK',
+  FOUR_BHK = '4BHK',
   STUDIO = 'Studio',
   PROPERTY = 'Property',
+  VILLA = 'Villa',
+  FARM_HOUSE = 'FarmHouse',
   LAND = 'Land',
   RENTAL = 'Rental',
   COMMERCIAL = 'Commercial',
@@ -193,6 +196,11 @@ export interface Property extends BaseModel {
   caseType?: string;
   /** 'NotApplied' | 'Applied' | 'Sanctioned' | 'Disbursed'. */
   loanStatus?: string;
+
+  // Links & media
+  googleMapLink?: string;
+  videoPhotoLink?: string;
+  mediaUrls?: string[];
 
   // Owner details
   ownerName: string;
@@ -508,8 +516,11 @@ export const REQUIREMENT_TYPE_OPTIONS = [
   { value: RequirementType.ONE_BHK, label: '1 BHK' },
   { value: RequirementType.TWO_BHK, label: '2 BHK' },
   { value: RequirementType.THREE_BHK, label: '3 BHK' },
+  { value: RequirementType.FOUR_BHK, label: '4 BHK' },
   { value: RequirementType.STUDIO, label: 'Studio' },
   { value: RequirementType.PROPERTY, label: 'Property' },
+  { value: RequirementType.VILLA, label: 'Villa' },
+  { value: RequirementType.FARM_HOUSE, label: 'Farm House' },
   { value: RequirementType.LAND, label: 'Land' },
   { value: RequirementType.RENTAL, label: 'Rental' },
   { value: RequirementType.COMMERCIAL, label: 'Commercial' },

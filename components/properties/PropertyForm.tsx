@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useForm, SubmitHandler, useWatch } from 'react-hook-form';
+import { X, MapPin, Video, Plus } from 'lucide-react';
 import { PropertyType, PropertyStatus, BHK_TYPE_OPTIONS, PROPERTY_TYPES_WITH_BHK } from '@/lib/types';
 import { PROPERTY_STATUSES } from '@/lib/constants';
 import { useFeature } from '@/hooks/useFeature';
@@ -20,6 +21,9 @@ export interface PropertyFormValues {
   area?: string;
   description?: string;
   status: string;
+  googleMapLink?: string;
+  videoPhotoLink?: string;
+  mediaUrls?: string[];
   ownerName: string;
   ownerPhone: string;
   /** Extra phone numbers beyond the primary. Server merges with ownerPhone
@@ -58,6 +62,8 @@ export function PropertyForm({
       area: initialData?.area || '',
       description: initialData?.description || '',
       status: initialData?.status || 'Available',
+      googleMapLink: initialData?.googleMapLink || '',
+      videoPhotoLink: initialData?.videoPhotoLink || '',
       ownerName: initialData?.ownerName || '',
       ownerPhone: initialData?.ownerPhone || '',
       ownerEmail: initialData?.ownerEmail || '',
@@ -65,6 +71,10 @@ export function PropertyForm({
   });
 
   const showMultiPhone = useFeature('feature.multi_phone');
+
+  // Media URL list state
+  const [mediaUrls, setMediaUrls] = useState<string[]>(initialData?.mediaUrls ?? []);
+  const [newMediaUrl, setNewMediaUrl] = useState('');
 
   // F12 — Local state for owner phones beyond the primary. The primary
   // (required) phone stays bound to react-hook-form via register('ownerPhone').
@@ -93,12 +103,26 @@ export function PropertyForm({
     ? statusValues
     : [initialStatus, ...statusValues];
 
+  const addMediaUrl = () => {
+    const trimmed = newMediaUrl.trim();
+    if (trimmed && !mediaUrls.includes(trimmed)) {
+      setMediaUrls((prev) => [...prev, trimmed]);
+      setNewMediaUrl('');
+    }
+  };
+
+  const removeMediaUrl = (index: number) => {
+    setMediaUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const submitHandler: SubmitHandler<PropertyFormValues> = async (data) => {
     // Clear bhkType and vacateDate if property type doesn't support it
     if (!PROPERTY_TYPES_WITH_BHK.includes(data.propertyType)) {
       data.bhkType = undefined;
       data.vacateDate = undefined;
     }
+    // Attach media URLs
+    data.mediaUrls = mediaUrls.filter(Boolean);
     // F12 — merge primary phone with the extras into a single deduped list
     // before posting. Server also dedupes; doing it here keeps the network
     // payload minimal and the UI's expectations honest.
@@ -246,7 +270,79 @@ export function PropertyForm({
         </div>
       </section>
 
-      {/* ── 2. Owner Contact ────────────────────────────────── */}
+      {/* ── 2. Links & Media ─────────────────────────────────── */}
+      <section className="space-y-4">
+        <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide border-b pb-2">
+          Links & Media
+        </h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className={labelStyle}>
+              <span className="flex items-center gap-1.5"><MapPin size={14} /> Google Map Link</span>
+            </label>
+            <input
+              {...register('googleMapLink')}
+              type="url"
+              placeholder="https://maps.google.com/..."
+              className={selectStyle}
+            />
+          </div>
+          <div>
+            <label className={labelStyle}>
+              <span className="flex items-center gap-1.5"><Video size={14} /> Video / Photo Link</span>
+            </label>
+            <input
+              {...register('videoPhotoLink')}
+              type="url"
+              placeholder="https://youtube.com/... or drive link"
+              className={selectStyle}
+            />
+          </div>
+        </div>
+
+        {/* Additional media links */}
+        <div>
+          <label className={labelStyle}>
+            <span className="flex items-center gap-1.5"><Video size={14} /> Additional Photo / Video Links</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={newMediaUrl}
+              onChange={(e) => setNewMediaUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMediaUrl(); } }}
+              placeholder="Paste image or video URL and click +"
+              className={selectStyle}
+            />
+            <button
+              type="button"
+              onClick={addMediaUrl}
+              className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex-shrink-0"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+          {mediaUrls.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {mediaUrls.map((url, i) => (
+                <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                  <span className="text-sm text-gray-600 truncate flex-1">{url}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeMediaUrl(i)}
+                    className="text-red-400 hover:text-red-600 flex-shrink-0"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── 3. Owner Contact ────────────────────────────────── */}
       <section className="space-y-4">
         <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide border-b pb-2">
           Owner Contact

@@ -100,6 +100,8 @@ export function AddPropertyWizard({ onSubmit, initialData, isLoading = false }: 
       area: initialData?.area || '',
       description: initialData?.description || '',
       status: initialStatus,
+      googleMapLink: initialData?.googleMapLink || '',
+      videoPhotoLink: initialData?.videoPhotoLink || '',
       ownerName: initialData?.ownerName || '',
       ownerPhone: initialData?.ownerPhone || '',
       ownerEmail: initialData?.ownerEmail || '',

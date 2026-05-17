@@ -348,6 +348,9 @@ export const createPropertySchema = z
     paymentStatus: optionalString,
     caseType: optionalString,
     loanStatus: optionalString,
+    googleMapLink: optionalString,
+    videoPhotoLink: optionalString,
+    mediaUrls: z.array(z.string().trim()).optional().default([]),
     ownerName: z.string().trim().min(2),
     ownerPhone: phoneSchema,
     // F12 — optional secondary numbers. The route normalises this with
