@@ -19,7 +19,7 @@
 
 import { useState } from 'react';
 import { useForm, useWatch, type SubmitHandler } from 'react-hook-form';
-import { ArrowLeft, ArrowRight, Check, User, Building2, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, User, Building2, Sparkles, MapPin, Video, Plus, X } from 'lucide-react';
 import { useFeature } from '@/hooks/useFeature';
 import {
   PropertyType,
@@ -52,7 +52,7 @@ const STEP_FIELDS: Record<StepId, ReadonlyArray<keyof PropertyFormValues>> = {
   1: ['ownerName', 'ownerPhone', 'ownerEmail'],
   2: [
     'propertyName', 'address', 'propertyType', 'bhkType', 'area', 'vacateDate',
-    'askingRent', 'sellingPrice', 'status',
+    'askingRent', 'sellingPrice', 'status', 'googleMapLink', 'videoPhotoLink',
   ],
   3: ['description'],
 };
@@ -73,6 +73,10 @@ export function AddPropertyWizard({ onSubmit, initialData, isLoading = false }: 
   // the primary phone.
   const [extraPhones, setExtraPhones] = useState<string[]>([]);
   const initialExtras = (initialData?.ownerPhones ?? []).slice(1);
+
+  // Media URL list state
+  const [mediaUrls, setMediaUrls] = useState<string[]>(initialData?.mediaUrls ?? []);
+  const [newMediaUrl, setNewMediaUrl] = useState('');
 
   const statusValues: ReadonlyArray<string> = useExtendedPropertyStatuses
     ? PROPERTY_STATUSES
@@ -123,11 +127,25 @@ export function AddPropertyWizard({ onSubmit, initialData, isLoading = false }: 
     setStep((s) => (Math.max(1, s - 1) as StepId));
   }
 
+  const addMediaUrl = () => {
+    const trimmed = newMediaUrl.trim();
+    if (trimmed && !mediaUrls.includes(trimmed)) {
+      setMediaUrls((prev) => [...prev, trimmed]);
+      setNewMediaUrl('');
+    }
+  };
+
+  const removeMediaUrl = (index: number) => {
+    setMediaUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const submitHandler: SubmitHandler<PropertyFormValues> = async (data) => {
     if (!PROPERTY_TYPES_WITH_BHK.includes(data.propertyType)) {
       data.bhkType = undefined;
       data.vacateDate = undefined;
     }
+    // Attach media URLs
+    data.mediaUrls = mediaUrls.filter(Boolean);
     // F12 — merge primary phone + extras into a deduped list before posting.
     if (showMultiPhone) {
       const merged = Array.from(
@@ -261,6 +279,75 @@ export function AddPropertyWizard({ onSubmit, initialData, isLoading = false }: 
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Links & Media */}
+          <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide border-b pb-2 mt-2">
+            Links &amp; Media
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelStyle}>
+                <span className="flex items-center gap-1.5"><MapPin size={14} /> Google Map Link</span>
+              </label>
+              <input
+                {...register('googleMapLink')}
+                type="url"
+                placeholder="https://maps.google.com/..."
+                className={selectStyle}
+              />
+            </div>
+            <div>
+              <label className={labelStyle}>
+                <span className="flex items-center gap-1.5"><Video size={14} /> Video / Photo Link</span>
+              </label>
+              <input
+                {...register('videoPhotoLink')}
+                type="url"
+                placeholder="https://youtube.com/... or drive link"
+                className={selectStyle}
+              />
+            </div>
+          </div>
+
+          {/* Additional media links */}
+          <div>
+            <label className={labelStyle}>
+              <span className="flex items-center gap-1.5"><Video size={14} /> Additional Photo / Video Links</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={newMediaUrl}
+                onChange={(e) => setNewMediaUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMediaUrl(); } }}
+                placeholder="Paste image or video URL and click +"
+                className={selectStyle}
+              />
+              <button
+                type="button"
+                onClick={addMediaUrl}
+                className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex-shrink-0"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+            {mediaUrls.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {mediaUrls.map((url, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <span className="text-sm text-gray-600 truncate flex-1">{url}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeMediaUrl(i)}
+                      className="text-red-400 hover:text-red-600 flex-shrink-0"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       )}
