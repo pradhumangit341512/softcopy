@@ -23,15 +23,18 @@ const MAX_ROWS = 5000;
 
 const rowSchema = z.object({
   clientName: z.string().trim().min(1, 'Name is required'),
-  phone: z.string().trim().min(1, 'Phone is required'),
+  phone: z.string().trim().optional().nullable().default(null)
+    .transform((v) => v || null),
   email: z
     .union([z.string().trim().email(), z.literal('')])
     .optional()
     .nullable()
     .transform((v) => v || null),
   companyName: z.string().trim().optional().nullable().default(null),
-  requirementType: z.string().trim().min(1, 'Requirement type is required'),
-  inquiryType: z.string().trim().min(1, 'Inquiry type is required'),
+  requirementType: z.string().trim().optional().nullable().default(null)
+    .transform((v) => v || null),
+  inquiryType: z.string().trim().optional().nullable().default(null)
+    .transform((v) => v || null),
   budget: z
     .union([
       z.coerce.number().positive(),
@@ -97,23 +100,25 @@ export async function POST(req: NextRequest) {
 
       const data = parsed.data;
 
-      // Duplicate phone check within batch
-      const normalizedPhone = data.phone.replace(/[\s\-()]/g, '');
-      if (seenPhones.has(normalizedPhone)) {
-        skipped.push({ row: rowNum, errors: ['Duplicate phone number in this file'] });
-        continue;
+      // Duplicate phone check within batch (skip if no phone)
+      if (data.phone) {
+        const normalizedPhone = data.phone.replace(/[\s\-()]/g, '');
+        if (seenPhones.has(normalizedPhone)) {
+          skipped.push({ row: rowNum, errors: ['Duplicate phone number in this file'] });
+          continue;
+        }
+        seenPhones.add(normalizedPhone);
       }
-      seenPhones.add(normalizedPhone);
 
       try {
         const client = await db.client.create({
           data: {
             clientName: data.clientName,
-            phone: data.phone,
+            phone: data.phone || '',
             email: data.email,
             companyName: data.companyName,
-            requirementType: data.requirementType,
-            inquiryType: data.inquiryType,
+            requirementType: data.requirementType || '',
+            inquiryType: data.inquiryType || '',
             budget: data.budget ? Number(data.budget) : null,
             preferredLocation: data.preferredLocation,
             address: data.address,

@@ -1,6 +1,6 @@
 'use client';
 
-import { Edit2, Trash2, Phone } from 'lucide-react';
+import { Edit2, Trash2, Phone, MapPin, Video } from 'lucide-react';
 import { Badge } from '@/components/common/Badge';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Button } from '@/components/common/Button';
@@ -33,6 +33,7 @@ export function PropertyTable({ properties, onEdit, onDelete }: PropertyTablePro
           <th className="px-3 py-2.5 text-right min-w-[90px]">Rent</th>
           <th className="px-3 py-2.5 text-right min-w-[100px]">Sale Price</th>
           <th className="px-3 py-2.5 text-left min-w-[70px]">Area</th>
+          <th className="px-3 py-2.5 text-center min-w-[70px]">Links</th>
           <th className="px-3 py-2.5 text-left min-w-[90px]">Vacate</th>
           <th className="px-3 py-2.5 text-left min-w-[85px]">Status</th>
           <th className="px-3 py-2.5 text-left min-w-[80px]">Added</th>
@@ -42,7 +43,7 @@ export function PropertyTable({ properties, onEdit, onDelete }: PropertyTablePro
       <tbody className="divide-y divide-gray-50">
         {properties.length === 0 ? (
           <tr>
-            <td colSpan={12} className="text-center py-12 text-gray-400 text-sm">
+            <td colSpan={13} className="text-center py-12 text-gray-400 text-sm">
               No properties found
             </td>
           </tr>
@@ -135,6 +136,41 @@ export function PropertyTable({ properties, onEdit, onDelete }: PropertyTablePro
 
               <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap text-xs">
                 {property.area || '—'}
+              </td>
+
+              <td className="px-3 py-2.5 text-center">
+                <div className="flex items-center justify-center gap-1.5">
+                  {property.googleMapLink ? (
+                    <a
+                      href={property.googleMapLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Google Map"
+                      className="w-7 h-7 rounded-lg bg-green-50 border border-green-100 flex items-center justify-center text-green-600 hover:bg-green-100 transition-colors"
+                    >
+                      <MapPin size={13} />
+                    </a>
+                  ) : (
+                    <span className="w-7 h-7 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-300">
+                      <MapPin size={13} />
+                    </span>
+                  )}
+                  {property.videoPhotoLink ? (
+                    <a
+                      href={property.videoPhotoLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Video / Photo"
+                      className="w-7 h-7 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 hover:bg-purple-100 transition-colors"
+                    >
+                      <Video size={13} />
+                    </a>
+                  ) : (
+                    <span className="w-7 h-7 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-300">
+                      <Video size={13} />
+                    </span>
+                  )}
+                </div>
               </td>
 
               <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap text-xs">

@@ -10,22 +10,54 @@ import { Button } from '@/components/common/Button';
 const COLUMN_MAP: Record<string, string> = {
   'lead name': 'clientName', 'leadname': 'clientName', 'lead': 'clientName',
   'client name': 'clientName', 'clientname': 'clientName', 'name': 'clientName', 'client': 'clientName',
+  'customer name': 'clientName', 'customername': 'clientName', 'customer': 'clientName',
+  'party name': 'clientName', 'partyname': 'clientName', 'party': 'clientName',
+  'full name': 'clientName', 'fullname': 'clientName',
+
   'phone': 'phone', 'mobile': 'phone', 'contact': 'phone', 'phone number': 'phone', 'mobile number': 'phone',
-  'email': 'email', 'email address': 'email', 'mail': 'email',
+  'phone no': 'phone', 'phone no.': 'phone', 'mobile no': 'phone', 'mobile no.': 'phone',
+  'contact no': 'phone', 'contact no.': 'phone', 'contact number': 'phone',
+  'mob': 'phone', 'mob no': 'phone', 'mob no.': 'phone', 'mob number': 'phone',
+  'cell': 'phone', 'cell no': 'phone', 'cell no.': 'phone',
+  'whatsapp': 'phone', 'whatsapp no': 'phone', 'whatsapp no.': 'phone', 'whatsapp number': 'phone',
+  'telephone': 'phone', 'tel': 'phone', 'tel no': 'phone',
+  'number': 'phone', 'ph': 'phone', 'ph no': 'phone',
+
+  'email': 'email', 'email address': 'email', 'mail': 'email', 'email id': 'email', 'emailid': 'email',
+
   'company': 'companyName', 'company name': 'companyName', 'companyname': 'companyName',
+  'firm': 'companyName', 'firm name': 'companyName',
+
   'requirement': 'requirementType', 'requirement type': 'requirementType', 'requirementtype': 'requirementType', 'type': 'requirementType',
+  'req type': 'requirementType', 'reqtype': 'requirementType', 'req': 'requirementType',
+  'property type': 'requirementType', 'propertytype': 'requirementType',
+  'looking for': 'requirementType', 'interest': 'requirementType', 'interested in': 'requirementType',
+  'buy/sell': 'requirementType', 'buy sell': 'requirementType', 'buy / sell': 'requirementType',
+  'purpose': 'requirementType', 'category': 'requirementType',
+
   'inquiry': 'inquiryType', 'inquiry type': 'inquiryType', 'inquirytype': 'inquiryType',
-  'budget': 'budget',
+  'enquiry': 'inquiryType', 'enquiry type': 'inquiryType', 'enquirytype': 'inquiryType',
+  'inquiry mode': 'inquiryType', 'enquiry mode': 'inquiryType',
+  'lead type': 'inquiryType', 'leadtype': 'inquiryType',
+  'source type': 'inquiryType', 'sourcetype': 'inquiryType',
+  'mode': 'inquiryType', 'channel': 'inquiryType',
+
+  'budget': 'budget', 'price': 'budget', 'amount': 'budget', 'budget range': 'budget',
+
   'location': 'preferredLocation', 'preferred location': 'preferredLocation', 'preferredlocation': 'preferredLocation', 'area': 'preferredLocation',
+  'city': 'preferredLocation', 'locality': 'preferredLocation', 'sector': 'preferredLocation', 'zone': 'preferredLocation',
+  'preferred area': 'preferredLocation',
+
   'address': 'address',
   'status': 'status',
   'source': 'source', 'lead source': 'source',
-  'notes': 'notes', 'note': 'notes', 'remark': 'notes', 'remarks': 'notes',
+  'notes': 'notes', 'note': 'notes', 'remark': 'notes', 'remarks': 'notes', 'comment': 'notes', 'comments': 'notes',
   'follow up': 'followUpDate', 'follow up date': 'followUpDate', 'followupdate': 'followUpDate', 'followup': 'followUpDate',
+  'next follow up': 'followUpDate', 'nfd': 'followUpDate',
 };
 
 function normalizeHeader(h: string): string {
-  return h.toLowerCase().replace(/[_\-]/g, ' ').replace(/\s+/g, ' ').trim();
+  return h.toLowerCase().replace(/[_\-\.]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 interface ParsedRow {
@@ -112,25 +144,51 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
         return;
       }
 
-      // Read header row (row 1)
-      const headerRow = sheet.getRow(1);
-      const colMap: Record<number, string> = {};
-      headerRow.eachCell((cell, colNumber) => {
-        const raw = String(cell.value ?? '').trim();
-        const normalized = normalizeHeader(raw);
-        const field = COLUMN_MAP[normalized];
-        if (field) colMap[colNumber] = field;
-      });
+      // Try to detect the header row (row 1 first, then row 2 as fallback)
+      let headerRowNum = 1;
+      let colMap: Record<number, string> = {};
+      const unmatchedHeaders: string[] = [];
 
-      if (!colMap || Object.keys(colMap).length === 0) {
-        setError('Could not match any column headers. Make sure your Excel has headers like: Lead Name, Phone, Requirement Type, Inquiry Type');
+      for (const tryRow of [1, 2]) {
+        const headerRow = sheet.getRow(tryRow);
+        const tempMap: Record<number, string> = {};
+        const tempUnmatched: string[] = [];
+
+        headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+          const raw = String(cell.value ?? '').trim();
+          if (!raw) return;
+          const normalized = normalizeHeader(raw);
+          const field = COLUMN_MAP[normalized];
+          if (field) {
+            tempMap[colNumber] = field;
+          } else {
+            tempUnmatched.push(raw);
+          }
+        });
+
+        if (Object.keys(tempMap).length > Object.keys(colMap).length) {
+          colMap = tempMap;
+          headerRowNum = tryRow;
+          unmatchedHeaders.length = 0;
+          unmatchedHeaders.push(...tempUnmatched);
+        }
+
+        if (Object.keys(colMap).length >= 3) break; // Good enough match
+      }
+
+      if (Object.keys(colMap).length === 0) {
+        const hint = unmatchedHeaders.length > 0
+          ? ` Found headers: ${unmatchedHeaders.slice(0, 8).join(', ')}`
+          : '';
+        setError(`Could not match any column headers.${hint} Make sure your Excel has headers like: Lead Name, Phone, Requirement Type, Inquiry Type`);
         return;
       }
 
       const rows: ParsedRow[] = [];
-      const maxRows = Math.min(sheet.rowCount, 5001); // +1 for header
+      const dataStartRow = headerRowNum + 1;
+      const maxRows = Math.min(sheet.rowCount, headerRowNum + 5000);
 
-      for (let i = 2; i <= maxRows; i++) {
+      for (let i = dataStartRow; i <= maxRows; i++) {
         const row = sheet.getRow(i);
         const data: Record<string, unknown> = {};
         let hasAnyValue = false;
@@ -157,12 +215,13 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
 
         if (!hasAnyValue) continue; // Skip completely empty rows
 
-        // Validate required fields client-side
+        // Validate required fields — only flag missing if the column was mapped
+        const mappedFields = new Set(Object.values(colMap));
         const errors: string[] = [];
         if (!data.clientName) errors.push('Name missing');
-        if (!data.phone) errors.push('Phone missing');
-        if (!data.requirementType) errors.push('Requirement type missing');
-        if (!data.inquiryType) errors.push('Inquiry type missing');
+        if (mappedFields.has('phone') && !data.phone) errors.push('Phone missing');
+        if (mappedFields.has('requirementType') && !data.requirementType) errors.push('Requirement type missing');
+        if (mappedFields.has('inquiryType') && !data.inquiryType) errors.push('Inquiry type missing');
 
         rows.push({
           rowNum: i,
