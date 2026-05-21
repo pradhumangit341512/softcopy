@@ -60,6 +60,40 @@ function normalizeHeader(h: string): string {
   return h.toLowerCase().replace(/[_\-\.]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Clean and normalize phone numbers from Excel.
+ *  - Converts numeric values (avoids scientific notation)
+ *  - Strips spaces, dashes, parentheses
+ *  - Adds +91 if 10-digit Indian number */
+function normalizePhone(val: unknown): string {
+  if (val === null || val === undefined) return '';
+
+  // Handle ExcelJS hyperlink objects { text: '...', hyperlink: 'tel:...' }
+  if (typeof val === 'object' && val !== null && 'text' in val) {
+    val = (val as { text: string }).text;
+  }
+
+  // Convert number to string without scientific notation
+  let phone = typeof val === 'number'
+    ? val.toFixed(0)
+    : String(val).trim();
+
+  // Strip all non-digit chars
+  phone = phone.replace(/[^\d]/g, '');
+
+  if (!phone) return '';
+
+  // Add +91 for 10-digit Indian numbers
+  if (phone.length === 10 && /^[6-9]/.test(phone)) {
+    phone = '91' + phone;
+  }
+  // Remove leading 0 (e.g., 09876543210 → 919876543210)
+  if (phone.length === 11 && phone.startsWith('0')) {
+    phone = '91' + phone.slice(1);
+  }
+
+  return '+' + phone;
+}
+
 interface ParsedRow {
   rowNum: number;
   data: Record<string, unknown>;
@@ -132,7 +166,24 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
         const lines = text.split(/\r?\n/).filter((l) => l.trim());
         const ws = workbook.addWorksheet('CSV');
         for (const line of lines) {
-          ws.addRow(line.split(',').map((c) => c.replace(/^"|"$/g, '').trim()));
+          // Parse CSV properly: handle quoted fields containing commas
+          const cells: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let ci = 0; ci < line.length; ci++) {
+            const ch = line[ci];
+            if (inQuotes) {
+              if (ch === '"' && line[ci + 1] === '"') { current += '"'; ci++; }
+              else if (ch === '"') { inQuotes = false; }
+              else { current += ch; }
+            } else {
+              if (ch === '"') { inQuotes = true; }
+              else if (ch === ',') { cells.push(current.trim()); current = ''; }
+              else { current += ch; }
+            }
+          }
+          cells.push(current.trim());
+          ws.addRow(cells);
         }
       } else {
         await workbook.xlsx.load(buffer);
@@ -198,6 +249,10 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
           const cell = row.getCell(col);
           let val = cell.value;
 
+          // Handle ExcelJS hyperlink objects { text: '...', hyperlink: '...' }
+          if (val && typeof val === 'object' && 'hyperlink' in val) {
+            val = (val as { text: string }).text;
+          }
           // Handle ExcelJS rich text
           if (val && typeof val === 'object' && 'richText' in val) {
             val = (val as { richText: Array<{ text: string }> }).richText.map((t) => t.text).join('');
@@ -207,7 +262,14 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
             val = val.toISOString();
           }
 
-          if (val !== null && val !== undefined && String(val).trim() !== '') {
+          // Phone field — normalize properly (handles numbers, +91, etc.)
+          if (field === 'phone') {
+            const cleaned = normalizePhone(val);
+            if (cleaned) {
+              hasAnyValue = true;
+              data[field] = cleaned;
+            }
+          } else if (val !== null && val !== undefined && String(val).trim() !== '') {
             hasAnyValue = true;
             data[field] = typeof val === 'number' ? val : String(val).trim();
           }
@@ -215,13 +277,16 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
 
         if (!hasAnyValue) continue; // Skip completely empty rows
 
-        // Validate required fields — only flag missing if the column was mapped
+        // Auto-fill defaults for missing required fields
+        if (!data.requirementType) data.requirementType = 'Property';
+        if (!data.inquiryType) data.inquiryType = 'Buy';
+        if (!data.status) data.status = 'New';
+
+        // Validate — only name is truly required
         const mappedFields = new Set(Object.values(colMap));
         const errors: string[] = [];
         if (!data.clientName) errors.push('Name missing');
         if (mappedFields.has('phone') && !data.phone) errors.push('Phone missing');
-        if (mappedFields.has('requirementType') && !data.requirementType) errors.push('Requirement type missing');
-        if (mappedFields.has('inquiryType') && !data.inquiryType) errors.push('Inquiry type missing');
 
         rows.push({
           rowNum: i,

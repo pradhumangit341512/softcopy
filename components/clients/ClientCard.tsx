@@ -177,6 +177,16 @@ export function ClientCard({
             </p>
           </div>
         )}
+
+        {/* Next Follow Up */}
+        {client.nextFollowUp && (
+          <div className="bg-blue-50 rounded-lg p-3">
+            <p className="text-xs text-blue-600 font-medium mb-1">Next Follow Up</p>
+            <p className="text-sm font-semibold text-blue-800">
+              {formatDate(client.nextFollowUp)}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Source & Notes */}

@@ -9,7 +9,7 @@ import { Loader } from '@/components/common/Loader';
 import { Alert } from '@/components/common/Alert';
 import { Badge } from '@/components/common/Badge';
 import { useAuth } from '@/hooks/useAuth';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, getFollowUpStatus } from '@/lib/utils';
 
 import type { Client } from '@/lib/types';
 
@@ -176,12 +176,23 @@ export default function PipelinePage() {
                           </p>
                         ) : null}
 
-                        {client.followUpDate && (
-                          <p className="text-xs text-gray-500 flex items-center gap-1.5">
-                            <Calendar size={11} className="text-gray-400 shrink-0" />
-                            {formatDate(client.followUpDate)}
-                          </p>
-                        )}
+                        {(() => {
+                          const date = client.nextFollowUp || client.followUpDate;
+                          const status = getFollowUpStatus(date);
+                          if (!date) return null;
+                          const isOverdue = status?.key === 'overdue';
+                          const isToday = status?.key === 'today';
+                          return (
+                            <p className={`text-xs flex items-center gap-1.5 ${
+                              isOverdue ? 'text-red-600 font-semibold' : isToday ? 'text-amber-600 font-semibold' : 'text-gray-500'
+                            }`}>
+                              <Calendar size={11} className={`shrink-0 ${isOverdue ? 'text-red-400' : isToday ? 'text-amber-400' : 'text-gray-400'}`} />
+                              {formatDate(date)}
+                              {isOverdue && ' (overdue)'}
+                              {isToday && ' (today)'}
+                            </p>
+                          );
+                        })()}
 
                         {client.creator?.name && (
                           <p className="text-xs text-gray-400 pt-1 border-t border-gray-50 mt-2">

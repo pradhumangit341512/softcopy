@@ -17,6 +17,7 @@ export interface ClientFormData {
   visitingDate?: string;
   visitingTime?: string;
   followUpDate?: string;
+  nextFollowUp?: string;
   status: string;
   source?: string;
   notes?: string;

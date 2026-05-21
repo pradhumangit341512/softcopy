@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Edit2, Trash2, Phone, FileText, X, ArrowRightLeft } from 'lucide-react';
+import { Edit2, Trash2, Phone, FileText, X, ArrowRightLeft, AlertTriangle, Clock, CalendarCheck } from 'lucide-react';
 import { Badge } from '@/components/common/Badge';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, getFollowUpStatus } from '@/lib/utils';
 import { Button } from '@/components/common/Button';
 import { WhatsAppButton } from '@/components/common/WhatsAppButton';
 
@@ -20,6 +20,32 @@ interface ClientTableProps {
 
 function cleanPhone(phone: string): string {
   return phone.replace(/[\s\-()]/g, '');
+}
+
+const FOLLOW_UP_ICONS = {
+  overdue: AlertTriangle,
+  today: Clock,
+  tomorrow: CalendarCheck,
+  future: CalendarCheck,
+} as const;
+
+function FollowUpCell({ date }: { date: Date | string | undefined | null }) {
+  const status = getFollowUpStatus(date);
+  if (!date) return <td className="px-4 py-3 whitespace-nowrap"><span className="text-xs text-gray-400">—</span></td>;
+  const Icon = status ? FOLLOW_UP_ICONS[status.key] : null;
+  return (
+    <td className="px-4 py-3 whitespace-nowrap">
+      <div>
+        <p className="text-xs text-gray-700">{formatDate(date)}</p>
+        {status && Icon && (
+          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 ${status.style}`}>
+            <Icon size={10} />
+            {status.label}
+          </span>
+        )}
+      </div>
+    </td>
+  );
 }
 
 /** Table component for displaying a list of clients with inline actions */
@@ -63,6 +89,7 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer }: ClientTab
             <th className="px-4 py-3 text-left">Location</th>
             <th className="px-4 py-3 text-left">Visit Date</th>
             <th className="px-4 py-3 text-left">Follow Up</th>
+            <th className="px-4 py-3 text-left">Next Follow Up</th>
             <th className="px-4 py-3 text-left">Notes</th>
             <th className="px-4 py-3 text-left">Visited</th>
             <th className="px-4 py-3 text-left">Status</th>
@@ -73,7 +100,7 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer }: ClientTab
         <tbody className="divide-y divide-gray-100 bg-white">
           {clients.length === 0 ? (
             <tr>
-              <td colSpan={11} className="text-center py-12 text-gray-400 text-sm">
+              <td colSpan={12} className="text-center py-12 text-gray-400 text-sm">
                 No clients found
               </td>
             </tr>
@@ -185,9 +212,10 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer }: ClientTab
                 </td>
 
                 {/* FOLLOW UP */}
-                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                  {formatDate(client.followUpDate)}
-                </td>
+                <FollowUpCell date={client.followUpDate} />
+
+                {/* NEXT FOLLOW UP */}
+                <FollowUpCell date={client.nextFollowUp} />
 
                 {/* NOTES — click to expand popup */}
                 <td className="px-4 py-3 relative">

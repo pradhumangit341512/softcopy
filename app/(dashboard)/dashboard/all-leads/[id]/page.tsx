@@ -71,11 +71,12 @@ export default function EditClientPage() {
       .catch(() => {});
   }, [isAdmin]);
 
-  const handleSubmit = async (data: Partial<Client> & { assignedTo?: string }) => {
+  const handleSubmit = async (data: Partial<Client> & { assignedTo?: string; nextFollowUp?: Date }) => {
     const formData: Partial<ClientFormData> = {
       ...data,
       visitingDate: data.visitingDate instanceof Date ? data.visitingDate.toISOString() : data.visitingDate as string | undefined,
       followUpDate: data.followUpDate instanceof Date ? data.followUpDate.toISOString() : data.followUpDate as string | undefined,
+      nextFollowUp: data.nextFollowUp instanceof Date ? data.nextFollowUp.toISOString() : data.nextFollowUp as string | undefined,
     };
     const success = await updateClient(clientId, formData);
     if (success) {

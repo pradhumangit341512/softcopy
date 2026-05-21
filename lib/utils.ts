@@ -29,6 +29,21 @@ export function getDaysUntil(date: Date | string): number {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+/** Classify a follow-up date as overdue, today, tomorrow, or future */
+export function getFollowUpStatus(date: Date | string | undefined | null): { label: string; style: string; key: 'overdue' | 'today' | 'tomorrow' | 'future' } | null {
+  if (!date) return null;
+  const d = new Date(date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return { label: `${Math.abs(diffDays)}d overdue`, style: 'text-red-600 bg-red-50', key: 'overdue' };
+  if (diffDays === 0) return { label: 'Today', style: 'text-amber-700 bg-amber-50', key: 'today' };
+  if (diffDays === 1) return { label: 'Tomorrow', style: 'text-blue-600 bg-blue-50', key: 'tomorrow' };
+  return { label: `in ${diffDays}d`, style: 'text-green-700 bg-green-50', key: 'future' };
+}
+
 /** Return Tailwind CSS classes for a given client status */
 export function getStatusColor(status: string): string {
   const colors: Record<string, string> = {

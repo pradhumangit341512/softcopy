@@ -89,6 +89,12 @@ export async function PUT(
 
     if (body.status !== undefined) updateData.status = body.status;
 
+    // Auto-set lastContactDate when visit or follow-up is completed
+    if (body.propertyVisited === true || body.propertyVisited === 'true' ||
+        body.visitStatus === 'Visited' || body.followUpDate !== undefined) {
+      updateData.lastContactDate = new Date();
+    }
+
     // Admin can reassign the lead to another teammate. After F2, reassign
     // updates `ownedBy` (current owner) rather than `createdBy` (audit anchor)
     // so capture history is preserved. Goes through the same audit trail

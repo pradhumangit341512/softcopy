@@ -134,6 +134,8 @@ export interface Client extends BaseModel {
   visitingDate?: Date;
   visitingTime?: string;
   followUpDate?: Date;
+  nextFollowUp?: Date;
+  lastContactDate?: Date;
 
   source?: string;
   notes?: string;
@@ -157,10 +159,12 @@ export interface Client extends BaseModel {
 
 export type ClientFormValues = Omit<
   Client,
-  'visitingDate' | 'followUpDate' | 'createdAt' | 'updatedAt'
+  'visitingDate' | 'followUpDate' | 'nextFollowUp' | 'lastContactDate' | 'createdAt' | 'updatedAt'
 > & {
   visitingDate?: string;     // ✅ MUST be string
   followUpDate?: string;     // ✅ MUST be string
+  nextFollowUp?: string;     // ✅ MUST be string
+  lastContactDate?: string;  // ✅ MUST be string
 };
 
 

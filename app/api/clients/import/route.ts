@@ -31,10 +31,10 @@ const rowSchema = z.object({
     .nullable()
     .transform((v) => v || null),
   companyName: z.string().trim().optional().nullable().default(null),
-  requirementType: z.string().trim().optional().nullable().default(null)
-    .transform((v) => v || null),
-  inquiryType: z.string().trim().optional().nullable().default(null)
-    .transform((v) => v || null),
+  requirementType: z.string().trim().optional().nullable().default('Property')
+    .transform((v) => v || 'Property'),
+  inquiryType: z.string().trim().optional().nullable().default('Buy')
+    .transform((v) => v || 'Buy'),
   budget: z
     .union([
       z.coerce.number().positive(),
@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
             followUpDate: data.followUpDate ? new Date(data.followUpDate) : null,
             companyId: payload.companyId,
             createdBy: payload.userId,
+            ownedBy: payload.userId,
             deletedAt: null,
           },
           select: { id: true, clientName: true },

@@ -24,6 +24,7 @@ import { Button } from '@/components/common/Button';
 const formSchema = clientSchema.extend({
   visitingDate: z.string().optional(),
   followUpDate: z.string().optional(),
+  nextFollowUp: z.string().optional(),
 });
 
 type ClientFormValues = z.infer<typeof formSchema>;
@@ -96,6 +97,9 @@ export function ClientForm({
         followUpDate:      initialData.followUpDate
           ? new Date(initialData.followUpDate).toISOString().split('T')[0]
           : '',
+        nextFollowUp:      initialData.nextFollowUp
+          ? new Date(initialData.nextFollowUp).toISOString().split('T')[0]
+          : '',
         status:            initialData.status ?? 'New',
         source:            initialData.source ?? '',
         notes:             initialData.notes ?? '',
@@ -114,10 +118,11 @@ export function ClientForm({
   });
 
   const submitHandler: SubmitHandler<ClientFormValues> = async (data) => {
-    const payload: Partial<Client> & { assignedTo?: string } = {
+    const payload: Partial<Client> & { assignedTo?: string; nextFollowUp?: Date } = {
       ...data,
       visitingDate: data.visitingDate ? new Date(data.visitingDate) : undefined,
       followUpDate: data.followUpDate ? new Date(data.followUpDate) : undefined,
+      nextFollowUp: data.nextFollowUp ? new Date(data.nextFollowUp) : undefined,
     };
     if (isAdmin && assignedTo && assignedTo !== currentUserId) {
       payload.assignedTo = assignedTo;
@@ -283,7 +288,7 @@ export function ClientForm({
       />
 
       {/* ── Dates ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <Input
             label="Visiting Date"
@@ -299,6 +304,15 @@ export function ClientForm({
             {...register('followUpDate')}
             error={errors.followUpDate?.message}
           />
+        </div>
+        <div>
+          <Input
+            label="Next Follow Up"
+            type="date"
+            {...register('nextFollowUp')}
+            error={errors.nextFollowUp?.message}
+          />
+          <p className="text-xs text-gray-400 mt-0.5">Schedule next follow-up after visit</p>
         </div>
       </div>
 
