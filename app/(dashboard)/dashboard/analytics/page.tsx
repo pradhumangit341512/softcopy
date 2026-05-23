@@ -63,34 +63,40 @@ const StatCard = ({
   color: string;
   sub?: string;
   trend?: 'up' | 'down';
-}) => (
-  <div
-    className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 flex flex-col gap-3 sm:gap-4
-      hover:shadow-md transition-shadow duration-200"
-  >
-    <div className="flex items-center justify-between">
-      <span className="text-xs sm:text-sm font-medium text-gray-500">{title}</span>
-      <div
-        className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0"
-        style={{ backgroundColor: `${color}18` }}
-      >
-        <Icon size={18} style={{ color }} />
+}) => {
+  const isLongValue = String(value).length > 8;
+  return (
+    <div
+      className="bg-white rounded-2xl p-3 sm:p-5 shadow-sm border border-gray-100 flex flex-col gap-2 sm:gap-4
+        hover:shadow-md transition-shadow duration-200 min-w-0"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] sm:text-sm font-medium text-gray-500 truncate">{title}</span>
+        <div
+          className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ backgroundColor: `${color}18` }}
+        >
+          <Icon className="w-4 h-4 sm:w-[18px] sm:h-[18px]" style={{ color }} />
+        </div>
+      </div>
+      <div>
+        <p className={`font-bold text-gray-900 tracking-tight leading-tight truncate
+          ${isLongValue ? 'text-base sm:text-xl lg:text-2xl' : 'text-xl sm:text-2xl lg:text-3xl'}`}>
+          {value}
+        </p>
+        {sub && (
+          <div
+            className={`inline-flex items-center gap-0.5 text-[10px] sm:text-xs font-semibold px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full mt-1.5
+              ${trend === 'up' ? 'text-emerald-600 bg-emerald-50' : 'text-red-500 bg-red-50'}`}
+          >
+            {trend === 'up' ? <ArrowUpRight size={10} className="sm:w-3 sm:h-3" /> : <ArrowDownRight size={10} className="sm:w-3 sm:h-3" />}
+            {sub}
+          </div>
+        )}
       </div>
     </div>
-    <div className="flex items-end justify-between">
-      <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 tracking-tight">{value}</span>
-      {sub && (
-        <div
-          className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full
-            ${trend === 'up' ? 'text-emerald-600 bg-emerald-50' : 'text-red-500 bg-red-50'}`}
-        >
-          {trend === 'up' ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-          {sub}
-        </div>
-      )}
-    </div>
-  </div>
-);
+  );
+};
 
 // Custom tooltip for charts
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
@@ -188,10 +194,15 @@ export default function AnalyticsPage() {
     );
   }
 
-  const pieData = data.leadsByStatus.map((s) => ({
-    name: s.status,
-    value: s._count,
-  }));
+  // Group statuses: show top 6, merge the rest into "Other"
+  const MAX_SLICES = 6;
+  const sorted = [...data.leadsByStatus].sort((a, b) => b._count - a._count);
+  const topStatuses = sorted.slice(0, MAX_SLICES);
+  const otherCount = sorted.slice(MAX_SLICES).reduce((sum, s) => sum + s._count, 0);
+  const pieData = [
+    ...topStatuses.map((s) => ({ name: s.status, value: s._count })),
+    ...(otherCount > 0 ? [{ name: 'Other', value: otherCount }] : []),
+  ];
 
   const summaryCards = [
     {
@@ -242,7 +253,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
         {summaryCards.map((card) => (
           <StatCard key={card.title} {...card} />
         ))}
@@ -253,12 +264,13 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
           {/* Line Chart */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 overflow-hidden">
             <div className="mb-4">
               <h2 className="text-base font-semibold text-gray-800">Monthly Leads</h2>
               <p className="text-xs text-gray-400 mt-0.5">Leads vs Deals over time</p>
             </div>
-            <ResponsiveContainer width="100%" height={240}>
+            <div className="h-[200px] sm:h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.monthlyData}
                 margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -276,15 +288,17 @@ export default function AnalyticsPage() {
                   activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Bar Chart */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 overflow-hidden">
             <div className="mb-4">
               <h2 className="text-base font-semibold text-gray-800">Monthly Comparison</h2>
               <p className="text-xs text-gray-400 mt-0.5">Side-by-side leads and deals</p>
             </div>
-            <ResponsiveContainer width="100%" height={240}>
+            <div className="h-[200px] sm:h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.monthlyData}
                 margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
                 barCategoryGap="30%">
@@ -299,6 +313,7 @@ export default function AnalyticsPage() {
                 <Bar dataKey="deals" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}
@@ -307,12 +322,13 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
         {/* Pie Chart */}
-        <div className="lg:col-span-3 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
+        <div className="lg:col-span-3 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 overflow-hidden">
           <div className="mb-4">
             <h2 className="text-base font-semibold text-gray-800">Leads by Status</h2>
             <p className="text-xs text-gray-400 mt-0.5">Distribution across pipeline stages</p>
           </div>
-          <ResponsiveContainer width="100%" height={280}>
+          <div className="h-[220px] sm:h-[280px]">
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={pieData}
@@ -320,7 +336,7 @@ export default function AnalyticsPage() {
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                outerRadius="75%"
+                outerRadius="80%"
                 labelLine={false}
                 label={renderCustomLabel}
               >
@@ -333,23 +349,32 @@ export default function AnalyticsPage() {
                 ))}
               </Pie>
               <Tooltip content={<CustomTooltip />} />
-              <Legend
-                formatter={(value) => (
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>{value}</span>
-                )}
-              />
             </PieChart>
           </ResponsiveContainer>
+          </div>
+          {/* Inline legend — contained, no overflow */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-gray-100">
+            {pieData.map((entry, index) => (
+              <div key={entry.name} className="flex items-center gap-1.5">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                />
+                <span className="text-xs text-gray-600 truncate max-w-[120px]">{entry.name}</span>
+                <span className="text-xs font-semibold text-gray-800">{entry.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Status Breakdown List */}
-        <div className="lg:col-span-2 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
+        <div className="lg:col-span-2 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 overflow-hidden">
           <div className="mb-4">
             <h2 className="text-base font-semibold text-gray-800">Status Breakdown</h2>
             <p className="text-xs text-gray-400 mt-0.5">Count per stage</p>
           </div>
-          <div className="space-y-3">
-            {data.leadsByStatus.map((item, index) => {
+          <div className="space-y-3 max-h-[300px] sm:max-h-[400px] overflow-y-auto pr-1">
+            {sorted.map((item, index) => {
               const total = data.leadsByStatus.reduce((s, i) => s + i._count, 0);
               const pct = total ? Math.round((item._count / total) * 100) : 0;
               const color = COLORS[index % COLORS.length];

@@ -89,9 +89,11 @@ export async function PUT(
 
     if (body.status !== undefined) updateData.status = body.status;
 
-    // Auto-set lastContactDate when visit or follow-up is completed
-    if (body.propertyVisited === true || body.propertyVisited === 'true' ||
-        body.visitStatus === 'Visited' || body.followUpDate !== undefined) {
+    // Auto-set lastContactDate when an actual contact event occurs,
+    // but only if the caller didn't explicitly supply their own value.
+    if (body.lastContactDate === undefined &&
+        (body.propertyVisited === true || body.propertyVisited === 'true' ||
+         body.visitStatus === 'Visited')) {
       updateData.lastContactDate = new Date();
     }
 

@@ -16,6 +16,9 @@ interface ClientTableProps {
   /** When provided, a Transfer button appears next to Edit/Delete for each
    * row. Parent decides whether to show this based on feature gating. */
   onTransfer?: (client: Client) => void;
+  /** When provided, checkboxes appear for bulk selection. */
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
 }
 
 function cleanPhone(phone: string): string {
@@ -49,7 +52,27 @@ function FollowUpCell({ date }: { date: Date | string | undefined | null }) {
 }
 
 /** Table component for displaying a list of clients with inline actions */
-export function ClientTable({ clients, onEdit, onDelete, onTransfer }: ClientTableProps) {
+export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds, onSelectionChange }: ClientTableProps) {
+  const selectable = !!selectedIds && !!onSelectionChange;
+  const allSelected = selectable && clients.length > 0 && clients.every((c) => selectedIds.has(c.id));
+  const someSelected = selectable && clients.some((c) => selectedIds.has(c.id)) && !allSelected;
+
+  function toggleAll() {
+    if (!onSelectionChange) return;
+    if (allSelected) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(clients.map((c) => c.id)));
+    }
+  }
+
+  function toggleOne(id: string) {
+    if (!onSelectionChange || !selectedIds) return;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  }
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -76,11 +99,22 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer }: ClientTab
 
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-      <table className="w-full text-sm min-w-[1000px]">
+      <table className="w-full text-sm min-w-[1050px]">
 
         {/* ── HEADER ── */}
         <thead className="bg-gray-100 text-gray-600 uppercase text-xs tracking-wider">
           <tr>
+            {selectable && (
+              <th className="px-3 py-3 w-10 text-center">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = !!someSelected; }}
+                  onChange={toggleAll}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+              </th>
+            )}
             <th className="px-4 py-3 text-center w-20">Actions</th>
             <th className="px-4 py-3 text-left">Client</th>
             <th className="px-4 py-3 text-left">Contact</th>
@@ -100,7 +134,7 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer }: ClientTab
         <tbody className="divide-y divide-gray-100 bg-white">
           {clients.length === 0 ? (
             <tr>
-              <td colSpan={12} className="text-center py-12 text-gray-400 text-sm">
+              <td colSpan={selectable ? 13 : 12} className="text-center py-12 text-gray-400 text-sm">
                 No clients found
               </td>
             </tr>
@@ -108,8 +142,20 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer }: ClientTab
             clients.map((client) => (
               <tr
                 key={client.id}
-                className="hover:bg-gray-50 transition-colors duration-150"
+                className={`hover:bg-gray-50 transition-colors duration-150 ${selectable && selectedIds?.has(client.id) ? 'bg-blue-50/50' : ''}`}
               >
+
+                {/* CHECKBOX */}
+                {selectable && (
+                  <td className="px-3 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds?.has(client.id) ?? false}
+                      onChange={() => toggleOne(client.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </td>
+                )}
 
                 {/* ACTIONS */}
                 <td className="px-4 py-3 text-center">

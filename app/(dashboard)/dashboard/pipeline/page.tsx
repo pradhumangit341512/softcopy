@@ -39,7 +39,7 @@ export default function PipelinePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/clients?page=1', { credentials: 'include' });
+      const res = await fetch('/api/clients?page=1&limit=100', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch pipeline');
       const data = await res.json();
       setClients(data.clients || []);
@@ -114,7 +114,7 @@ export default function PipelinePage() {
           return (
             <div
               key={stage.key}
-              className={`rounded-2xl border ${stage.color} flex flex-col min-h-[400px]`}
+              className={`rounded-2xl border ${stage.color} flex flex-col min-h-[200px] md:min-h-[400px]`}
             >
               {/* Stage header */}
               <div className="px-4 py-3 border-b border-gray-200/60 bg-white/40 rounded-t-2xl">

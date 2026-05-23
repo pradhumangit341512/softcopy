@@ -221,6 +221,7 @@ export async function POST(req: NextRequest) {
         ownedBy: assignTo,
         visitingDate: data.visitingDate,
         followUpDate: data.followUpDate,
+        nextFollowUp: data.nextFollowUp,
         deletedAt: null,
       },
     });

@@ -389,10 +389,10 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:px-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[85vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100">
           <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
             <FileSpreadsheet size={18} className="text-blue-500" />
             {step === 'done' ? 'Import Complete' : 'Import Leads from Excel'}
@@ -403,7 +403,7 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-auto p-5">
+        <div className="flex-1 overflow-auto p-4 sm:p-5">
           {error && (
             <div className="mb-4 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -422,7 +422,7 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
                   const file = e.dataTransfer.files[0];
                   if (file) handleFile(file);
                 }}
-                className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center
+                className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-10 text-center
                   cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
               >
                 <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
@@ -557,7 +557,7 @@ export function BulkImportModal({ open, onClose, onImported }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-t border-gray-100 flex justify-end gap-2">
           {step === 'preview' && (
             <>
               <Button variant="outline" onClick={reset}>

@@ -103,6 +103,7 @@ export const createClientSchema = z
     notes: optionalString,
     visitingDate: optionalDate,
     followUpDate: optionalDate,
+    nextFollowUp: optionalDate,
     propertyVisited: z.boolean().optional().default(false),
     visitStatus: z.string().optional().default('NotVisited'),
     // Admin can assign a client to a specific team member.

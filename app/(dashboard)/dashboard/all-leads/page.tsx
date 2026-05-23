@@ -3,9 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Download, Upload, Users, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, Download, Upload, Users, SlidersHorizontal, X, ArrowRightLeft } from 'lucide-react';
 import { BulkImportModal } from '@/components/clients/BulkImportModal';
 import { TransferLeadModal } from '@/components/clients/TransferLeadModal';
+import { BulkAssignModal } from '@/components/clients/BulkAssignModal';
 
 import { Loader } from '@/components/common/Loader';
 import { ClientTable } from '@/components/clients/ClientTable';
@@ -49,6 +50,8 @@ export default function ClientsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [transferTarget, setTransferTarget] = useState<Client | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const canTransfer = useFeature('feature.lead_transfer');
   const canShowDeadTab = useFeature('feature.dead_leads_tab');
   const canShowTypeTabs = useFeature('feature.lead_type_tabs');
@@ -155,6 +158,7 @@ export default function ClientsPage() {
       setClients(data.clients || []);
       setTotalPages(data.pagination?.pages || 1);
       setTotalCount(data.pagination?.total || 0);
+      setSelectedIds(new Set());
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch clients';
       setError(msg);
@@ -356,6 +360,39 @@ export default function ClientsPage() {
         }}
       />
 
+      {/* ══ BULK ACTION BAR ══ */}
+      {canTransfer && selectedIds.size > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+          <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+            <input
+              type="checkbox"
+              checked
+              readOnly
+              className="w-4 h-4 rounded border-blue-300 text-blue-600"
+            />
+            {selectedIds.size} lead{selectedIds.size !== 1 ? 's' : ''} selected
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setBulkAssignOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
+                bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <ArrowRightLeft size={14} />
+              <span className="hidden sm:inline">Assign to teammate</span>
+              <span className="sm:hidden">Assign</span>
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-800
+                hover:bg-blue-100 rounded-lg transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ══ TABLE CARD ══ */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
@@ -443,12 +480,14 @@ export default function ClientsPage() {
           <>
             {/* Horizontal scroll on small screens */}
             <div className="overflow-x-auto">
-              <div className="min-w-[600px]">
+              <div className="min-w-[700px]">
                 <ClientTable
                   clients={clients}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   onTransfer={canTransfer ? (c) => setTransferTarget(c) : undefined}
+                  selectedIds={canTransfer ? selectedIds : undefined}
+                  onSelectionChange={canTransfer ? setSelectedIds : undefined}
                 />
               </div>
             </div>
@@ -473,6 +512,20 @@ export default function ClientsPage() {
         onClose={() => setShowImportModal(false)}
         onImported={() => fetchClients()}
       />
+
+      {/* Bulk Assign Modal */}
+      {canTransfer && (
+        <BulkAssignModal
+          isOpen={bulkAssignOpen}
+          clientIds={Array.from(selectedIds)}
+          onClose={() => setBulkAssignOpen(false)}
+          onTransferred={() => {
+            setSelectedIds(new Set());
+            setBulkAssignOpen(false);
+            fetchClients();
+          }}
+        />
+      )}
 
       {/* Transfer Lead Modal — only mounted when feature is enabled */}
       {canTransfer && (
