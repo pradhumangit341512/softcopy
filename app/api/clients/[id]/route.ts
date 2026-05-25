@@ -91,10 +91,19 @@ export async function PUT(
 
     // Auto-set lastContactDate when an actual contact event occurs,
     // but only if the caller didn't explicitly supply their own value.
-    if (body.lastContactDate === undefined &&
-        (body.propertyVisited === true || body.propertyVisited === 'true' ||
-         body.visitStatus === 'Visited')) {
-      updateData.lastContactDate = new Date();
+    const isContactEvent =
+      body.propertyVisited === true || body.propertyVisited === 'true' ||
+      body.visitStatus === 'Visited';
+
+    if (isContactEvent) {
+      if (body.lastContactDate === undefined) {
+        updateData.lastContactDate = new Date();
+      }
+      // Clear followUpDate after contact is made so it no longer shows as
+      // pending/overdue. The nextFollowUp field tracks the upcoming one.
+      if (body.followUpDate === undefined) {
+        updateData.followUpDate = null;
+      }
     }
 
     // Admin can reassign the lead to another teammate. After F2, reassign

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Building2, SlidersHorizontal, X, Download, Upload } from 'lucide-react';
+import { Plus, Building2, SlidersHorizontal, X, Download, Upload, ArrowRightLeft } from 'lucide-react';
 
 import { Loader } from '@/components/common/Loader';
 import { PropertyTable } from '@/components/properties/PropertyTable';
@@ -15,6 +15,7 @@ import { Pagination } from '@/components/common/Pagination';
 import { Button } from '@/components/common/Button';
 import { TabStrip } from '@/components/common/TabStrip';
 import { PropertyBulkImportModal } from '@/components/properties/PropertyBulkImportModal';
+import { BulkAssignPropertyModal } from '@/components/properties/BulkAssignPropertyModal';
 import { useConfirm } from '@/components/common/ConfirmDialog';
 
 import type { Property } from '@/lib/types';
@@ -52,18 +53,13 @@ export default function PropertiesPage() {
   const searchParams = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
 
-  useEffect(() => {
-    if (authLoading || !user) return;
-    if (user.role === 'user') {
-      router.replace('/dashboard/my-work');
-    }
-  }, [authLoading, user, router]);
-
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const canShowInventoryTabs = useFeature('feature.inventory_tabs');
   const canBulkImportInventory = useFeature('feature.bulk_inventory');
   const confirm = useConfirm();
   const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,6 +159,7 @@ export default function PropertiesPage() {
       setProperties(data.properties || []);
       setTotalPages(data.pagination?.pages || 1);
       setTotalCount(data.pagination?.total || 0);
+      setSelectedIds(new Set());
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch properties';
       setError(msg);
@@ -368,6 +365,34 @@ export default function PropertiesPage() {
         }}
       />
 
+      {/* BULK ACTION BAR */}
+      {isAdmin && selectedIds.size > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+          <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+            <input type="checkbox" checked readOnly className="w-4 h-4 rounded border-blue-300 text-blue-600" />
+            {selectedIds.size} item{selectedIds.size !== 1 ? 's' : ''} selected
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setBulkAssignOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
+                bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <ArrowRightLeft size={14} />
+              <span className="hidden sm:inline">Assign to teammate</span>
+              <span className="sm:hidden">Assign</span>
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-800
+                hover:bg-blue-100 rounded-lg transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* TABLE CARD */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
@@ -455,6 +480,8 @@ export default function PropertiesPage() {
                 properties={properties}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                selectedIds={isAdmin ? selectedIds : undefined}
+                onSelectionChange={isAdmin ? setSelectedIds : undefined}
               />
             </div>
 
@@ -480,6 +507,20 @@ export default function PropertiesPage() {
           open={showImportModal}
           onClose={() => setShowImportModal(false)}
           onImported={() => fetchProperties()}
+        />
+      )}
+
+      {/* Bulk Assign Modal */}
+      {isAdmin && (
+        <BulkAssignPropertyModal
+          isOpen={bulkAssignOpen}
+          propertyIds={Array.from(selectedIds)}
+          onClose={() => setBulkAssignOpen(false)}
+          onTransferred={() => {
+            setSelectedIds(new Set());
+            setBulkAssignOpen(false);
+            fetchProperties();
+          }}
         />
       )}
     </div>

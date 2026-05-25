@@ -199,6 +199,26 @@ export default function ClientsPage() {
     }
   };
 
+  const handleFollowUpDone = async (clientId: string, nextFollowUp?: string) => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          followUpDate: null,
+          visitStatus: 'Visited',
+          ...(nextFollowUp ? { nextFollowUp } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to complete follow-up');
+      fetchClients();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to complete follow-up';
+      setError(msg);
+    }
+  };
+
   const handleEdit   = (id: string) => router.push(`/dashboard/all-leads/${id}`);
   const handleDelete = async (id: string) => {
     const ok = await confirm({
@@ -488,6 +508,7 @@ export default function ClientsPage() {
                   onTransfer={canTransfer ? (c) => setTransferTarget(c) : undefined}
                   selectedIds={canTransfer ? selectedIds : undefined}
                   onSelectionChange={canTransfer ? setSelectedIds : undefined}
+                  onFollowUpDone={handleFollowUpDone}
                 />
               </div>
             </div>

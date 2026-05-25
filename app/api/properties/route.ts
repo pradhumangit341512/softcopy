@@ -4,8 +4,8 @@ import {
   verifyAuth,
   isValidObjectId,
 } from "@/lib/auth";
-import { isAdminRole } from "@/lib/authorize";
-import { createPropertySchema, parseBody } from "@/lib/validations";
+import { isAdminRole, isTeamMember } from "@/lib/authorize";
+import { createPropertySchema } from "@/lib/validations";
 
 export const runtime = "nodejs";
 
@@ -42,10 +42,25 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") || 10)));
     const skip = (page - 1) * limit;
 
+    // Collect independent AND constraints so ownership scope and search
+    // don't overwrite each other's OR clauses.
+    const andClauses: Array<Record<string, unknown>> = [];
+
     const where: Record<string, unknown> = {
       companyId: payload.companyId,
       deletedAt: null,
     };
+
+    // Team members only see inventory assigned to them (via ownedBy).
+    // Fall back to createdBy for legacy rows where ownedBy is null.
+    if (isTeamMember(payload.role)) {
+      andClauses.push({
+        OR: [
+          { ownedBy: payload.userId },
+          { ownedBy: null, createdBy: payload.userId },
+        ],
+      });
+    }
 
     if (status) where.status = status;
     if (propertyType) where.propertyType = propertyType;
@@ -85,12 +100,18 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) {
-      where.OR = [
-        { propertyName: { contains: search, mode: "insensitive" } },
-        { ownerName: { contains: search, mode: "insensitive" } },
-        { ownerPhone: { contains: search } },
-        { address: { contains: search, mode: "insensitive" } },
-      ];
+      andClauses.push({
+        OR: [
+          { propertyName: { contains: search, mode: "insensitive" } },
+          { ownerName: { contains: search, mode: "insensitive" } },
+          { ownerPhone: { contains: search } },
+          { address: { contains: search, mode: "insensitive" } },
+        ],
+      });
+    }
+
+    if (andClauses.length > 0) {
+      where.AND = andClauses;
     }
 
     if (dateFrom || dateTo) {
@@ -144,8 +165,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const parsed = await parseBody(req, createPropertySchema);
-    if (!parsed.ok) return parsed.response;
+    const rawBody = await req.json();
+    const assignedTo = typeof rawBody?.assignedTo === 'string' ? rawBody.assignedTo : null;
+
+    const parsed = createPropertySchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ') },
+        { status: 400 }
+      );
+    }
     const data = parsed.data;
 
     // F12 — keep ownerPhone and ownerPhones in lock-step. The primary phone
@@ -192,6 +221,9 @@ export async function POST(req: NextRequest) {
         ownerEmail: data.ownerEmail,
         companyId: payload.companyId,
         createdBy: payload.userId,
+        ownedBy: assignedTo && isValidObjectId(assignedTo) && isAdminRole(payload.role)
+          ? assignedTo
+          : payload.userId,
         deletedAt: null,
       },
     });

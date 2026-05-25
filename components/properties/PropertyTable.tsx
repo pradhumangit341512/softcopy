@@ -16,14 +16,44 @@ interface PropertyTableProps {
   properties: Property[];
   onEdit: (id: string) => void;
   onDelete?: (id: string) => Promise<void>;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
 }
 
-export function PropertyTable({ properties, onEdit, onDelete }: PropertyTableProps) {
+export function PropertyTable({ properties, onEdit, onDelete, selectedIds, onSelectionChange }: PropertyTableProps) {
+  const selectable = !!selectedIds && !!onSelectionChange;
+  const allSelected = selectable && properties.length > 0 && properties.every((p) => selectedIds.has(p.id));
+  const someSelected = selectable && properties.some((p) => selectedIds.has(p.id)) && !allSelected;
+
+  function toggleAll() {
+    if (!onSelectionChange) return;
+    if (allSelected) onSelectionChange(new Set());
+    else onSelectionChange(new Set(properties.map((p) => p.id)));
+  }
+
+  function toggleOne(id: string) {
+    if (!onSelectionChange || !selectedIds) return;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  }
   return (
     <table className="w-full text-sm">
       <thead className="bg-gray-50/80 text-gray-500 uppercase text-[11px] font-semibold tracking-wider
         border-b border-gray-100 sticky top-0">
         <tr>
+          {selectable && (
+            <th className="px-3 py-2.5 w-10 text-center">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(el) => { if (el) el.indeterminate = !!someSelected; }}
+                onChange={toggleAll}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+            </th>
+          )}
           <th className="px-3 py-2.5 text-center w-[72px]">Actions</th>
           <th className="px-3 py-2.5 text-left min-w-[140px]">Property</th>
           <th className="px-3 py-2.5 text-left min-w-[90px]">Type</th>
@@ -43,7 +73,7 @@ export function PropertyTable({ properties, onEdit, onDelete }: PropertyTablePro
       <tbody className="divide-y divide-gray-50">
         {properties.length === 0 ? (
           <tr>
-            <td colSpan={13} className="text-center py-12 text-gray-400 text-sm">
+            <td colSpan={selectable ? 14 : 13} className="text-center py-12 text-gray-400 text-sm">
               No properties found
             </td>
           </tr>
@@ -51,8 +81,18 @@ export function PropertyTable({ properties, onEdit, onDelete }: PropertyTablePro
           properties.map((property) => (
             <tr
               key={property.id}
-              className="hover:bg-blue-50/30 transition-colors duration-100"
+              className={`hover:bg-blue-50/30 transition-colors duration-100 ${selectable && selectedIds?.has(property.id) ? 'bg-blue-50/50' : ''}`}
             >
+              {selectable && (
+                <td className="px-3 py-2.5 text-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds?.has(property.id) ?? false}
+                    onChange={() => toggleOne(property.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </td>
+              )}
               <td className="px-3 py-2.5 text-center">
                 <div className="flex items-center justify-center gap-1">
                   <Button

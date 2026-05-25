@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Edit2, Trash2, Phone, FileText, X, ArrowRightLeft, AlertTriangle, Clock, CalendarCheck } from 'lucide-react';
+import { Edit2, Trash2, Phone, FileText, X, ArrowRightLeft, AlertTriangle, Clock, CalendarCheck, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/common/Badge';
 import { formatCurrency, formatDate, getFollowUpStatus } from '@/lib/utils';
 import { Button } from '@/components/common/Button';
@@ -19,6 +19,8 @@ interface ClientTableProps {
   /** When provided, checkboxes appear for bulk selection. */
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
+  /** Quick-complete a follow-up: marks current done, optionally sets next date */
+  onFollowUpDone?: (clientId: string, nextFollowUp?: string) => Promise<void>;
 }
 
 function cleanPhone(phone: string): string {
@@ -52,7 +54,7 @@ function FollowUpCell({ date }: { date: Date | string | undefined | null }) {
 }
 
 /** Table component for displaying a list of clients with inline actions */
-export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds, onSelectionChange }: ClientTableProps) {
+export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds, onSelectionChange, onFollowUpDone }: ClientTableProps) {
   const selectable = !!selectedIds && !!onSelectionChange;
   const allSelected = selectable && clients.length > 0 && clients.every((c) => selectedIds.has(c.id));
   const someSelected = selectable && clients.some((c) => selectedIds.has(c.id)) && !allSelected;
@@ -74,7 +76,11 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds
     onSelectionChange(next);
   }
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
+  const [followUpPopupId, setFollowUpPopupId] = useState<string | null>(null);
+  const [nextDate, setNextDate] = useState('');
+  const [submittingFollowUp, setSubmittingFollowUp] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const followUpPopoverRef = useRef<HTMLDivElement>(null);
 
   // Close notes popup on click outside or Escape
   useEffect(() => {
@@ -96,6 +102,38 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds
       document.removeEventListener('keydown', handleKey);
     };
   }, [openNoteId]);
+
+  // Close follow-up popup on click outside or Escape
+  useEffect(() => {
+    if (!followUpPopupId) return;
+    function handleClick(e: MouseEvent) {
+      if (followUpPopoverRef.current && !followUpPopoverRef.current.contains(e.target as Node)) {
+        setFollowUpPopupId(null);
+        setNextDate('');
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setFollowUpPopupId(null); setNextDate(''); }
+    }
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [followUpPopupId]);
+
+  async function handleCompleteFollowUp(clientId: string) {
+    if (!onFollowUpDone) return;
+    setSubmittingFollowUp(true);
+    try {
+      await onFollowUpDone(clientId, nextDate || undefined);
+      setFollowUpPopupId(null);
+      setNextDate('');
+    } finally {
+      setSubmittingFollowUp(false);
+    }
+  }
 
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
@@ -258,7 +296,96 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds
                 </td>
 
                 {/* FOLLOW UP */}
-                <FollowUpCell date={client.followUpDate} />
+                <td className="px-4 py-3 whitespace-nowrap relative">
+                  {client.followUpDate ? (() => {
+                    const status = getFollowUpStatus(client.followUpDate);
+                    const Icon = status ? FOLLOW_UP_ICONS[status.key] : null;
+                    return (
+                      <div className="flex items-start gap-1.5">
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-700">{formatDate(client.followUpDate)}</p>
+                          {status && Icon && (
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 ${status.style}`}>
+                              <Icon size={10} />
+                              {status.label}
+                            </span>
+                          )}
+                        </div>
+                        {onFollowUpDone && (
+                          <button
+                            onClick={() => { setFollowUpPopupId(followUpPopupId === client.id ? null : client.id); setNextDate(''); }}
+                            title="Mark follow-up done"
+                            className="shrink-0 mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center
+                              text-green-500 hover:text-green-700 hover:bg-green-50 transition-colors"
+                          >
+                            <CheckCircle2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })() : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
+
+                  {/* Complete Follow-up Popup */}
+                  {followUpPopupId === client.id && (
+                    <div
+                      ref={followUpPopoverRef}
+                      className="absolute z-50 top-full left-0 mt-1 w-64 bg-white rounded-xl
+                        border border-gray-200 shadow-xl p-4 animate-in fade-in slide-in-from-top-2"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                          <CheckCircle2 size={14} className="text-green-500" />
+                          Complete Follow-up
+                        </h4>
+                        <button
+                          onClick={() => { setFollowUpPopupId(null); setNextDate(''); }}
+                          className="w-6 h-6 rounded-lg hover:bg-gray-100 flex items-center
+                            justify-center text-gray-400 hover:text-gray-600"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      <p className="text-xs text-gray-500 mb-3">
+                        {client.clientName} — {formatDate(client.followUpDate)}
+                      </p>
+
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Schedule next follow-up (optional)
+                      </label>
+                      <input
+                        type="date"
+                        value={nextDate}
+                        onChange={(e) => setNextDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                          focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      />
+
+                      <div className="flex items-center gap-2 mt-3">
+                        <button
+                          onClick={() => handleCompleteFollowUp(client.id)}
+                          disabled={submittingFollowUp}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm
+                            font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg
+                            transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          <CheckCircle2 size={14} />
+                          {submittingFollowUp ? 'Saving...' : 'Done'}
+                        </button>
+                        <button
+                          onClick={() => { setFollowUpPopupId(null); setNextDate(''); }}
+                          className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-800
+                            hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </td>
 
                 {/* NEXT FOLLOW UP */}
                 <FollowUpCell date={client.nextFollowUp} />

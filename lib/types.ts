@@ -61,6 +61,13 @@ export enum PropertyStatus {
   UNAVAILABLE = 'Unavailable',
 }
 
+export enum AssignmentStatus {
+  SUGGESTED = 'Suggested',
+  INTERESTED = 'Interested',
+  VISITED = 'Visited',
+  REJECTED = 'Rejected',
+}
+
 export enum CommissionStatus {
   PENDING = 'Pending',
   PAID = 'Paid',
@@ -218,6 +225,19 @@ export interface Property extends BaseModel {
   createdBy?: string;
   creator?: User;
   company?: Company;
+}
+
+// ==================== PROPERTY ASSIGNMENT ====================
+
+export interface PropertyAssignment extends BaseModel {
+  clientId: string;
+  propertyId: string;
+  assignedBy: string;
+  notes?: string;
+  status: AssignmentStatus | string;
+  client?: Client;
+  property?: Property;
+  assigner?: User;
 }
 
 // ==================== PROJECTS / TOWERS / UNITS (F17) ====================

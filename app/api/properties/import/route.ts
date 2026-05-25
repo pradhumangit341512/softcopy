@@ -196,6 +196,7 @@ export async function POST(req: NextRequest) {
             ownerEmail: data.ownerEmail,
             companyId: payload.companyId,
             createdBy: payload.userId,
+            ownedBy: payload.userId,
             deletedAt: null,
           },
           select: { id: true, propertyName: true },

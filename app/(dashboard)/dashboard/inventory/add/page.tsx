@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -11,23 +11,40 @@ import { useToast } from '@/components/common/Toast';
 import { Loader } from '@/components/common/Loader';
 import { Button } from '@/components/common/Button';
 import { useFeature } from '@/hooks/useFeature';
+import { useAuth } from '@/hooks/useAuth';
+
+interface TeamMember { id: string; name: string; }
 
 export default function AddPropertyPage() {
   const router = useRouter();
   const { addToast } = useToast();
-  // F9 — when enabled, the 3-step wizard replaces the single-page form.
-  // Both forms share the same PropertyFormValues shape so onSubmit is identical.
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const useWizard = useFeature('feature.inventory_wizard');
   const [loading, setLoading] = useState(false);
+  const [assignedTo, setAssignedTo] = useState('');
+  const [teammates, setTeammates] = useState<TeamMember[]>([]);
+
+  // Fetch teammates for assignment dropdown (admin only)
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch('/api/users/teammates', { credentials: 'include' })
+      .then(async (r) => {
+        const j = await r.json();
+        if (r.ok && j.teammates) setTeammates(j.teammates);
+      })
+      .catch(() => {});
+  }, [isAdmin]);
 
   const handleSubmit = async (data: PropertyFormValues) => {
     setLoading(true);
     try {
+      const payload = { ...data, ...(assignedTo ? { assignedTo } : {}) };
       const res = await fetch('/api/properties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -69,6 +86,33 @@ export default function AddPropertyPage() {
           </p>
         </div>
       </div>
+
+      {/* Assign to team member (admin only) */}
+      {isAdmin && teammates.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">
+              Assign to Team Member
+            </span>
+            <select
+              value={assignedTo}
+              onChange={(e) => setAssignedTo(e.target.value)}
+              className="mt-1 block w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-2 text-sm
+                focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">Myself (default)</option>
+              {teammates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} {t.id === user?.id ? '(You)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              This inventory will appear in the selected member&apos;s dashboard
+            </p>
+          </label>
+        </div>
+      )}
 
       {/* Form Card — wizard or single-page form depending on feature gate */}
       <Card>

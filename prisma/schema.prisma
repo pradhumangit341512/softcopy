@@ -104,6 +104,7 @@ model User {
   dealPaymentsRecorded    DealPayment[]       @relation("DealPaymentRecorder")
   splitsParticipating     CommissionSplit[]   @relation("SplitParticipant")
   splitPayoutsRecorded    CommissionSplitPayout[] @relation("SplitPayoutRecorder")
+  propertyAssignments     PropertyAssignment[]   @relation("PropertyAssigner")
   @@index([role])
   @@index([companyId, role, status])
   @@index([deletedAt])
@@ -200,6 +201,7 @@ model Client {
   company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   creator           User         @relation(fields: [createdBy], references: [id], onDelete: Restrict)
   commissions       Commission[]
+  propertyAssignments PropertyAssignment[]
   @@index([followUpDate])
   @@index([phone])
   @@index([deletedAt])
@@ -490,12 +492,14 @@ model Property {
 
   companyId      String   @db.ObjectId
   createdBy      String   @db.ObjectId
+  ownedBy        String?  @db.ObjectId
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   creator        User     @relation("PropertyCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  propertyAssignments PropertyAssignment[]
 
   @@index([ownerPhone])
   @@index([deletedAt])
@@ -506,6 +510,28 @@ model Property {
   // by projectName + sectorNo, so this index covers both.
   @@index([companyId, projectName])
   @@index([companyId, sectorNo])
+}
+
+// Admin assigns inventory (property) to a lead. Many-to-many join table
+// with status tracking so the salesperson can progress each suggestion.
+model PropertyAssignment {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  clientId    String   @db.ObjectId
+  propertyId  String   @db.ObjectId
+  assignedBy  String   @db.ObjectId
+  notes       String?
+  status      String   @default("Suggested") // Suggested | Interested | Visited | Rejected
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  assigner    User     @relation("PropertyAssigner", fields: [assignedBy], references: [id], onDelete: Restrict)
+
+  @@unique([clientId, propertyId])
+  @@index([clientId])
+  @@index([propertyId])
+  @@map("property_assignments")
 }
 
 model MonthlyBudget {

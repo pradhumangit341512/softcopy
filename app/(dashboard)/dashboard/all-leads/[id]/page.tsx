@@ -13,6 +13,7 @@ import { Loader } from '@/components/common/Loader';
 import { Button } from '@/components/common/Button';
 import { Client } from '@/lib/types';
 import type { ClientFormData } from '@/hooks/useClients';
+import { AssignedProperties } from '@/components/clients/AssignedProperties';
 
 interface TeamMember { id: string; name: string }
 
@@ -160,6 +161,13 @@ export default function EditClientPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Assigned Properties */}
+      <AssignedProperties
+        clientId={clientId}
+        clientName={client.clientName}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }
