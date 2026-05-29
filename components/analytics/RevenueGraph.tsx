@@ -67,6 +67,7 @@ export function RevenueGraph() {
 
   useEffect(() => {
     fetchRevenueData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeframe]);
 
   const fetchRevenueData = async () => {

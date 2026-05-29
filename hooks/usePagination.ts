@@ -16,7 +16,7 @@ interface UsePaginationReturn {
 /** Manages page navigation state with next/prev helpers and boundary checks */
 export function usePagination(initialPage = 1, initialTotal = 1): UsePaginationReturn {
   const [currentPage, setCurrentPage] = useState(initialPage);
-  const [totalPages, setTotalPages] = useState(initialTotal);
+  const [totalPages] = useState(initialTotal);
 
   const goToPage = useCallback((page: number) => {
     if (page >= 1 && page <= totalPages) {

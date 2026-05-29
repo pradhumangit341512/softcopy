@@ -23,7 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { createFeedbackSchema, parseBody } from '@/lib/validations';
+import { createFeedbackSchema } from '@/lib/validations';
 import { apiLimiter, getClientIp, rateLimited } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';

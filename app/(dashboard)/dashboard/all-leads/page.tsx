@@ -170,6 +170,7 @@ export default function ClientsPage() {
   useEffect(() => {
     if (authLoading || !user?.id) return;
     fetchClients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, fetchClients]);
 
   // ── Export ──

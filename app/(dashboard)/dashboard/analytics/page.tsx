@@ -153,6 +153,7 @@ export default function AnalyticsPage() {
       return;
     }
     fetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
 
   const fetchAnalytics = async () => {

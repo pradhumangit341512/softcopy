@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import Image from 'next/image';
 import { Button } from './Button';
 
 interface EmptyStateProps {
@@ -23,7 +24,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4">
       {image ? (
-        <img src={image} alt={title} className="w-48 h-48 mb-6" />
+        <Image src={image} alt={title} width={192} height={192} className="mb-6" />
       ) : (
         <div className="text-6xl mb-6">{icon}</div>
       )}

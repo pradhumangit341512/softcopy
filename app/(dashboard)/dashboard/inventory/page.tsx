@@ -172,6 +172,7 @@ export default function PropertiesPage() {
   useEffect(() => {
     if (authLoading || !user?.id) return;
     fetchProperties();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, fetchProperties]);
 
   const handleEdit = (id: string) => router.push(`/dashboard/inventory/${id}`);

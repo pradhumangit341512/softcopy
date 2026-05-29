@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 
@@ -29,7 +29,8 @@ export function useAuth() {
     if (!hasFetched && !isLoading) {
       fetchUser();
     }
-  }, []); // ✅ empty deps — run once only, no infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Redirect unauthenticated users away from protected pages ──
   useEffect(() => {

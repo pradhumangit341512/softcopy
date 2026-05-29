@@ -42,9 +42,7 @@ const COLOR_PRIMARY: [number, number, number]   = [37, 99, 235];   // blue-600
 const COLOR_INK:     [number, number, number]   = [17, 24, 39];    // gray-900
 const COLOR_MUTED:   [number, number, number]   = [107, 114, 128]; // gray-500
 const COLOR_ACCENT:  [number, number, number]   = [124, 58, 237];  // violet-600
-const COLOR_OK:      [number, number, number]   = [16, 185, 129];  // emerald-500
 const COLOR_LIGHT:   [number, number, number]   = [243, 244, 246]; // gray-100
-const COLOR_BORDER:  [number, number, number]   = [229, 231, 235]; // gray-200
 
 const FONT_BODY = 'helvetica';
 
@@ -552,7 +550,6 @@ function build() {
   // a Node Buffer for writeFileSync.
   const ab = doc.output('arraybuffer');
   writeFileSync(outPath, Buffer.from(ab));
-  // eslint-disable-next-line no-console
   console.log(`PDF generated: ${outPath}`);
 }
 

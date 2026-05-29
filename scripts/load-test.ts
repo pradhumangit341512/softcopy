@@ -42,7 +42,7 @@ const endpoints: EndpointStats[] = [
 
 let totalRequests = 0;
 let totalErrors = 0;
-let allLatencies: number[] = [];
+const allLatencies: number[] = [];
 const startTime = Date.now();
 
 // First get a valid auth cookie by logging in
@@ -194,7 +194,7 @@ async function main() {
   try {
     const res = await fetch(`${BASE}/login`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
-  } catch (e) {
+  } catch {
     console.error('❌ Server not reachable at', BASE);
     console.error('   Run: npm run dev');
     process.exit(1);

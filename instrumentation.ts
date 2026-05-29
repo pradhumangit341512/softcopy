@@ -25,7 +25,6 @@ export async function register() {
       await import('./sentry.edge.config');
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[instrumentation] Sentry init skipped:', err);
   }
 }

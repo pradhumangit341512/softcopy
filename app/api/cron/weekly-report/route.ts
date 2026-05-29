@@ -32,7 +32,6 @@ export async function POST(req: NextRequest) {
 
     // Day-of-week check: only run on Monday (IST)
     const now = new Date();
-    const istHour = (now.getUTCHours() + 5) % 24 + (now.getUTCMinutes() + 30 >= 60 ? 1 : 0);
     const istDay = new Date(now.getTime() + 5.5 * 60 * 60 * 1000).getDay();
 
     if (istDay !== 1) {

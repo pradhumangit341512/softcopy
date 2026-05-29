@@ -43,7 +43,10 @@ export function useAsync<T>(
 
   useEffect(() => {
     if (immediate) {
-      execute();
+      // Intentional: kick off the initial fetch on mount. The setState
+      // inside execute is async (after await) so it won't cascade.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void execute();
     }
   }, [execute, immediate]);
 

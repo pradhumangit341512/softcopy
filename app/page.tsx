@@ -143,7 +143,6 @@ async function loadFeedback(): Promise<{
       },
     };
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[landing] feedback load skipped:', err);
     return {
       feedbackItems: [],
