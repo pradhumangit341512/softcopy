@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth, isValidObjectId } from "@/lib/auth";
 import { isAdminRole } from "@/lib/authorize";
+import { escapeRegex } from "@/lib/utils";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -73,11 +74,12 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) {
+      const safe = escapeRegex(search);
       where.OR = [
-        { propertyName: { contains: search, mode: "insensitive" } },
-        { ownerName: { contains: search, mode: "insensitive" } },
-        { ownerPhone: { contains: search } },
-        { address: { contains: search, mode: "insensitive" } },
+        { propertyName: { contains: safe, mode: "insensitive" } },
+        { ownerName: { contains: safe, mode: "insensitive" } },
+        { ownerPhone: { contains: safe } },
+        { address: { contains: safe, mode: "insensitive" } },
       ];
     }
 

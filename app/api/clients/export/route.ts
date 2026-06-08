@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { verifyAuth } from "@/lib/auth";
 import ExcelJS from "exceljs";
 import { requireFeature } from "@/lib/require-feature";
+import { escapeRegex } from "@/lib/utils";
 
 // ✅ Fix #1: Force Node.js runtime so ExcelJS works
 export const runtime = "nodejs";
@@ -59,10 +60,11 @@ export async function GET(req: NextRequest) {
     if (type === "filtered") {
       if (status)   where.status = status;
       if (search) {
+        const safe = escapeRegex(search);
         where.OR = [
-          { clientName: { contains: search, mode: "insensitive" } },
-          { phone:      { contains: search, mode: "insensitive" } },
-          { email:      { contains: search, mode: "insensitive" } },
+          { clientName: { contains: safe, mode: "insensitive" } },
+          { phone:      { contains: safe, mode: "insensitive" } },
+          { email:      { contains: safe, mode: "insensitive" } },
         ];
       }
       if (dateFrom || dateTo) {

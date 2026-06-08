@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Download, Upload, Users, SlidersHorizontal, X, ArrowRightLeft } from 'lucide-react';
+import { Plus, Download, Upload, Users, SlidersHorizontal, X, ArrowRightLeft, CalendarClock } from 'lucide-react';
 import { BulkImportModal } from '@/components/clients/BulkImportModal';
 import { TransferLeadModal } from '@/components/clients/TransferLeadModal';
 import { BulkAssignModal } from '@/components/clients/BulkAssignModal';
+import { BulkFollowUpModal } from '@/components/clients/BulkFollowUpModal';
 
 import { Loader } from '@/components/common/Loader';
 import { ClientTable } from '@/components/clients/ClientTable';
@@ -52,6 +53,7 @@ export default function ClientsPage() {
   const [transferTarget, setTransferTarget] = useState<Client | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkFollowUpOpen, setBulkFollowUpOpen] = useState(false);
   const canTransfer = useFeature('feature.lead_transfer');
   const canShowDeadTab = useFeature('feature.dead_leads_tab');
   const canShowTypeTabs = useFeature('feature.lead_type_tabs');
@@ -200,22 +202,45 @@ export default function ClientsPage() {
     }
   };
 
-  const handleFollowUpDone = async (clientId: string, nextFollowUp?: string) => {
+  // Complete the active follow-up with an outcome. The dedicated endpoint
+  // records history, smart-links Status, and rolls the follow-up forward
+  // (next date) or finishes it — all atomically.
+  const handleCompleteFollowUp = async (
+    clientId: string,
+    payload: { outcome: string; note?: string; nextDate?: string },
+  ) => {
     try {
-      const res = await fetch(`/api/clients/${clientId}`, {
-        method: 'PUT',
+      const res = await fetch(`/api/clients/${clientId}/follow-up`, {
+        method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          followUpDate: null,
-          visitStatus: 'Visited',
-          ...(nextFollowUp ? { nextFollowUp } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Failed to complete follow-up');
       fetchClients();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to complete follow-up';
+      setError(msg);
+    }
+  };
+
+  // Inline single-field update for the list's Visit Date / Schedule-follow-up
+  // quick edits — patches the lead directly so staff don't open the full form.
+  const handleQuickUpdate = async (
+    clientId: string,
+    patch: { visitingDate?: string | null; followUpDate?: string | null },
+  ) => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error('Update failed');
+      fetchClients();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update lead';
       setError(msg);
     }
   };
@@ -382,7 +407,7 @@ export default function ClientsPage() {
       />
 
       {/* ══ BULK ACTION BAR ══ */}
-      {canTransfer && selectedIds.size > 0 && (
+      {selectedIds.size > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
           <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
             <input
@@ -395,14 +420,24 @@ export default function ClientsPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setBulkAssignOpen(true)}
+              onClick={() => setBulkFollowUpOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
-                bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
             >
-              <ArrowRightLeft size={14} />
-              <span className="hidden sm:inline">Assign to teammate</span>
-              <span className="sm:hidden">Assign</span>
+              <CalendarClock size={14} />
+              <span className="hidden sm:inline">Follow-up</span>
             </button>
+            {canTransfer && (
+              <button
+                onClick={() => setBulkAssignOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
+                  bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              >
+                <ArrowRightLeft size={14} />
+                <span className="hidden sm:inline">Assign to teammate</span>
+                <span className="sm:hidden">Assign</span>
+              </button>
+            )}
             <button
               onClick={() => setSelectedIds(new Set())}
               className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-800
@@ -507,9 +542,10 @@ export default function ClientsPage() {
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   onTransfer={canTransfer ? (c) => setTransferTarget(c) : undefined}
-                  selectedIds={canTransfer ? selectedIds : undefined}
-                  onSelectionChange={canTransfer ? setSelectedIds : undefined}
-                  onFollowUpDone={handleFollowUpDone}
+                  selectedIds={selectedIds}
+                  onSelectionChange={setSelectedIds}
+                  onCompleteFollowUp={handleCompleteFollowUp}
+                  onQuickUpdate={handleQuickUpdate}
                 />
               </div>
             </div>
@@ -533,6 +569,18 @@ export default function ClientsPage() {
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
         onImported={() => fetchClients()}
+      />
+
+      {/* Bulk Follow-up Modal — available to everyone (core follow-up flow) */}
+      <BulkFollowUpModal
+        isOpen={bulkFollowUpOpen}
+        clientIds={Array.from(selectedIds)}
+        onClose={() => setBulkFollowUpOpen(false)}
+        onDone={() => {
+          setSelectedIds(new Set());
+          setBulkFollowUpOpen(false);
+          fetchClients();
+        }}
       />
 
       {/* Bulk Assign Modal */}

@@ -1,3 +1,20 @@
+/**
+ * Escape regex metacharacters so a user-supplied string can be used safely as
+ * a literal inside a regex-backed query.
+ *
+ * Prisma's MongoDB connector compiles `contains`/`startsWith`/`endsWith` into a
+ * `$regex`, passing the value through unescaped. An unbalanced metacharacter
+ * (e.g. a lone `(` in a search like "Flat (2BHK)") is an invalid pattern and
+ * makes MongoDB throw, surfacing as a 500. Escaping turns the term into a true
+ * literal substring match, which is the intended search behavior anyway.
+ *
+ * @param input Raw, untrusted search term.
+ * @returns The term with all regex metacharacters backslash-escaped.
+ */
+export function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Format a numeric amount as Indian-locale currency string */
 export function formatCurrency(amount: number, currency: string = '₹'): string {
   return `${currency}${amount.toLocaleString('en-IN')}`;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyAuth } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
+import { escapeRegex } from '@/lib/utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,11 +19,12 @@ export async function GET(req: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build search filter with role-based isolation
+    const safe = escapeRegex(query);
     const searchCondition = {
       OR: [
-        { clientName: { contains: query, mode: Prisma.QueryMode.insensitive } },
-        { phone: { contains: query } },
-        { email: { contains: query, mode: Prisma.QueryMode.insensitive } },
+        { clientName: { contains: safe, mode: Prisma.QueryMode.insensitive } },
+        { phone: { contains: safe } },
+        { email: { contains: safe, mode: Prisma.QueryMode.insensitive } },
       ],
     };
 

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { verifyAuth, isValidObjectId } from "@/lib/auth";
 import { createCommissionSchema, parseBody } from "@/lib/validations";
 import { isTeamMember, requireAdmin } from "@/lib/authorize";
+import { escapeRegex } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -56,9 +57,10 @@ export async function GET(req: NextRequest) {
     if (paidStatus) where.paidStatus = paidStatus;
     if (hasDateRange) where.createdAt = dateRange;
     if (search) {
+      const safe = escapeRegex(search);
       where.OR = [
-        { client: { clientName: { contains: search, mode: "insensitive" } } },
-        { salesPersonName: { contains: search, mode: "insensitive" } },
+        { client: { clientName: { contains: safe, mode: "insensitive" } } },
+        { salesPersonName: { contains: safe, mode: "insensitive" } },
       ];
     }
 

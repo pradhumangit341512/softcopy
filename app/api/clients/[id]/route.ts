@@ -18,8 +18,8 @@ export async function GET(
     }
 
     const { id } = await context.params;
-    if (!id) {
-      return NextResponse.json({ error: "Client id missing" }, { status: 400 });
+    if (!id || !isValidObjectId(id)) {
+      return NextResponse.json({ error: "Invalid client ID" }, { status: 400 });
     }
 
     const client = await db.client.findFirst({
@@ -56,6 +56,9 @@ export async function PUT(
     }
 
     const { id } = await context.params;
+    if (!id || !isValidObjectId(id)) {
+      return NextResponse.json({ error: "Invalid client ID" }, { status: 400 });
+    }
 
     // Parse the raw body manually — explicit field extraction avoids
     // Zod v4 transform/strip edge cases that silently drop fields.
@@ -169,6 +172,9 @@ export async function DELETE(
     }
 
     const { id } = await context.params;
+    if (!id || !isValidObjectId(id)) {
+      return NextResponse.json({ error: "Invalid client ID" }, { status: 400 });
+    }
 
     const where: Record<string, unknown> = {
       id,

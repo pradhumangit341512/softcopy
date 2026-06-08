@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth";
 import { isAdminRole, isTeamMember } from "@/lib/authorize";
 import { createPropertySchema } from "@/lib/validations";
+import { escapeRegex } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -100,12 +101,13 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) {
+      const safe = escapeRegex(search);
       andClauses.push({
         OR: [
-          { propertyName: { contains: search, mode: "insensitive" } },
-          { ownerName: { contains: search, mode: "insensitive" } },
-          { ownerPhone: { contains: search } },
-          { address: { contains: search, mode: "insensitive" } },
+          { propertyName: { contains: safe, mode: "insensitive" } },
+          { ownerName: { contains: safe, mode: "insensitive" } },
+          { ownerPhone: { contains: safe } },
+          { address: { contains: safe, mode: "insensitive" } },
         ],
       });
     }
@@ -165,8 +167,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const rawBody = await req.json();
-    const assignedTo = typeof rawBody?.assignedTo === 'string' ? rawBody.assignedTo : null;
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+    const assignedTo =
+      typeof (rawBody as { assignedTo?: unknown })?.assignedTo === 'string'
+        ? (rawBody as { assignedTo: string }).assignedTo
+        : null;
 
     const parsed = createPropertySchema.safeParse(rawBody);
     if (!parsed.success) {

@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
         db.client.count({
           where: {
             ...myLeadsFilter,
-            followUpDate: { lte: todayEnd },
+            followUpDate: { lte: todayEnd, not: null },
             status: { notIn: ['DealDone', 'Rejected'] },
           },
         }),
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
         db.client.findMany({
           where: {
             ...myLeadsFilter,
-            followUpDate: { lte: todayEnd },
+            followUpDate: { lte: todayEnd, not: null },
             status: { notIn: ['DealDone', 'Rejected'] },
           },
           orderBy: { followUpDate: 'asc' },

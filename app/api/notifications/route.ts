@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Compute fresh notifications (idempotent upsert)
-    await computeNotifications(payload.userId, payload.companyId);
+    await computeNotifications(payload.userId, payload.companyId, payload.role);
 
     // Fetch latest 20, unread first
     const notifications = await db.notification.findMany({

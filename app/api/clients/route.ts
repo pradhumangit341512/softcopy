@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth";
 import { createClientSchema, parseBody } from "@/lib/validations";
 import { isTeamMember, isAdminRole } from "@/lib/authorize";
+import { escapeRegex } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -101,7 +102,10 @@ export async function GET(req: NextRequest) {
 
     // Follow-up filter
     if (followUp === 'overdue') {
-      where.followUpDate = { lt: new Date() };
+      // `not: null` is REQUIRED — in MongoDB's BSON sort order null < any date,
+      // so a bare `{ lt: now }` also matches leads with NO follow-up date,
+      // turning "Overdue" into "show everything". Exclude nulls explicitly.
+      where.followUpDate = { lt: new Date(), not: null };
       where.status = where.status ?? { notIn: ['DealDone', 'Rejected'] };
     } else if (followUp === 'today') {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -112,11 +116,12 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) {
+      const safe = escapeRegex(search);
       andClauses.push({
         OR: [
-          { clientName: { contains: search, mode: "insensitive" } },
-          { phone: { contains: search } },
-          { email: { contains: search, mode: "insensitive" } },
+          { clientName: { contains: safe, mode: "insensitive" } },
+          { phone: { contains: safe } },
+          { email: { contains: safe, mode: "insensitive" } },
         ],
       });
     }

@@ -16,6 +16,7 @@ import {
   parseBody,
 } from '@/lib/validations';
 import { requireFeature } from '@/lib/require-feature';
+import { escapeRegex } from '@/lib/utils';
 
 export const runtime = 'nodejs';
 
@@ -36,10 +37,11 @@ export async function GET(req: NextRequest) {
     };
     if (isTeamMember(payload.role)) where.createdBy = payload.userId;
     if (search) {
+      const safe = escapeRegex(search);
       where.OR = [
-        { projectName: { contains: search, mode: 'insensitive' } },
-        { location: { contains: search, mode: 'insensitive' } },
-        { sector: { contains: search, mode: 'insensitive' } },
+        { projectName: { contains: safe, mode: 'insensitive' } },
+        { location: { contains: safe, mode: 'insensitive' } },
+        { sector: { contains: safe, mode: 'insensitive' } },
       ];
     }
 

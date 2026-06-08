@@ -19,6 +19,7 @@ import { hashPassword } from '@/lib/auth';
 import { requireSuperAdmin, generateTempPassword } from '@/lib/superadmin';
 import { createCompanyWithAdminSchema, parseBody } from '@/lib/validations';
 import { recordAudit } from '@/lib/audit';
+import { escapeRegex } from '@/lib/utils';
 
 export const runtime = 'nodejs';
 
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   const where: Record<string, unknown> = {};
   if (statusFilter) where.status = statusFilter;
-  if (search) where.companyName = { contains: search, mode: 'insensitive' };
+  if (search) where.companyName = { contains: escapeRegex(search), mode: 'insensitive' };
 
   const [companies, total] = await Promise.all([
     db.company.findMany({

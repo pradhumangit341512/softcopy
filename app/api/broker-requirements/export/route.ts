@@ -13,6 +13,7 @@ import { db } from '@/lib/db';
 import { verifyAuth } from '@/lib/auth';
 import { isTeamMember } from '@/lib/authorize';
 import { requireFeature } from '@/lib/require-feature';
+import { escapeRegex } from '@/lib/utils';
 import ExcelJS from 'exceljs';
 
 export const runtime = 'nodejs';
@@ -40,11 +41,12 @@ export async function GET(req: NextRequest) {
     if (isTeamMember(payload.role)) where.createdBy = payload.userId;
     if (status) where.status = status;
     if (search) {
+      const safe = escapeRegex(search);
       where.OR = [
-        { brokerName: { contains: search, mode: 'insensitive' } },
-        { brokerCompany: { contains: search, mode: 'insensitive' } },
-        { contact: { contains: search } },
-        { requirement: { contains: search, mode: 'insensitive' } },
+        { brokerName: { contains: safe, mode: 'insensitive' } },
+        { brokerCompany: { contains: safe, mode: 'insensitive' } },
+        { contact: { contains: safe } },
+        { requirement: { contains: safe, mode: 'insensitive' } },
       ];
     }
     if (dateFrom || dateTo) {

@@ -77,7 +77,9 @@ export async function POST(req: NextRequest) {
             db.client.count({
               where: {
                 createdBy: member.id, companyId: company.id, deletedAt: null,
-                followUpDate: { lt: now },
+                // not: null — exclude leads with no follow-up date; a bare
+                // `{ lt: now }` matches nulls in MongoDB and inflates the count.
+                followUpDate: { lt: now, not: null },
                 status: { notIn: ['DealDone', 'Rejected'] },
               },
             }),

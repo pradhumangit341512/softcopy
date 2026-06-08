@@ -121,6 +121,17 @@ export type UserWithoutPassword = Omit<User, 'password'>;
 
 // ==================== CLIENT ====================
 
+/** One recorded follow-up outcome (embedded in Client.followUps). */
+export interface FollowUpEntry {
+  date: Date | string;
+  outcome: string;
+  label?: string;
+  note?: string;
+  byUserId?: string;
+  byName?: string;
+  nextDate?: Date | string | null;
+}
+
 export interface Client extends BaseModel {
   clientName: string;
   phone: string;
@@ -143,6 +154,13 @@ export interface Client extends BaseModel {
   followUpDate?: Date;
   nextFollowUp?: Date;
   lastContactDate?: Date;
+
+  /** Append-only follow-up history (newest entries last). */
+  followUps?: FollowUpEntry[];
+  /** Denormalized latest outcome for fast list rendering. */
+  lastFollowUpOutcome?: string;
+  lastFollowUpLabel?: string;
+  lastFollowUpAt?: Date;
 
   source?: string;
   notes?: string;

@@ -108,13 +108,25 @@ export function ClientForm({
       }
     : undefined;
 
+  // Local YYYY-MM-DD offset from today (for the follow-up default + quick-picks).
+  const plusDays = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  };
+
+  // P0 "no lead leaks" — new leads default to a follow-up 3 days out so they're
+  // never created without a next action. Editing keeps the lead's own value.
+  const newLeadDefaults = { followUpDate: plusDays(3) } as Partial<ClientFormValues>;
+
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<ClientFormValues>({
     resolver: zodResolver(formSchema) as unknown as Resolver<ClientFormValues>,
-    defaultValues: cleanDefaults as Partial<ClientFormValues> | undefined,
+    defaultValues: (cleanDefaults ?? newLeadDefaults) as Partial<ClientFormValues>,
   });
 
   const submitHandler: SubmitHandler<ClientFormValues> = async (data) => {
@@ -304,6 +316,19 @@ export function ClientForm({
             {...register('followUpDate')}
             error={errors.followUpDate?.message}
           />
+          <div className="flex items-center gap-1.5 mt-1">
+            {([['Today', 0], ['+3 days', 3], ['+1 week', 7]] as const).map(([label, n]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setValue('followUpDate', plusDays(n), { shouldValidate: true, shouldDirty: true })}
+                className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium transition-colors"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Set a follow-up so the lead isn&apos;t forgotten.</p>
         </div>
         <div>
           <Input

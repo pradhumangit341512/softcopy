@@ -163,6 +163,19 @@ model TrustedDevice {
   @@map("trusted_devices")
 }
 
+/// One recorded follow-up outcome on a lead (embedded in Client.followUps).
+/// Append-only history: each completed follow-up adds an entry capturing what
+/// happened, who did it, and the date scheduled next (if any).
+type FollowUpEntry {
+  date     DateTime
+  outcome  String // disposition value from lib/follow-up.ts (e.g. "no_answer")
+  label    String? // human label snapshot at time of entry
+  note     String?
+  byUserId String?   @db.ObjectId
+  byName   String?
+  nextDate DateTime?
+}
+
 model Client {
   id                String       @id @default(auto()) @map("_id") @db.ObjectId
   clientName        String
@@ -181,6 +194,11 @@ model Client {
   followUpDate      DateTime?
   nextFollowUp      DateTime?
   lastContactDate   DateTime?
+  // Follow-up history + denormalized "latest" for fast list rendering.
+  followUps           FollowUpEntry[]
+  lastFollowUpOutcome String?
+  lastFollowUpLabel   String?
+  lastFollowUpAt      DateTime?
   status            String       @default("New")
   source            String?
   notes             String?

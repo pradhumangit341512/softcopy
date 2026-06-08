@@ -20,6 +20,7 @@ import {
   parseBody,
 } from '@/lib/validations';
 import { requireFeature } from '@/lib/require-feature';
+import { escapeRegex } from '@/lib/utils';
 
 export const runtime = 'nodejs';
 
@@ -74,11 +75,12 @@ export async function GET(req: NextRequest) {
     }
 
     if (search) {
+      const safe = escapeRegex(search);
       where.OR = [
-        { brokerName: { contains: search, mode: 'insensitive' } },
-        { brokerCompany: { contains: search, mode: 'insensitive' } },
-        { contact: { contains: search } },
-        { requirement: { contains: search, mode: 'insensitive' } },
+        { brokerName: { contains: safe, mode: 'insensitive' } },
+        { brokerCompany: { contains: safe, mode: 'insensitive' } },
+        { contact: { contains: safe } },
+        { requirement: { contains: safe, mode: 'insensitive' } },
       ];
     }
 
