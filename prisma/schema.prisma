@@ -31,6 +31,11 @@ model Company {
   //   }
   // Resolved by lib/entitlements.ts hasFeature().
   featureFlags       Json?
+  // HR geo check-in (Enterprise HR). When enabled, members can self-check-in
+  // from their location and attendance is auto-marked. officeLocations are the
+  // allowed geofences for "office"-mode members.
+  geoCheckInEnabled  Boolean         @default(false)
+  officeLocations    OfficeLocation[]
   status             String          @default("active")
   // Max number of `role:user` team members the broker admin may create.
   // Enforced at /api/users POST.
@@ -59,6 +64,9 @@ model Company {
   monthlyBudgets     MonthlyBudget[]
   properties         Property[]
   paymentRecords     PaymentRecord[]
+  payrollProfiles    PayrollProfile[]
+  attendance         Attendance[]
+  payslips           Payslip[]
   @@index([status])
   @@index([subscriptionExpiry])
   @@index([subscriptionUntil])
@@ -105,6 +113,9 @@ model User {
   splitsParticipating     CommissionSplit[]   @relation("SplitParticipant")
   splitPayoutsRecorded    CommissionSplitPayout[] @relation("SplitPayoutRecorder")
   propertyAssignments     PropertyAssignment[]   @relation("PropertyAssigner")
+  payrollProfile          PayrollProfile?
+  attendance              Attendance[]
+  payslips                Payslip[]
   @@index([role])
   @@index([companyId, role, status])
   @@index([deletedAt])
@@ -856,4 +867,151 @@ model DailyPlan {
   @@index([companyId, date])
   @@index([userId, date])
   @@map("daily_plans")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HR / PAYROLL (Enterprise HR plan — feature.payroll)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// An allowed office geofence (embedded in Company.officeLocations). A member
+/// in "office" attendance mode must check in within `radiusMeters` of one of
+/// these points.
+type OfficeLocation {
+  name         String
+  lat          Float
+  lng          Float
+  radiusMeters Int    @default(200)
+}
+
+/// Per-member payroll configuration set by Admin/HR. One row per team member.
+/// Drives salary-slip generation: base + allowances + commission − absence cut.
+/// All money fields are in the company's currency (INR). Additive & optional —
+/// members without a profile simply aren't on payroll yet.
+model PayrollProfile {
+  id                    String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String    @unique @db.ObjectId
+  companyId             String    @db.ObjectId
+
+  baseSalary            Float     @default(0)
+  travelAllowance       Float     @default(0)
+  otherAllowance        Float     @default(0)
+
+  // Absence policy. `perAbsentDeduction` = fixed ₹ cut per unpaid absent day.
+  // null → pro-rate from base salary ÷ working days at payslip time.
+  perAbsentDeduction    Float?
+  paidLeavesPerMonth    Int       @default(1)
+
+  // Default % the member earns per deal — pre-fills new commissions only.
+  // Actual per-deal commission lives on Commission/CommissionSplit.
+  defaultCommissionRate Float     @default(0)
+
+  // Geo check-in mode: 'office' (must be within a geofence), 'field' (any
+  // location, logged), or 'manual' (no self check-in — admin marks only).
+  attendanceMode        String    @default("office")
+
+  designation           String?
+  joiningDate           DateTime?
+  pan                   String?
+  active                Boolean   @default(true)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company               Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, active])
+  @@map("payroll_profiles")
+}
+
+/// One attendance record per member per day. `date` is a local "YYYY-MM-DD"
+/// string so month-range queries are simple lexicographic ranges and the
+/// (userId, date) pair is uniquely one status per day. `source` is 'manual'
+/// for admin-marked rows; 'geo'/'activity' arrive in P2.
+model Attendance {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  companyId String   @db.ObjectId
+  date      String   // "YYYY-MM-DD"
+  status    String   // present | absent | half_day | paid_leave | unpaid_leave | holiday | week_off
+  note      String?
+  markedBy  String?  @db.ObjectId
+  source    String   @default("manual")
+  // Geo check-in audit (source = 'geo'). Captured one-shot at check-in.
+  checkInAt       DateTime?
+  checkInLat      Float?
+  checkInLng      Float?
+  checkInAccuracy Float?
+  checkInDistance Float?
+  withinGeofence  Boolean?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([companyId, date])
+  @@map("attendance")
+}
+
+/// One line on a payslip (embedded). `amount` is signed: earnings positive,
+/// deductions negative. `sourceType` groups them for the PDF layout.
+type PayslipLine {
+  sourceType String // base | allowance | commission | absence | adjustment
+  label      String
+  amount     Float
+  clientName String?
+  date       String?
+}
+
+/// A month's salary slip for one member. Generated as a Draft, then Finalized
+/// into an immutable snapshot the member downloads. Recomputing/editing is only
+/// allowed while Draft — once Finalized, later changes to deals/attendance never
+/// alter it.
+model Payslip {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String        @db.ObjectId
+  companyId        String        @db.ObjectId
+  period           String        // "YYYY-MM"
+
+  // Snapshot of identity at generation time.
+  companyName      String?
+  employeeName     String
+  designation      String?
+  pan              String?
+  slipNo           String?
+
+  // Earnings
+  baseSalary       Float         @default(0)
+  allowancesTotal  Float         @default(0)
+  commissionTotal  Float         @default(0)
+  additions        Float         @default(0)
+  grossEarnings    Float         @default(0)
+
+  // Attendance snapshot + deductions
+  presentDays      Float         @default(0)
+  absentUnits      Float         @default(0)
+  paidLeaves       Float         @default(0)
+  absenceDeduction Float         @default(0)
+  otherDeductions  Float         @default(0)
+
+  netPay           Float         @default(0)
+  lines            PayslipLine[]
+
+  status           String        @default("Draft") // Draft | Finalized | Paid
+  generatedAt      DateTime      @default(now())
+  finalizedAt      DateTime?
+  finalizedBy      String?       @db.ObjectId
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period])
+  @@index([companyId, period])
+  @@map("payslips")
 }

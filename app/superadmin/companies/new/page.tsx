@@ -343,6 +343,7 @@ const PLAN_BORDER: Record<Plan, string> = {
   standard: 'border-sky-300 bg-sky-50',
   pro: 'border-violet-300 bg-violet-50',
   enterprise: 'border-amber-300 bg-amber-50',
+  enterprise_hr: 'border-rose-300 bg-rose-50',
 };
 
 /**

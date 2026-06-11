@@ -18,8 +18,9 @@
 import { useEffect, useMemo, useState, use } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Save, RotateCcw, ShieldCheck, Lock } from 'lucide-react';
+import { PLANS, PLAN_METADATA, type Plan } from '@/lib/plans';
 
-type PlanId = 'basic' | 'standard' | 'pro' | 'enterprise';
+type PlanId = Plan;
 
 interface PlanOption {
   id: PlanId;
@@ -51,14 +52,14 @@ const PLAN_BORDER: Record<PlanId, string> = {
   standard: 'border-sky-300 bg-sky-50',
   pro: 'border-violet-300 bg-violet-50',
   enterprise: 'border-amber-300 bg-amber-50',
+  enterprise_hr: 'border-rose-300 bg-rose-50',
 };
 
-const TIER_LABEL: Record<PlanId, string> = {
-  basic: 'Basic',
-  standard: 'Standard',
-  pro: 'Pro',
-  enterprise: 'Enterprise',
-};
+// Tier display names come straight from the plan catalogue so this UI never
+// drifts from lib/plans.ts as tiers are added or renamed.
+const TIER_LABEL: Record<PlanId, string> = Object.fromEntries(
+  PLANS.map((p) => [p, PLAN_METADATA[p].label]),
+) as Record<PlanId, string>;
 
 export default function CompanyFeaturesPage({
   params,
@@ -163,19 +164,15 @@ export default function CompanyFeaturesPage({
   // Group catalogue by the lowest plan tier that includes each feature.
   // We compute this from PLAN options provided by the API so the UI never
   // needs to know plan-tier mapping.
+  // Lowest tier (in PLANS order) whose plan default includes the feature.
   const tierOf = (key: string): PlanId => {
-    if (planFor.basic?.features.includes(key)) return 'basic';
-    if (planFor.standard?.features.includes(key)) return 'standard';
-    if (planFor.pro?.features.includes(key)) return 'pro';
-    return 'enterprise';
+    for (const p of PLANS) {
+      if (planFor[p]?.features.includes(key)) return p;
+    }
+    return PLANS[PLANS.length - 1];
   };
 
-  const groups: Record<PlanId, FeatureRow[]> = {
-    basic: [],
-    standard: [],
-    pro: [],
-    enterprise: [],
-  };
+  const groups = Object.fromEntries(PLANS.map((p) => [p, [] as FeatureRow[]])) as Record<PlanId, FeatureRow[]>;
   for (const row of data.catalogue) {
     groups[tierOf(row.key)].push(row);
   }
@@ -280,7 +277,7 @@ export default function CompanyFeaturesPage({
       {/* Feature matrix */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {(['basic', 'standard', 'pro', 'enterprise'] as PlanId[]).map((tier) => {
+          {PLANS.map((tier) => {
             const rows = groups[tier];
             if (rows.length === 0) return null;
             return (

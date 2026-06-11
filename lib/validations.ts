@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
+import { PLANS } from './plans';
 
 // ==================== PRIMITIVES ====================
 
@@ -466,7 +467,7 @@ export type OnboardingEnquiryInput = z.infer<typeof onboardingEnquirySchema>;
  */
 export const createCompanyWithAdminSchema = z.object({
   companyName: z.string().trim().min(2, 'Company name is required'),
-  plan: z.enum(['basic', 'standard', 'pro', 'enterprise']).default('standard'),
+  plan: z.enum(PLANS).default('standard'),
   seatLimit: z.number().int().min(1).max(1000).default(5),
   adminSeatLimit: z.number().int().min(1).max(50).default(2),
   monthlyFee: z.number().nonnegative().nullable().optional(),
@@ -487,7 +488,7 @@ export const createCompanyWithAdminSchema = z.object({
 
 export const updateCompanyBySuperAdminSchema = z.object({
   companyName: z.string().trim().min(2).optional(),
-  plan: z.enum(['basic', 'standard', 'pro', 'enterprise']).optional(),
+  plan: z.enum(PLANS).optional(),
   seatLimit: z.number().int().min(1).max(1000).optional(),
   adminSeatLimit: z.number().int().min(1).max(50).optional(),
   monthlyFee: z.number().nonnegative().nullable().optional(),
@@ -507,7 +508,7 @@ export const updateCompanyBySuperAdminSchema = z.object({
  * Setting `featureFlags: {}` clears all overrides (back to plan default).
  */
 export const updateCompanyFeatureFlagsSchema = z.object({
-  plan: z.enum(['basic', 'standard', 'pro', 'enterprise']).optional(),
+  plan: z.enum(PLANS).optional(),
   featureFlags: z.record(z.string(), z.boolean()).optional(),
 }).strict().refine(
   (d) => d.plan !== undefined || d.featureFlags !== undefined,

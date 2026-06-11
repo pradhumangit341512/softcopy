@@ -7,7 +7,7 @@ import {
   BarChart3, Settings, X, Building2,
   GitBranch, Briefcase, UserCog, Award,
   CalendarCheck, FolderTree, Handshake, Sparkles,
-  BookOpen, Database,
+  BookOpen, Database, Wallet, MapPin, Receipt,
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { LucideIcon } from 'lucide-react';
@@ -50,6 +50,10 @@ const navItems: NavItem[] = [
     roles: ['user'] },
   { href: '/dashboard/commissions',          icon: TrendingUp,      label: 'My Commissions',
     roles: ['user'] },
+  { href: '/dashboard/check-in',             icon: MapPin,          label: 'Check In',
+    roles: ['user'], feature: 'feature.payroll' },
+  { href: '/dashboard/my-salary',            icon: Receipt,         label: 'My Salary',
+    roles: ['user'], feature: 'feature.payroll' },
 
   // ── Admin / SuperAdmin only ──
   { href: '/dashboard/all-leads',            icon: Users,           label: 'All Leads',
@@ -76,6 +80,8 @@ const navItems: NavItem[] = [
     roles: ['admin', 'superadmin'] },
   { href: '/dashboard/all-team-performance', icon: Award,           label: 'All Team Performance',
     roles: ['admin', 'superadmin'] },
+  { href: '/dashboard/payroll',              icon: Wallet,          label: 'Payroll',
+    roles: ['admin', 'superadmin'], feature: 'feature.payroll' },
 
   // ── Everyone (bottom) ──
   { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'          },

@@ -63,12 +63,29 @@ export async function GET(req: NextRequest) {
     ] = await Promise.all([
       db.client.count({ where: clientFilter }),
 
+      // "Today's visits" = leads scheduled today that AREN'T done yet. Once the
+      // visit is completed (propertyVisited or visitStatus flips to Visited),
+      // it drops off — otherwise a finished visit keeps nagging as pending.
       db.client.count({
-        where: { ...clientFilter, visitingDate: { gte: todayStart, lt: todayEnd } },
+        where: {
+          ...clientFilter,
+          visitingDate: { gte: todayStart, lt: todayEnd },
+          propertyVisited: false,
+          visitStatus: { not: "Visited" },
+          // Closed leads (deal done / rejected) shouldn't show as visits to make.
+          status: { notIn: ["DealDone", "Rejected"] },
+        },
       }),
 
       db.client.findMany({
-        where: { ...clientFilter, visitingDate: { gte: todayStart, lt: todayEnd } },
+        where: {
+          ...clientFilter,
+          visitingDate: { gte: todayStart, lt: todayEnd },
+          propertyVisited: false,
+          visitStatus: { not: "Visited" },
+          // Closed leads (deal done / rejected) shouldn't show as visits to make.
+          status: { notIn: ["DealDone", "Rejected"] },
+        },
         select: {
           id: true, clientName: true, phone: true,
           visitingDate: true, visitingTime: true, notes: true,

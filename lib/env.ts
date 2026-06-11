@@ -64,6 +64,12 @@ const schema = z.object({
 
   // ---- Cron auth ----
   CRON_SECRET: z.string().min(16).optional(),
+
+  // ---- Google Maps (browser-side) ----
+  // Used by the geo office-location map picker. Inlined into the client bundle,
+  // so it is necessarily public — restrict it by HTTP referrer in the Google
+  // Cloud Console rather than treating it as a secret.
+  NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: z.string().optional(),
 });
 
 type Env = z.infer<typeof schema>;

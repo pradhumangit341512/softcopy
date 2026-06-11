@@ -74,6 +74,10 @@ export async function GET(req: NextRequest) {
           where: {
             ...myLeadsFilter,
             visitingDate: { gte: todayStart, lt: todayEnd },
+            // Only pending visits — drop ones already done or on closed leads.
+            propertyVisited: false,
+            visitStatus: { not: 'Visited' },
+            status: { notIn: ['DealDone', 'Rejected'] },
           },
         }),
         db.client.findMany({
@@ -95,6 +99,10 @@ export async function GET(req: NextRequest) {
           where: {
             ...myLeadsFilter,
             visitingDate: { gte: todayStart, lt: todayEnd },
+            // Only pending visits — drop ones already done or on closed leads.
+            propertyVisited: false,
+            visitStatus: { not: 'Visited' },
+            status: { notIn: ['DealDone', 'Rejected'] },
           },
           select: {
             id: true,

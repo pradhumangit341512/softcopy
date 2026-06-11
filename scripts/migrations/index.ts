@@ -24,6 +24,10 @@ import { migration as m014 } from './014_reference_projects_init';
 import { migration as m015 } from './015_learn_grow_init';
 import { migration as m016 } from './016_feedback_init';
 import { migration as m017 } from './017_company_admin_seat_limit';
+import { migration as m018 } from './018_payroll_profile_init';
+import { migration as m019 } from './019_attendance_init';
+import { migration as m020 } from './020_geo_checkin_init';
+import { migration as m021 } from './021_payslip_init';
 
 export const ALL_MIGRATIONS: Migration[] = [
   m000,
@@ -44,4 +48,8 @@ export const ALL_MIGRATIONS: Migration[] = [
   m015,
   m016,
   m017,
+  m018,
+  m019,
+  m020,
+  m021,
 ];

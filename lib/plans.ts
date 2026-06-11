@@ -9,7 +9,7 @@
  * (e.g. for a refund/dispute).
  */
 
-export const PLANS = ['basic', 'standard', 'pro', 'enterprise'] as const;
+export const PLANS = ['basic', 'standard', 'pro', 'enterprise', 'enterprise_hr'] as const;
 export type Plan = (typeof PLANS)[number];
 
 /** All known feature keys. Add new keys here as features ship. */
@@ -45,6 +45,9 @@ export const FEATURE_KEYS = [
 
   // ── Enterprise ──
   'feature.granular_permissions',
+
+  // ── Enterprise HR (top tier — HR / payroll suite) ──
+  'feature.payroll',
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -78,6 +81,8 @@ export const FEATURE_LABELS: Record<FeatureKey, { label: string; description: st
   'feature.reference_db':                { label: 'Reference Database',               description: 'Curated public-project catalogue with brochure links — share externally' },
 
   'feature.granular_permissions':        { label: 'Per-Member Permissions',           description: 'Per-user permission toggles beyond fixed role tiers' },
+
+  'feature.payroll':                     { label: 'HR & Payroll Suite',               description: 'Team salaries, attendance, commission accrual, and downloadable salary slips' },
 };
 
 /** Plan → feature-key list. Higher tiers extend lower tiers. */
@@ -120,11 +125,18 @@ const ENTERPRISE_FEATURES: FeatureKey[] = [
   'feature.granular_permissions',
 ];
 
+// Top tier — everything in Enterprise plus the HR/payroll suite.
+const ENTERPRISE_HR_FEATURES: FeatureKey[] = [
+  ...ENTERPRISE_FEATURES,
+  'feature.payroll',
+];
+
 export const PLAN_FEATURES: Record<Plan, ReadonlyArray<FeatureKey>> = {
   basic: BASIC_FEATURES,
   standard: STANDARD_FEATURES,
   pro: PRO_FEATURES,
   enterprise: ENTERPRISE_FEATURES,
+  enterprise_hr: ENTERPRISE_HR_FEATURES,
 };
 
 /** Marketing-friendly metadata shown on plan-picker UIs. */
@@ -133,6 +145,7 @@ export const PLAN_METADATA: Record<Plan, { label: string; tagline: string; price
   standard:   { label: 'Standard',   tagline: 'Active brokerage / 4–15 users',   pricePerUserMonth: 1499 },
   pro:        { label: 'Pro',        tagline: 'Established / 15–50 users',       pricePerUserMonth: 3499 },
   enterprise: { label: 'Enterprise', tagline: 'Large team / 50+ users',          pricePerUserMonth: 7999 },
+  enterprise_hr: { label: 'Enterprise HR', tagline: 'Enterprise + payroll, attendance & salary slips', pricePerUserMonth: 9999 },
 };
 
 export function isValidPlan(value: unknown): value is Plan {

@@ -4,6 +4,7 @@ import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Copy, KeyRound, Pause, Save, ShieldCheck } from 'lucide-react';
+import { PLANS, PLAN_METADATA } from '@/lib/plans';
 
 interface UserRow {
   id: string; name: string; email: string; phone: string; role: string;
@@ -210,7 +211,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
           </dl>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <SelectField label="Plan" value={edit.plan} onChange={(v) => setEdit({ ...edit, plan: v })} options={['standard','pro','enterprise','custom']} />
+            <SelectField label="Plan" value={edit.plan} onChange={(v) => setEdit({ ...edit, plan: v })} options={PLANS.map((p) => ({ value: p, label: PLAN_METADATA[p].label }))} />
             <NumberField label="Team seat limit" value={String(edit.seatLimit)} onChange={(v) => setEdit({ ...edit, seatLimit: Number(v) })} />
             <NumberField label="Admin seat limit (partners)" value={String(edit.adminSeatLimit)} onChange={(v) => setEdit({ ...edit, adminSeatLimit: Number(v) })} />
             <NumberField label="Monthly fee (₹)" value={edit.monthlyFee} onChange={(v) => setEdit({ ...edit, monthlyFee: v })} />
@@ -335,12 +336,14 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
     </label>
   );
 }
-function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+type SelectOption = string | { value: string; label: string };
+function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: SelectOption[] }) {
+  const normalized = options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o));
   return (
     <label className="block">
       <span className="text-sm font-medium text-gray-700">{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm capitalize">
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {normalized.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </label>
   );
