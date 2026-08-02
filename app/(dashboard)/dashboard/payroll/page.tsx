@@ -8,6 +8,7 @@ import { useFeature } from '@/hooks/useFeature';
 import { FeatureLocked } from '@/components/common/FeatureLocked';
 import { Loader } from '@/components/common/Loader';
 import { Alert } from '@/components/common/Alert';
+import { StatCard, EmptyBlock } from '@/components/common/StatCard';
 import { formatCurrency } from '@/lib/utils';
 import { PayrollProfileModal, type PayrollMember } from '@/components/payroll/PayrollProfileModal';
 
@@ -61,6 +62,11 @@ export default function PayrollPage() {
   }
 
   const onPayrollCount = members.filter((m) => m.profile?.active).length;
+  const monthlyPayroll = members.reduce((sum, m) => {
+    const p = m.profile;
+    if (!p?.active) return sum;
+    return sum + p.baseSalary + (p.travelAllowance ?? 0) + (p.otherAllowance ?? 0);
+  }, 0);
 
   return (
     <div className="py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-5">
@@ -72,29 +78,38 @@ export default function PayrollPage() {
           </h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
             Set base salary, allowances, absence policy, and commission rate per team member
-            {!loading && members.length > 0 && (
-              <span className="ml-1.5 text-gray-400">— {onPayrollCount} of {members.length} on payroll</span>
-            )}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/payroll/attendance">
-            <button className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold
+          <Link href="/dashboard/payroll/attendance" className="flex-1 sm:flex-none">
+            <button className="w-full flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold
               text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl shadow-sm transition-colors whitespace-nowrap">
-              <CalendarCheck size={15} />
-              <span className="hidden sm:inline">Attendance</span>
+              <CalendarCheck size={15} /> Attendance
             </button>
           </Link>
-          <Link href="/dashboard/payroll/payslips">
-            <button className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold
+          <Link href="/dashboard/payroll/payslips" className="flex-1 sm:flex-none">
+            <button className="w-full flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold
               text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-colors whitespace-nowrap">
-              <FileText size={15} />
-              <span className="hidden sm:inline">Payslips</span>
+              <FileText size={15} /> Payslips
             </button>
           </Link>
         </div>
       </div>
+
+      {/* Summary */}
+      {!loading && members.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+          <StatCard label="On payroll" value={`${onPayrollCount} / ${members.length}`} hint="active members" />
+          <StatCard label="Monthly payroll" value={formatCurrency(monthlyPayroll)} hint="base + allowances" />
+          <StatCard
+            label="Avg. package"
+            value={onPayrollCount ? formatCurrency(Math.round(monthlyPayroll / onPayrollCount)) : '—'}
+            hint="per active member"
+            className="col-span-2 sm:col-span-1"
+          />
+        </div>
+      )}
 
       {error && <Alert type="error" title="Error" message={error} onClose={() => setError(null)} />}
 
@@ -103,7 +118,7 @@ export default function PayrollPage() {
         {loading ? (
           <div className="py-12"><Loader message="Loading team..." /></div>
         ) : members.length === 0 ? (
-          <div className="py-12 text-center text-gray-500 text-sm">No active team members found.</div>
+          <EmptyBlock icon={<Wallet size={26} />} text="No active team members found." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">

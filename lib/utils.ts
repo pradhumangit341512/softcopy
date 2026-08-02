@@ -38,6 +38,28 @@ export function formatDate(date?: Date | string | null): string {
   });
 }
 
+/**
+ * Compact relative time for "last activity" labels, e.g. "just now", "3h ago",
+ * "2d ago", "5w ago". Falls back to an absolute date past ~1 year so it never
+ * reads as a vague "53w ago". Returns '' for missing/invalid input.
+ */
+export function timeAgo(date?: Date | string | null): string {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const secs = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (secs < 0) return formatDate(d); // future date — show the absolute date, not "just now"
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 7)}w ago`;
+  return formatDate(d);
+}
+
 /** Calculate the number of days from today until the given date */
 export function getDaysUntil(date: Date | string): number {
   const target = new Date(date);

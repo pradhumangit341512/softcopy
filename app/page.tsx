@@ -271,15 +271,30 @@ export default async function LandingPage() {
             <div className="mock__body">
               <aside className="mock__side">
                 <div className="mock__logo">B365</div>
+                {/* Enterprise HR — the full-featured plan. Mirrors the real
+                    admin sidebar (components/dashboard/Sidebar.tsx) so the
+                    preview shows every module the top tier unlocks, including
+                    the HR / Payroll suite. */}
                 <ul>
                   <li className="is-active"><span>◆</span> Dashboard</li>
+                  <li><span>◇</span> Daily Plan</li>
                   <li><span>◇</span> Leads</li>
                   <li><span>◇</span> Pipeline</li>
-                  <li><span>◇</span> Properties</li>
-                  <li><span>◇</span> Visits</li>
+                  <li><span>◇</span> Inventory</li>
+                  <li><span>◇</span> Projects</li>
+                  <li><span>◇</span> Broker Reqs</li>
+                  <li><span>◇</span> Find Opportunity</li>
+                  <li><span>◇</span> Learn &amp; Grow</li>
+                  <li><span>◇</span> Reference DB</li>
                   <li><span>◇</span> Commissions</li>
-                  <li><span>◇</span> Team</li>
                   <li><span>◇</span> Analytics</li>
+                  <li><span>◇</span> Team</li>
+                  <li><span>◇</span> Performance</li>
+                  <li className="mock__side-tag">HR Suite · Enterprise HR</li>
+                  <li className="is-hr"><span>◈</span> Payroll</li>
+                  <li className="is-hr"><span>◈</span> Attendance</li>
+                  <li className="is-hr"><span>◈</span> Salary Slips</li>
+                  <li><span>◇</span> Settings</li>
                 </ul>
               </aside>
 
@@ -503,7 +518,7 @@ export default async function LandingPage() {
               <div key={m.title} className="module">
                 <span className="module__icon" aria-hidden>{m.icon}</span>
                 <div>
-                  <h4>{m.title}</h4>
+                  <h3>{m.title}</h3>
                   <p>{m.copy}</p>
                 </div>
               </div>
@@ -548,7 +563,7 @@ export default async function LandingPage() {
             {SECURITY_POINTS.map((s) => (
               <article key={s.title} className="sec-card">
                 <span className="sec-card__key" aria-hidden>◆</span>
-                <h4>{s.title}</h4>
+                <h3>{s.title}</h3>
                 <p>{s.copy}</p>
               </article>
             ))}
@@ -738,26 +753,26 @@ export default async function LandingPage() {
             <p>The broker CRM that helps you actually close. Built in India, for India.</p>
           </div>
           <div className="foot__col">
-            <h4>Product</h4>
+            <h3>Product</h3>
             <a href="#features">Features</a>
             <a href="#modules">Modules</a>
             <a href="#pricing">Pricing</a>
             <a href="#faq">FAQ</a>
           </div>
           <div className="foot__col">
-            <h4>Company</h4>
+            <h3>Company</h3>
             <a href="#testimonials">Customers</a>
             <a href="#security">Security</a>
             <a href="#contact">Contact</a>
           </div>
           <div className="foot__col">
-            <h4>Account</h4>
+            <h3>Account</h3>
             <Link href="/login">Sign in</Link>
             <a href="#contact">Request onboarding</a>
             <a href="mailto:broker365.support@gmail.com">Support</a>
           </div>
           <div className="foot__col">
-            <h4>Reach us</h4>
+            <h3>Reach us</h3>
             <a href="mailto:broker365.support@gmail.com">broker365.support@gmail.com</a>
             <a href="tel:+916367766573">+91 63677 66573</a>
             <a
@@ -769,7 +784,7 @@ export default async function LandingPage() {
             </a>
           </div>
           <div className="foot__col">
-            <h4>Legal</h4>
+            <h3>Legal</h3>
             <Link href="/privacy">Privacy Policy</Link>
             <Link href="/terms">Terms of Service</Link>
           </div>

@@ -450,7 +450,7 @@ html { scroll-behavior: smooth; }
 }
 .b360 .mock__body {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: 216px 1fr;
   min-height: 520px;
 }
 .b360 .mock__side {
@@ -462,7 +462,7 @@ html { scroll-behavior: smooth; }
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 12px;
   color: var(--blue);
-  margin-bottom: 22px;
+  margin-bottom: 16px;
   letter-spacing: 0.05em;
   font-weight: 600;
 }
@@ -470,14 +470,15 @@ html { scroll-behavior: smooth; }
 .b360 .mock__side li {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: 9px;
+  padding: 7px 10px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--ink-dim);
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   cursor: default;
   font-weight: 500;
+  white-space: nowrap;
 }
 .b360 .mock__side li span { color: var(--ink-faint); }
 .b360 .mock__side li.is-active {
@@ -485,6 +486,26 @@ html { scroll-behavior: smooth; }
   color: var(--blue-deep);
 }
 .b360 .mock__side li.is-active span { color: var(--blue); }
+
+/* Small section label introducing the Enterprise HR / Payroll suite. */
+.b360 .mock__side-tag {
+  display: block !important;
+  padding: 12px 10px 5px !important;
+  margin-bottom: 0 !important;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 8.5px !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+/* HR-suite items — tinted to signal the top-tier upgrade. */
+.b360 .mock__side li.is-hr {
+  color: var(--blue-deep);
+  background: linear-gradient(90deg, rgba(45, 92, 255, 0.06), transparent);
+}
+.b360 .mock__side li.is-hr span { color: var(--blue); }
 
 .b360 .mock__main { padding: 22px 26px; background: var(--bg-alt); }
 .b360 .mock__topbar {
@@ -780,7 +801,8 @@ html { scroll-behavior: smooth; }
 .b360 .cell__num {
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 10px;
-  color: var(--ink-faint);
+  /* --ink-dim (not --ink-faint) to clear WCAG AA 4.5:1 on the white cell bg. */
+  color: var(--ink-dim);
   letter-spacing: 0.1em;
   font-weight: 600;
 }
@@ -900,7 +922,7 @@ html { scroll-behavior: smooth; }
   font-size: 16px;
   flex-shrink: 0;
 }
-.b360 .module h4 {
+.b360 .module h3 {
   font-family: var(--font-fraunces), serif;
   font-weight: 600;
   font-size: 16px;
@@ -975,7 +997,7 @@ html { scroll-behavior: smooth; }
   color: var(--blue);
   margin-bottom: 14px;
 }
-.b360 .sec-card h4 {
+.b360 .sec-card h3 {
   font-family: var(--font-fraunces), serif;
   font-weight: 500;
   font-size: 19px;
@@ -1028,13 +1050,19 @@ html { scroll-behavior: smooth; }
 }
 
 .b360 .prices {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 18px;
-  max-width: 1120px;
+  max-width: 1180px;
   margin: 0 auto;
 }
 .b360 .price {
+  /* Fluid cards: grow to fill the row, wrap when they can't, and any
+     orphan row (e.g. the 4th/5th tier) centres instead of hugging the
+     left. Basis 300–360px → 3-up on desktop, 2-up on tablet, 1-up on phone. */
+  flex: 1 1 300px;
+  max-width: 360px;
   padding: 36px 28px;
   border-radius: 22px;
   border: 1px solid var(--line);
@@ -1099,7 +1127,7 @@ html { scroll-behavior: smooth; }
 }
 .b360 .price__list li:first-child { border-top: none; }
 .b360 .prices__foot {
-  grid-column: 1 / -1;
+  flex-basis: 100%;
   text-align: center;
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 12px;
@@ -1343,7 +1371,7 @@ html { scroll-behavior: smooth; }
   max-width: 320px;
   margin-top: 12px;
 }
-.b360 .foot__col h4 {
+.b360 .foot__col h3 {
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 11px;
   text-transform: uppercase;
@@ -1523,7 +1551,7 @@ html { scroll-behavior: smooth; }
   .b360 .steps { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .b360 .security { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .b360 .quotes { grid-template-columns: 1fr; max-width: 640px; margin: 0 auto; }
-  .b360 .prices { grid-template-columns: 1fr; max-width: 520px; }
+  .b360 .prices { max-width: 720px; } /* flex-wrap → 2-up tablet, orphan centres; 1-up on phones */
 
   .b360 .contact { grid-template-columns: 1fr; gap: 36px; max-width: 620px; }
 

@@ -90,7 +90,7 @@ export const TESTIMONIALS: Testimonial[] = [
 ];
 
 /**
- * Public pricing — four tiers, mirroring the in-app PLAN_METADATA in
+ * Public pricing — five tiers, mirroring the in-app PLAN_METADATA in
  * lib/plans.ts. The superadmin assigns one of these per company; each
  * tier unlocks a defined feature set, and per-feature add-ons can be
  * granted on top via Company.featureFlags overrides without changing
@@ -154,6 +154,19 @@ export const PRICING_TIERS: PricingTier[] = [
       'API & custom integrations',
       'Dedicated success manager',
       'On-site onboarding + training',
+    ],
+  },
+  {
+    tier: 'Enterprise HR',
+    price: '₹9,999',
+    cadence: '/user/mo',
+    tagline: 'Enterprise + HR, payroll & attendance',
+    features: [
+      'Everything in Enterprise',
+      'HR & Payroll suite',
+      'Team salaries + downloadable payslips',
+      'Attendance + geo check-in',
+      'Commission accrual into salary',
     ],
   },
 ];

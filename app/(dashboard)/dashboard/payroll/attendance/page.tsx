@@ -8,6 +8,7 @@ import { useFeature } from '@/hooks/useFeature';
 import { FeatureLocked } from '@/components/common/FeatureLocked';
 import { Loader } from '@/components/common/Loader';
 import { Alert } from '@/components/common/Alert';
+import { EmptyBlock } from '@/components/common/StatCard';
 import { OfficeLocationsModal } from '@/components/payroll/OfficeLocationsModal';
 import {
   ATTENDANCE_STATUSES, ATTENDANCE_CYCLE, getAttendanceStatus, absentUnitsFor,
@@ -146,14 +147,16 @@ export default function AttendancePage() {
           </h1>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={() => setGeoOpen(true)} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => setGeoOpen(true)} className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl shadow-sm transition-colors">
             <MapPin size={15} /> <span className="hidden sm:inline">Geo settings</span>
           </button>
           {/* Month nav */}
-          <button onClick={() => setPeriod((p) => shiftPeriod(p, -1))} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50"><ChevronLeft size={16} /></button>
-          <span className="text-sm font-semibold text-gray-800 min-w-[120px] text-center">{monthLabel}</span>
-          <button onClick={() => setPeriod((p) => shiftPeriod(p, 1))} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50"><ChevronRight size={16} /></button>
+          <div className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+            <button onClick={() => setPeriod((p) => shiftPeriod(p, -1))} aria-label="Previous month" className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors"><ChevronLeft size={16} /></button>
+            <span className="text-sm font-semibold text-gray-800 min-w-[112px] text-center">{monthLabel}</span>
+            <button onClick={() => setPeriod((p) => shiftPeriod(p, 1))} aria-label="Next month" className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors"><ChevronRight size={16} /></button>
+          </div>
         </div>
       </div>
 
@@ -175,7 +178,7 @@ export default function AttendancePage() {
         {loading ? (
           <div className="py-12"><Loader message="Loading attendance..." /></div>
         ) : members.length === 0 ? (
-          <div className="py-12 text-center text-gray-500 text-sm">No active team members.</div>
+          <EmptyBlock icon={<CalendarCheck size={26} />} text="No active team members." />
         ) : (
           <div className="overflow-x-auto">
             <table className="text-xs border-collapse">

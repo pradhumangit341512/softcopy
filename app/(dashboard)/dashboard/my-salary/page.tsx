@@ -7,6 +7,7 @@ import { useFeature } from '@/hooks/useFeature';
 import { FeatureLocked } from '@/components/common/FeatureLocked';
 import { Loader } from '@/components/common/Loader';
 import { Alert } from '@/components/common/Alert';
+import { EmptyBlock } from '@/components/common/StatCard';
 import { formatCurrency } from '@/lib/utils';
 import { downloadPayslipPdf, type PayslipDoc } from '@/lib/payslip-pdf';
 
@@ -79,9 +80,11 @@ export default function MySalaryPage() {
         {loading ? (
           <div className="py-12"><Loader message="Loading..." /></div>
         ) : rows.length === 0 ? (
-          <div className="py-12 text-center text-gray-500 text-sm">
-            No salary slips yet. They appear here once your admin finalizes them.
-          </div>
+          <EmptyBlock
+            icon={<Wallet size={26} />}
+            text="No salary slips yet"
+            hint="They appear here once your admin finalizes them."
+          />
         ) : (
           <ul className="divide-y divide-gray-100">
             {rows.map((r) => (

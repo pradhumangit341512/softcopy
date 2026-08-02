@@ -8,6 +8,7 @@ import { useFeature } from '@/hooks/useFeature';
 import { FeatureLocked } from '@/components/common/FeatureLocked';
 import { Loader } from '@/components/common/Loader';
 import { Alert } from '@/components/common/Alert';
+import { StatCard, EmptyBlock } from '@/components/common/StatCard';
 import { useToast } from '@/components/common/Toast';
 import { formatCurrency } from '@/lib/utils';
 import { downloadPayslipPdf, type PayslipDoc } from '@/lib/payslip-pdf';
@@ -119,15 +120,26 @@ export default function PayslipsPage() {
             <FileText size={24} className="text-blue-600" /> Payslips
           </h1>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={generate} disabled={busy} className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-60">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+            <button onClick={() => setPeriod((p) => shiftPeriod(p, -1))} aria-label="Previous month" className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors"><ChevronLeft size={16} /></button>
+            <span className="text-sm font-semibold text-gray-800 min-w-[112px] text-center">{monthLabel}</span>
+            <button onClick={() => setPeriod((p) => shiftPeriod(p, 1))} aria-label="Next month" className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors"><ChevronRight size={16} /></button>
+          </div>
+          <button onClick={generate} disabled={busy} className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-colors disabled:opacity-60 whitespace-nowrap">
             <RefreshCw size={15} className={busy ? 'animate-spin' : ''} /> {busy ? 'Generating…' : 'Generate'}
           </button>
-          <button onClick={() => setPeriod((p) => shiftPeriod(p, -1))} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50"><ChevronLeft size={16} /></button>
-          <span className="text-sm font-semibold text-gray-800 min-w-[120px] text-center">{monthLabel}</span>
-          <button onClick={() => setPeriod((p) => shiftPeriod(p, 1))} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50"><ChevronRight size={16} /></button>
         </div>
       </div>
+
+      {/* Summary */}
+      {!loading && rows.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+          <StatCard label="Net pay this month" value={formatCurrency(rows.reduce((s, r) => s + r.netPay, 0))} hint={`${rows.length} payslip${rows.length !== 1 ? 's' : ''}`} />
+          <StatCard label="Drafts" value={String(rows.filter((r) => r.status === 'Draft').length)} hint="editable" />
+          <StatCard label="Finalized" value={String(rows.filter((r) => r.status !== 'Draft').length)} hint="locked · downloadable" className="col-span-2 sm:col-span-1" />
+        </div>
+      )}
 
       {error && <Alert type="error" title="Error" message={error} onClose={() => setError(null)} />}
 
@@ -135,9 +147,11 @@ export default function PayslipsPage() {
         {loading ? (
           <div className="py-12"><Loader message="Loading payslips..." /></div>
         ) : rows.length === 0 ? (
-          <div className="py-12 text-center text-gray-500 text-sm">
-            No payslips for {monthLabel}. Click <span className="font-semibold">Generate</span> to create drafts for everyone on payroll.
-          </div>
+          <EmptyBlock
+            icon={<FileText size={26} />}
+            text={`No payslips for ${monthLabel}`}
+            hint="Click Generate to create drafts for everyone on payroll."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[860px]">

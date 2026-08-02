@@ -3,12 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { Edit2, Trash2, Phone, FileText, X, ArrowRightLeft, CheckCircle2, CalendarDays, Plus, Pencil, History } from 'lucide-react';
 import { Badge } from '@/components/common/Badge';
-import { formatCurrency, formatDate, getFollowUpStatus } from '@/lib/utils';
-import { DISPOSITIONS, suggestedNextDate } from '@/lib/follow-up';
+import { formatCurrency, formatDate, getFollowUpStatus, timeAgo } from '@/lib/utils';
+import { DISPOSITIONS, suggestedNextDate, outcomeLabel } from '@/lib/follow-up';
 import { Button } from '@/components/common/Button';
 import { WhatsAppButton } from '@/components/common/WhatsAppButton';
 
-import type { Client } from '@/lib/types';
+import type { Client, FollowUpEntry } from '@/lib/types';
 
 /** Payload the Complete popup sends up to the page → POST /follow-up. */
 export interface CompleteFollowUpPayload {
@@ -99,6 +99,76 @@ function DateEditPopover({
         <button onClick={onClose} className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
       </div>
     </div>
+  );
+}
+
+/** Newest follow-up history entry (the array is append-ordered), if any. */
+function lastFollowUpEntry(client: Client): FollowUpEntry | undefined {
+  const list = client.followUps;
+  return list && list.length > 0 ? list[list.length - 1] : undefined;
+}
+
+interface ResolvedFollowUp {
+  label: string;                      // human label ('' if none)
+  when: Date | string | undefined;    // timestamp of the last follow-up
+  by: string | undefined;             // who logged it
+  note: string | undefined;           // free-text note, if any
+}
+
+/**
+ * Single source of truth for a client's most recent follow-up display fields.
+ * Prefers the newest history entry (it carries who + the note), falling back to
+ * the denormalized lastFollowUp* mirror. Raw outcome codes resolve to human
+ * labels via outcomeLabel(). Both follow-up renderers use this so they can
+ * never describe different records for the same client.
+ */
+function resolveLastFollowUp(client: Client): ResolvedFollowUp {
+  const last = lastFollowUpEntry(client);
+  return {
+    label: last?.label || client.lastFollowUpLabel || outcomeLabel(last?.outcome ?? client.lastFollowUpOutcome),
+    when: last?.date ?? client.lastFollowUpAt,
+    by: last?.byName,
+    note: last?.note ?? undefined,
+  };
+}
+
+/**
+ * Compact "what happened last time" line for the Follow Up column (shown while a
+ * follow-up is still pending). Renders nothing if the client has never had a
+ * follow-up logged.
+ */
+function LastFollowUpLine({ client }: { client: Client }) {
+  const { label, when, by, note } = resolveLastFollowUp(client);
+  if (!label && !when) return null;
+
+  const rel = timeAgo(when);
+  const exact = when ? formatDate(when) : undefined;
+  return (
+    <p className="text-[11px] text-gray-500 truncate max-w-[150px]" title={note || exact || undefined}>
+      <span className="text-gray-400">Last:</span>{' '}
+      <span className="font-medium text-gray-600">{label || 'Logged'}</span>
+      {rel && <span className="text-gray-400"> · {rel}</span>}
+      {by && <span className="text-gray-400"> · {by}</span>}
+    </p>
+  );
+}
+
+/**
+ * Green "completed" badge shown when there is no pending follow-up but the
+ * client has a logged history: outcome · relative time · who. Values are
+ * computed once here rather than re-invoked inline.
+ */
+function CompletedFollowUpBadge({ client }: { client: Client }) {
+  const { label, when, by } = resolveLastFollowUp(client);
+  const rel = timeAgo(when);
+  const exact = when ? formatDate(when) : undefined;
+  const title = [by ? `by ${by}` : undefined, exact].filter(Boolean).join(' · ') || undefined;
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700" title={title}>
+      <CheckCircle2 size={12} /> {label || 'Follow-up complete'}
+      {rel && <span className="font-normal text-gray-400"> · {rel}</span>}
+      {by && <span className="font-normal text-gray-400"> · {by}</span>}
+    </span>
   );
 }
 
@@ -384,6 +454,7 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds
                         )}
                       </div>
                       {fuStatus && <p className={`text-[11px] font-semibold ${FU_TEXT[fuStatus.key]}`}>{fuStatus.label}</p>}
+                      <LastFollowUpLine client={client} />
                       {onCompleteFollowUp && (
                         <button onClick={() => openComplete(client.id)}
                           className="flex items-center justify-center gap-1 w-full px-2.5 py-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
@@ -393,10 +464,7 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds
                     </div>
                   ) : (client.lastFollowUpAt || client.lastContactDate) ? (
                     <div className="space-y-1">
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700">
-                        <CheckCircle2 size={12} /> {client.lastFollowUpLabel || 'Follow-up complete'}
-                      </span>
-                      {client.lastFollowUpAt && <p className="text-[10px] text-gray-400">{formatDate(client.lastFollowUpAt)}</p>}
+                      <CompletedFollowUpBadge client={client} />
                       {onQuickUpdate && (
                         <button onClick={() => setSchedulePopupId(client.id)} className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"><Plus size={12} /> Schedule next</button>
                       )}
