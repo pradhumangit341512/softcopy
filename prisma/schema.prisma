@@ -772,11 +772,17 @@ model Project {
   name               String
   // 'Commercial' | 'Residential'
   propertyType       String
-  // 'ReadyToMove' | 'UnderConstruction'
+  // PreLaunch | UnderConstruction | PartiallyReady | ReadyToMove
   constructionStatus String
   city               String?
   location           String?
   sector             String?
+  // 2.4 — total project area (value + unit from AREA_UNITS)
+  totalArea          Float?
+  totalAreaUnit      String?
+  // 3.3 — the per-company "Standalone Properties" bucket for loose units that
+  // don't belong to a real project. Auto-created; one per company.
+  isStandalone       Boolean  @default(false)
   createdBy          String   @db.ObjectId
   deletedAt          DateTime?
   createdAt          DateTime @default(now())
@@ -809,6 +815,46 @@ model Unit {
   ownerPhones String[] @default([])
   typology    String?
   size        String?
+  // F17b — richer inventory attributes. All nullable; legacy units keep null
+  // until edited. `areaSqft` is the structured form of the free-text `size`
+  // (backfilled by migration 022). `price` is a total for Sale/Lease, monthly
+  // for Rent — always interpret it together with `listingType`.
+  assetType      String?  // Flat | Villa | Plot | Commercial | Shop | Office | Penthouse
+  listingType    String?  // Sale | Rent | Lease
+  furnishing     String?  // Furnished | Semi-furnished | Unfurnished
+  interiorStatus String?  // Done | In progress | Not done
+  // Area is entered as value + unit (Gaj/Marla/Kanal/…); areaSqft is the derived
+  // canonical (value × unit factor) so sorting and sq-ft consumers keep working.
+  areaValue      Float?
+  areaUnit       String?  // one of AREA_UNITS in lib/unit-options
+  areaSqft       Float?
+  pricePerSqft   Float?   // price per the chosen areaUnit
+  price          Float?
+  // F17c — category-specific attributes. All nullable; the form shows only the
+  // ones relevant to the chosen assetType / listingType.
+  facing             String?   // E | W | N | S | NE | NW | SE | SW
+  bathrooms          Int?
+  parking            String?   // free text, e.g. "2 covered"
+  plotDimensions     String?   // plots, e.g. "30 x 40 ft"
+  cornerPlot         Boolean?  // plots
+  // Rental-specific (used when listingType = Rent)
+  deposit            Float?    // security deposit
+  maintenanceMonthly Float?    // monthly maintenance charge
+  availableFrom      String?   // 'YYYY-MM-DD'
+  preferredTenant    String?   // Family | Bachelors | Company | Any
+  lockInMonths       Int?
+  reraId             String?   // RERA registration number
+  // F17d (Phase 2) — location/feature tags (public) + deal source (internal).
+  tags               String[] @default([])
+  dealType           String?   // Direct | Via dealer — internal, never shared
+  dealerName         String?
+  dealerPhone        String?
+  brokerageSharePct  Float?    // dealer's share of the brokerage (%)
+  // Phase 3 — property images (public) + cheque/cash price split (internal).
+  imageUrls          String[] @default([])
+  splitPrice         Boolean?
+  chequeAmount       Float?
+  cashAmount         Float?
   // 'Vacant' | 'SelfOccupied' | 'Rented' | 'ForSale' | 'Sold'
   status      String   @default("Vacant")
   remarks     String?

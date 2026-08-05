@@ -13,7 +13,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, FolderTree, Building2, Upload } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Plus, FolderTree, Building2, Upload, MapPin } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeature } from '@/hooks/useFeature';
 import { Loader } from '@/components/common/Loader';
@@ -21,6 +22,7 @@ import { Alert } from '@/components/common/Alert';
 import { TabStrip } from '@/components/common/TabStrip';
 import { FeatureLocked } from '@/components/common/FeatureLocked';
 import { AddProjectWizard } from '@/components/projects/AddProjectWizard';
+import { projectStatusLabel } from '@/lib/unit-options';
 import { ProjectsBulkImportModal } from '@/components/projects/ProjectsBulkImportModal';
 import type { Project, Tower, Unit } from '@/lib/types';
 
@@ -44,6 +46,21 @@ export default function ProjectsWorkingPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('');
   const [showWizard, setShowWizard] = useState(false);
+  const [standaloneBusy, setStandaloneBusy] = useState(false);
+  const router = useRouter();
+
+  /** Jump into the per-user "Standalone Properties" bucket to add loose units. */
+  async function addStandalone() {
+    setStandaloneBusy(true);
+    try {
+      const res = await fetch('/api/projects/standalone', { method: 'POST', credentials: 'include' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Failed to open standalone properties');
+      router.push(`/dashboard/projects-working/${j.projectId}`);
+    } catch {
+      setStandaloneBusy(false);
+    }
+  }
   const [showImport, setShowImport] = useState(false);
 
   const fetchProjects = useCallback(async () => {
@@ -99,6 +116,19 @@ export default function ProjectsWorkingPage() {
             >
               <Upload size={15} />
               <span className="hidden sm:inline">Import</span>
+            </button>
+          )}
+          {canUseWizard && (
+            <button
+              type="button"
+              onClick={addStandalone}
+              disabled={standaloneBusy}
+              className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5
+                text-sm font-semibold text-gray-700 bg-white border border-gray-200
+                hover:bg-gray-50 rounded-xl shadow-sm transition-colors disabled:opacity-60"
+            >
+              <MapPin size={15} />
+              <span className="hidden sm:inline">{standaloneBusy ? 'Opening…' : 'Standalone'}</span>
             </button>
           )}
           {canUseWizard && (
@@ -163,7 +193,7 @@ export default function ProjectsWorkingPage() {
                       ? 'text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200'
                       : 'text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200'
                   }>
-                    {p.constructionStatus === 'ReadyToMove' ? 'Ready' : 'Under Construction'}
+                    {projectStatusLabel(p.constructionStatus)}
                   </span>
                 </div>
                 <h3 className="font-semibold text-gray-900 line-clamp-1">{p.name}</h3>
@@ -174,7 +204,7 @@ export default function ProjectsWorkingPage() {
                 )}
                 <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100 text-xs text-gray-600">
                   <span className="flex items-center gap-1">
-                    <Building2 size={12} className="text-gray-400" /> {towerCount} tower{towerCount === 1 ? '' : 's'}
+                    <Building2 size={12} className="text-gray-400" /> {towerCount} block{towerCount === 1 ? '' : 's'}
                   </span>
                   <span>·</span>
                   <span>{unitCount} unit{unitCount === 1 ? '' : 's'}</span>

@@ -269,6 +269,41 @@ export interface Unit extends BaseModel {
   ownerPhones?: string[];
   typology?: string | null;
   size?: string | null;
+  /** F17b — richer inventory attributes (see lib/unit-options.ts for the option lists). */
+  assetType?: string | null;
+  listingType?: string | null;
+  furnishing?: string | null;
+  interiorStatus?: string | null;
+  /** Area entered as value + unit; areaSqft is the derived canonical sq ft. */
+  areaValue?: number | null;
+  areaUnit?: string | null;
+  areaSqft?: number | null;
+  pricePerSqft?: number | null;
+  /** Total for Sale/Lease, monthly for Rent — read with `listingType`. */
+  price?: number | null;
+  /** F17c — category-specific attributes (see lib/unit-options.ts). */
+  facing?: string | null;
+  bathrooms?: number | null;
+  parking?: string | null;
+  plotDimensions?: string | null;
+  cornerPlot?: boolean | null;
+  deposit?: number | null;
+  maintenanceMonthly?: number | null;
+  availableFrom?: string | null;
+  preferredTenant?: string | null;
+  lockInMonths?: number | null;
+  reraId?: string | null;
+  /** F17d — location/feature tags (public) + deal source (internal-only). */
+  tags?: string[];
+  dealType?: string | null;
+  dealerName?: string | null;
+  dealerPhone?: string | null;
+  brokerageSharePct?: number | null;
+  /** Phase 3 — image URLs (public) + cheque/cash split (internal). */
+  imageUrls?: string[];
+  splitPrice?: boolean | null;
+  chequeAmount?: number | null;
+  cashAmount?: number | null;
   status: string;
   remarks?: string | null;
   assignedTo?: string | null;
@@ -284,10 +319,15 @@ export interface Project extends BaseModel {
   companyId?: string;
   name: string;
   propertyType: 'Commercial' | 'Residential';
-  constructionStatus: 'ReadyToMove' | 'UnderConstruction';
+  /** One of PROJECT_STATUS_VALUES in lib/unit-options (PreLaunch, UnderConstruction, PartiallyReady, ReadyToMove). */
+  constructionStatus: string;
   city?: string | null;
   location?: string | null;
   sector?: string | null;
+  totalArea?: number | null;
+  totalAreaUnit?: string | null;
+  /** True for the auto-created per-company "Standalone Properties" bucket. */
+  isStandalone?: boolean;
   createdBy?: string;
   towers?: Tower[];
 }

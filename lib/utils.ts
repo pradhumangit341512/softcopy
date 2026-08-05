@@ -20,6 +20,19 @@ export function formatCurrency(amount: number, currency: string = '₹'): string
   return `${currency}${amount.toLocaleString('en-IN')}`;
 }
 
+/**
+ * Compact Indian-currency shorthand for large amounts:
+ *   1,25,00,000 → "₹1.25 Cr"   ·   58,50,000 → "₹58.5 L"   ·   9,500 → "₹9,500"
+ * Trailing zeros are trimmed (₹2 Cr, not ₹2.00 Cr). Used in tight table/card
+ * cells; the full number stays available via formatCurrency for tooltips.
+ */
+export function formatCompactINR(amount: number, currency: string = '₹'): string {
+  const trim = (n: number) => String(Math.round(n * 100) / 100);
+  if (amount >= 1e7) return `${currency}${trim(amount / 1e7)} Cr`;
+  if (amount >= 1e5) return `${currency}${trim(amount / 1e5)} L`;
+  return `${currency}${amount.toLocaleString('en-IN')}`;
+}
+
 /** Format a phone number string as XXX-XXX-XXXX */
 export function formatPhone(phone: string): string {
   const cleaned = phone.replace(/\D/g, '');

@@ -28,6 +28,13 @@ import { migration as m018 } from './018_payroll_profile_init';
 import { migration as m019 } from './019_attendance_init';
 import { migration as m020 } from './020_geo_checkin_init';
 import { migration as m021 } from './021_payslip_init';
+import { migration as m022 } from './022_unit_listing_fields';
+import { migration as m023 } from './023_unit_category_fields';
+import { migration as m024 } from './024_unit_area_units';
+import { migration as m025 } from './025_unit_deal_tags';
+import { migration as m026 } from './026_project_total_area';
+import { migration as m027 } from './027_unit_images_price_split';
+import { migration as m028 } from './028_project_is_standalone';
 
 export const ALL_MIGRATIONS: Migration[] = [
   m000,
@@ -52,4 +59,11 @@ export const ALL_MIGRATIONS: Migration[] = [
   m019,
   m020,
   m021,
+  m022,
+  m023,
+  m024,
+  m025,
+  m026,
+  m027,
+  m028,
 ];

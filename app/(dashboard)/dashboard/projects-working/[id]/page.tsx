@@ -1,14 +1,15 @@
 'use client';
 
 /**
- * Project detail — F17 polish
+ * Project detail — F17 / F17b
  *
  * Shows a project with its towers + units. Inline "Add Tower" and "Add Unit"
  * dialogs let admins extend the hierarchy without leaving the page.
  *
- * The big add wizard (F22) is for creating brand-new projects. From this
- * page we use slim per-row prompts because the user already has the
- * project context and rarely needs more than 4 fields per unit.
+ * F17b enriches each unit with inventory attributes (asset type, listing type,
+ * furnishing, interior status, area, per-sqft price, headline price) and adds
+ * one-tap WhatsApp / Email sharing of any unit or the whole project. The add
+ * and edit unit forms share one <UnitFormFields> so they can never drift.
  */
 
 import { use, useCallback, useEffect, useState } from 'react';
@@ -22,11 +23,20 @@ import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { FeatureLocked } from '@/components/common/FeatureLocked';
 import { useConfirm } from '@/components/common/ConfirmDialog';
+import { UnitFormFields } from '@/components/projects/UnitFormFields';
+import { UnitsList } from '@/components/projects/UnitsList';
+import { ShareListingButtons } from '@/components/projects/ShareListingButtons';
+import {
+  EMPTY_UNIT_DRAFT,
+  unitToDraft,
+  unitDraftToBody,
+  projectStatusLabel,
+  isAvailableStatus,
+  type UnitDraft,
+} from '@/lib/unit-options';
 import type { Project, Tower, Unit } from '@/lib/types';
 
 type FullProject = Project & { towers?: (Tower & { units?: Unit[] })[] };
-
-const UNIT_STATUSES = ['Vacant', 'SelfOccupied', 'Rented', 'ForSale', 'Sold'] as const;
 
 export default function ProjectDetailPage({
   params,
@@ -39,6 +49,7 @@ export default function ProjectDetailPage({
   const confirm = useConfirm();
 
   const [project, setProject] = useState<FullProject | null>(null);
+  const [matches, setMatches] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,31 +59,15 @@ export default function ProjectDetailPage({
 
   // Add-unit form: keyed by towerId so each tower has its own draft state
   const [unitDraftFor, setUnitDraftFor] = useState<string | null>(null);
-  const [unitDraft, setUnitDraft] = useState({
-    floor: '',
-    unitNo: '',
-    typology: '',
-    size: '',
-    status: 'Vacant',
-    ownerName: '',
-    ownerPhone: '',
-  });
+  const [unitDraft, setUnitDraft] = useState<UnitDraft>(EMPTY_UNIT_DRAFT);
 
   // Inline edit state — at most one tower or unit is being edited at a time
-  // (overwriting one editor opens the other). Stored as id strings so the
-  // children can match without prop-drilling editing flags through.
+  // (opening one closes the other). Stored as id strings so the children can
+  // match without prop-drilling editing flags through.
   const [editingTowerId, setEditingTowerId] = useState<string | null>(null);
   const [editingTowerName, setEditingTowerName] = useState('');
   const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
-  const [editingUnit, setEditingUnit] = useState({
-    floor: '',
-    unitNo: '',
-    typology: '',
-    size: '',
-    status: 'Vacant',
-    ownerName: '',
-    ownerPhone: '',
-  });
+  const [editingUnit, setEditingUnit] = useState<UnitDraft>(EMPTY_UNIT_DRAFT);
 
   const fetchProject = useCallback(async () => {
     setLoading(true);
@@ -82,6 +77,11 @@ export default function ProjectDetailPage({
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || 'Failed to fetch project');
       setProject(j);
+      // Lead matches — best-effort; never blocks the page.
+      try {
+        const mres = await fetch(`/api/projects/${id}/lead-matches`, { credentials: 'include' });
+        if (mres.ok) setMatches((await mres.json()).matches ?? {});
+      } catch { /* ignore */ }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to fetch project');
     } finally {
@@ -123,24 +123,13 @@ export default function ProjectDetailPage({
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          floor: Number(unitDraft.floor) || 0,
-          unitNo: unitDraft.unitNo.trim(),
-          typology: unitDraft.typology || null,
-          size: unitDraft.size || null,
-          status: unitDraft.status,
-          ownerName: unitDraft.ownerName || null,
-          ownerPhones: unitDraft.ownerPhone ? [unitDraft.ownerPhone.trim()] : [],
-        }),
+        body: JSON.stringify(unitDraftToBody(unitDraft)),
       });
       if (!res.ok) {
         const j = await res.json();
         throw new Error(j.error || 'Failed to add unit');
       }
-      setUnitDraft({
-        floor: '', unitNo: '', typology: '', size: '',
-        status: 'Vacant', ownerName: '', ownerPhone: '',
-      });
+      setUnitDraft(EMPTY_UNIT_DRAFT);
       setUnitDraftFor(null);
       fetchProject();
     } catch (e: unknown) {
@@ -177,10 +166,10 @@ export default function ProjectDetailPage({
 
   async function handleDeleteTower(towerId: string, towerName: string) {
     const ok = await confirm({
-      title: `Delete tower “${towerName}”?`,
-      message: 'All units inside this tower will be hidden from the team. The data is preserved in the database for recovery.',
+      title: `Delete block “${towerName}”?`,
+      message: 'All units inside this block will be hidden from the team. The data is preserved in the database for recovery.',
       tone: 'danger',
-      confirmText: 'Delete tower',
+      confirmText: 'Delete block',
     });
     if (!ok) return;
     try {
@@ -200,16 +189,9 @@ export default function ProjectDetailPage({
 
   function startEditUnit(unit: Unit) {
     setEditingTowerId(null);
+    setUnitDraftFor(null); // close any open "add unit" panel so only one editor shows
     setEditingUnitId(unit.id);
-    setEditingUnit({
-      floor: String(unit.floor ?? ''),
-      unitNo: unit.unitNo ?? '',
-      typology: unit.typology ?? '',
-      size: unit.size ?? '',
-      status: unit.status ?? 'Vacant',
-      ownerName: unit.ownerName ?? '',
-      ownerPhone: (unit.ownerPhones?.[0]) ?? '',
-    });
+    setEditingUnit(unitToDraft(unit));
   }
 
   async function handleSaveUnit(towerId: string, unitId: string) {
@@ -219,15 +201,7 @@ export default function ProjectDetailPage({
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          floor: Number(editingUnit.floor) || 0,
-          unitNo: editingUnit.unitNo.trim(),
-          typology: editingUnit.typology || null,
-          size: editingUnit.size || null,
-          status: editingUnit.status,
-          ownerName: editingUnit.ownerName || null,
-          ownerPhones: editingUnit.ownerPhone ? [editingUnit.ownerPhone.trim()] : [],
-        }),
+        body: JSON.stringify(unitDraftToBody(editingUnit)),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -283,6 +257,22 @@ export default function ProjectDetailPage({
   if (authLoading) return <Loader />;
   if (!enabled) return <FeatureLocked feature="feature.projects_working" />;
 
+  const locationLine = project
+    ? [project.location, project.sector, project.city].filter(Boolean).join(', ')
+    : '';
+
+  /** Project-level share summary: name, type, location, and tower/unit counts. */
+  function projectShareText(p: FullProject): string {
+    const towerCount = p.towers?.length ?? 0;
+    const unitCount = (p.towers ?? []).reduce((n, t) => n + (t.units?.length ?? 0), 0);
+    return [
+      `🏢 ${p.name}`,
+      `${p.propertyType} · ${projectStatusLabel(p.constructionStatus)}`,
+      locationLine ? `📍 ${locationLine}` : null,
+      `${towerCount} block${towerCount === 1 ? '' : 's'} · ${unitCount} unit${unitCount === 1 ? '' : 's'}`,
+    ].filter(Boolean).join('\n');
+  }
+
   return (
     <div className="py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-5">
       <div className="flex items-center gap-2">
@@ -304,23 +294,32 @@ export default function ProjectDetailPage({
             <div>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{project.name}</h1>
               <p className="text-gray-500 text-xs sm:text-sm mt-0.5">
-                {project.propertyType} ·{' '}
-                {project.constructionStatus === 'ReadyToMove' ? 'Ready To Move' : 'Under Construction'}
+                {project.propertyType} · {projectStatusLabel(project.constructionStatus)}
                 {(project.location || project.sector || project.city) && (
                   <>
                     {' · '}
                     {[project.location, project.sector, project.city].filter(Boolean).join(' · ')}
                   </>
                 )}
+                {project.totalArea != null && (
+                  <> {' · '}{project.totalArea.toLocaleString('en-IN')} {project.totalAreaUnit ?? ''}</>
+                )}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleDeleteProject}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 hover:bg-red-50 rounded-xl"
-            >
-              <Trash2 size={14} /> Delete project
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <ShareListingButtons
+                size="md"
+                text={projectShareText(project)}
+                subject={`Project: ${project.name}`}
+              />
+              <button
+                type="button"
+                onClick={handleDeleteProject}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 hover:bg-red-50 rounded-xl"
+              >
+                <Trash2 size={14} /> Delete project
+              </button>
+            </div>
           </div>
 
           {/* Towers */}
@@ -328,7 +327,7 @@ export default function ProjectDetailPage({
             <header className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <Building2 size={14} className="text-gray-400" />
-                Towers ({project.towers?.length ?? 0})
+                Blocks ({project.towers?.length ?? 0})
               </h2>
               <Button
                 type="button"
@@ -336,7 +335,7 @@ export default function ProjectDetailPage({
                 onClick={() => setShowAddTower((v) => !v)}
                 icon={<Plus size={14} />}
               >
-                Add Tower
+                Add Block
               </Button>
             </header>
 
@@ -344,8 +343,8 @@ export default function ProjectDetailPage({
               <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row gap-2 sm:items-end">
                 <div className="flex-1">
                   <Input
-                    label="Tower Name"
-                    placeholder="e.g. Tower B"
+                    label="Block Name"
+                    placeholder="e.g. Block B"
                     value={newTowerName}
                     onChange={(e) => setNewTowerName(e.target.value)}
                   />
@@ -362,7 +361,7 @@ export default function ProjectDetailPage({
             <ul className="divide-y divide-gray-100">
               {(project.towers ?? []).length === 0 && (
                 <li className="px-4 py-8 text-center text-sm text-gray-400">
-                  No towers yet. Click “Add Tower” to start.
+                  No blocks yet. Click “Add Block” to start.
                 </li>
               )}
               {(project.towers ?? []).map((t) => (
@@ -381,7 +380,7 @@ export default function ProjectDetailPage({
                           type="button"
                           onClick={() => handleSaveTower(t.id)}
                           disabled={!editingTowerName.trim()}
-                          aria-label="Save tower name"
+                          aria-label="Save block name"
                           className="w-7 h-7 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 flex items-center justify-center disabled:opacity-50"
                         >
                           <Check size={14} />
@@ -389,7 +388,7 @@ export default function ProjectDetailPage({
                         <button
                           type="button"
                           onClick={() => setEditingTowerId(null)}
-                          aria-label="Cancel tower rename"
+                          aria-label="Cancel block rename"
                           className="w-7 h-7 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 flex items-center justify-center"
                         >
                           <X size={14} />
@@ -401,7 +400,7 @@ export default function ProjectDetailPage({
                         <button
                           type="button"
                           onClick={() => startEditTower(t)}
-                          aria-label={`Rename tower ${t.name}`}
+                          aria-label={`Rename block ${t.name}`}
                           title="Rename"
                           className="w-7 h-7 rounded-lg border border-blue-100 bg-blue-50 text-blue-500 hover:bg-blue-100 flex items-center justify-center"
                         >
@@ -410,8 +409,8 @@ export default function ProjectDetailPage({
                         <button
                           type="button"
                           onClick={() => handleDeleteTower(t.id, t.name)}
-                          aria-label={`Delete tower ${t.name}`}
-                          title="Delete tower"
+                          aria-label={`Delete block ${t.name}`}
+                          title="Delete block"
                           className="w-7 h-7 rounded-lg border border-red-100 bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center"
                         >
                           <Trash2 size={12} />
@@ -419,118 +418,35 @@ export default function ProjectDetailPage({
                       </div>
                     )}
                     <span className="text-xs text-gray-400 shrink-0">
-                      {t.units?.length ?? 0} unit{(t.units?.length ?? 0) === 1 ? '' : 's'}
+                      {(() => {
+                        const total = t.units?.length ?? 0;
+                        if (total === 0) return 'No units';
+                        const avail = (t.units ?? []).filter((u) => isAvailableStatus(u.status)).length;
+                        return `${avail} of ${total} available`;
+                      })()}
                     </span>
                   </div>
 
-                  {/* Units mini-table — Actions column reveals inline edit
-                      and delete buttons. Row collapses into a full-width
-                      edit panel below the table when the user clicks edit. */}
-                  {(t.units?.length ?? 0) > 0 && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs min-w-[680px]">
-                        <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider">
-                          <tr>
-                            <th className="px-2 py-1.5 text-left">Floor</th>
-                            <th className="px-2 py-1.5 text-left">Unit No</th>
-                            <th className="px-2 py-1.5 text-left">Typology</th>
-                            <th className="px-2 py-1.5 text-left">Size</th>
-                            <th className="px-2 py-1.5 text-left">Status</th>
-                            <th className="px-2 py-1.5 text-left">Owner</th>
-                            <th className="px-2 py-1.5 text-center w-20">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {(t.units ?? []).map((u) => (
-                            <tr
-                              key={u.id}
-                              className={
-                                editingUnitId === u.id
-                                  ? 'bg-blue-50/50'
-                                  : 'hover:bg-gray-50'
-                              }
-                            >
-                              <td className="px-2 py-1.5 text-gray-700">{u.floor}</td>
-                              <td className="px-2 py-1.5 font-medium text-gray-900">{u.unitNo}</td>
-                              <td className="px-2 py-1.5 text-gray-700">{u.typology ?? '—'}</td>
-                              <td className="px-2 py-1.5 text-gray-700">{u.size ?? '—'}</td>
-                              <td className="px-2 py-1.5">
-                                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-700">
-                                  {u.status}
-                                </span>
-                              </td>
-                              <td className="px-2 py-1.5 text-gray-700">{u.ownerName ?? '—'}</td>
-                              <td className="px-2 py-1.5">
-                                <div className="flex items-center justify-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => startEditUnit(u)}
-                                    aria-label={`Edit unit ${u.unitNo}`}
-                                    title="Edit unit"
-                                    className="w-6 h-6 rounded border border-blue-100 bg-blue-50 text-blue-500 hover:bg-blue-100 flex items-center justify-center"
-                                  >
-                                    <Pencil size={11} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteUnit(t.id, u.id, u.unitNo)}
-                                    aria-label={`Delete unit ${u.unitNo}`}
-                                    title="Delete unit"
-                                    className="w-6 h-6 rounded border border-red-100 bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center"
-                                  >
-                                    <Trash2 size={11} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  {/* Units — responsive table (lg+) / cards (below lg). Edit,
+                      delete, and WhatsApp/Email share live in each row/card. */}
+                  <UnitsList
+                    units={t.units ?? []}
+                    editingUnitId={editingUnitId}
+                    shareCtx={{ projectName: project.name, towerName: t.name, location: locationLine }}
+                    matches={matches}
+                    onEdit={startEditUnit}
+                    onDelete={(u) => handleDeleteUnit(t.id, u.id, u.unitNo)}
+                  />
 
-                  {/* Inline edit panel — appears when the user clicks the
-                      pencil on a unit. Same shape as the add-unit form below
-                      so users learn one layout. */}
+                  {/* Inline edit panel — appears when the pencil on a unit is
+                      clicked. Same <UnitFormFields> as the add-unit form so
+                      users learn one layout. */}
                   {editingUnitId && (t.units ?? []).some((u) => u.id === editingUnitId) && (
                     <div className="mt-3 p-3 border border-blue-200 bg-blue-50/30 rounded-xl space-y-2">
                       <p className="text-[11px] uppercase tracking-wider font-semibold text-blue-700">
                         Editing unit
                       </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <Input label="Floor" type="number" placeholder="12"
-                          value={editingUnit.floor}
-                          onChange={(e) => setEditingUnit({ ...editingUnit, floor: e.target.value })} />
-                        <Input label="Unit No *" placeholder="B-1204"
-                          value={editingUnit.unitNo}
-                          onChange={(e) => setEditingUnit({ ...editingUnit, unitNo: e.target.value })} />
-                        <Input label="Typology" placeholder="3BHK"
-                          value={editingUnit.typology}
-                          onChange={(e) => setEditingUnit({ ...editingUnit, typology: e.target.value })} />
-                        <Input label="Size" placeholder="1850 sqft"
-                          value={editingUnit.size}
-                          onChange={(e) => setEditingUnit({ ...editingUnit, size: e.target.value })} />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                          <select
-                            value={editingUnit.status}
-                            onChange={(e) => setEditingUnit({ ...editingUnit, status: e.target.value })}
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            {UNIT_STATUSES.map((s) => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <Input label="Owner" placeholder="Rajesh Kumar"
-                          value={editingUnit.ownerName}
-                          onChange={(e) => setEditingUnit({ ...editingUnit, ownerName: e.target.value })} />
-                        <Input label="Owner Phone" placeholder="+91 …"
-                          value={editingUnit.ownerPhone}
-                          onChange={(e) => setEditingUnit({ ...editingUnit, ownerPhone: e.target.value })} />
-                      </div>
+                      <UnitFormFields value={editingUnit} onChange={setEditingUnit} />
                       <div className="flex justify-end gap-2 pt-1">
                         <Button type="button" variant="outline" onClick={() => setEditingUnitId(null)}>
                           Cancel
@@ -548,34 +464,7 @@ export default function ProjectDetailPage({
 
                   {unitDraftFor === t.id ? (
                     <div className="mt-3 p-3 border border-gray-200 rounded-xl space-y-2">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <Input label="Floor" type="number" placeholder="12"
-                          value={unitDraft.floor} onChange={(e) => setUnitDraft({ ...unitDraft, floor: e.target.value })} />
-                        <Input label="Unit No *" placeholder="B-1204"
-                          value={unitDraft.unitNo} onChange={(e) => setUnitDraft({ ...unitDraft, unitNo: e.target.value })} />
-                        <Input label="Typology" placeholder="3BHK"
-                          value={unitDraft.typology} onChange={(e) => setUnitDraft({ ...unitDraft, typology: e.target.value })} />
-                        <Input label="Size" placeholder="1850 sqft"
-                          value={unitDraft.size} onChange={(e) => setUnitDraft({ ...unitDraft, size: e.target.value })} />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                          <select
-                            value={unitDraft.status}
-                            onChange={(e) => setUnitDraft({ ...unitDraft, status: e.target.value })}
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            {UNIT_STATUSES.map((s) => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <Input label="Owner" placeholder="Rajesh Kumar"
-                          value={unitDraft.ownerName} onChange={(e) => setUnitDraft({ ...unitDraft, ownerName: e.target.value })} />
-                        <Input label="Owner Phone" placeholder="+91 …"
-                          value={unitDraft.ownerPhone} onChange={(e) => setUnitDraft({ ...unitDraft, ownerPhone: e.target.value })} />
-                      </div>
+                      <UnitFormFields value={unitDraft} onChange={setUnitDraft} />
                       <div className="flex justify-end gap-2 pt-1">
                         <Button type="button" variant="outline" onClick={() => setUnitDraftFor(null)}>Cancel</Button>
                         <Button type="button" onClick={() => handleAddUnit(t.id)} disabled={!unitDraft.unitNo.trim()}>
@@ -586,10 +475,10 @@ export default function ProjectDetailPage({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setUnitDraftFor(t.id)}
-                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                      onClick={() => { setEditingUnitId(null); setUnitDraft(EMPTY_UNIT_DRAFT); setUnitDraftFor(t.id); }}
+                      className="mt-3 w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-600 bg-blue-50/60 border border-dashed border-blue-200 hover:bg-blue-50 hover:border-blue-300 rounded-xl transition-colors"
                     >
-                      <Plus size={12} /> Add unit to {t.name}
+                      <Plus size={13} /> Add unit to {t.name}
                     </button>
                   )}
                 </li>

@@ -26,6 +26,7 @@ import { Plus, X, ArrowLeft, ArrowRight, Check, Trash2 } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Alert } from '@/components/common/Alert';
+import { PROJECT_STATUS_VALUES, projectStatusLabel, AREA_UNIT_VALUES, DEFAULT_AREA_UNIT } from '@/lib/unit-options';
 
 interface UnitDraft {
   floor: string;
@@ -62,10 +63,12 @@ export function AddProjectWizard({ onClose, onCreated }: Props) {
   // Step 1
   const [name, setName] = useState('');
   const [propertyType, setPropertyType] = useState<'Residential' | 'Commercial'>('Residential');
-  const [constructionStatus, setConstructionStatus] = useState<'ReadyToMove' | 'UnderConstruction'>('ReadyToMove');
+  const [constructionStatus, setConstructionStatus] = useState<string>('ReadyToMove');
   const [city, setCity] = useState('');
   const [location, setLocation] = useState('');
   const [sector, setSector] = useState('');
+  const [totalArea, setTotalArea] = useState('');
+  const [totalAreaUnit, setTotalAreaUnit] = useState<string>(DEFAULT_AREA_UNIT);
 
   // Step 2
   const [towerName, setTowerName] = useState('');
@@ -110,6 +113,8 @@ export function AddProjectWizard({ onClose, onCreated }: Props) {
           city: city || null,
           location: location || null,
           sector: sector || null,
+          totalArea: totalArea.trim() ? Number(totalArea) : null,
+          totalAreaUnit: totalArea.trim() ? totalAreaUnit : null,
         }),
       });
       // Defensive: if the server returned an HTML error page (e.g. a Next.js
@@ -129,7 +134,7 @@ export function AddProjectWizard({ onClose, onCreated }: Props) {
       const validUnits = units.filter((u) => u.unitNo.trim());
 
       if (trimmedTower || validUnits.length > 0) {
-        const towerNameToUse = trimmedTower || 'Tower 1';
+        const towerNameToUse = trimmedTower || 'Block 1';
         const towerRes = await fetch(`/api/projects/${project.id}/towers`, {
           method: 'POST',
           credentials: 'include',
@@ -222,11 +227,12 @@ export function AddProjectWizard({ onClose, onCreated }: Props) {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Construction Status *</label>
                   <select
                     value={constructionStatus}
-                    onChange={(e) => setConstructionStatus(e.target.value as typeof constructionStatus)}
+                    onChange={(e) => setConstructionStatus(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="ReadyToMove">Ready To Move</option>
-                    <option value="UnderConstruction">Under Construction</option>
+                    {PROJECT_STATUS_VALUES.map((v) => (
+                      <option key={v} value={v}>{projectStatusLabel(v)}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -235,19 +241,34 @@ export function AddProjectWizard({ onClose, onCreated }: Props) {
                 <Input label="Location / Locality" placeholder="e.g. Golf Course Road" value={location} onChange={(e) => setLocation(e.target.value)} />
                 <Input label="Sector" placeholder="e.g. Sector 24" value={sector} onChange={(e) => setSector(e.target.value)} />
               </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <Input label="Total project area" type="number" placeholder="e.g. 5" value={totalArea} onChange={(e) => setTotalArea(e.target.value)} />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Area unit</label>
+                  <select
+                    value={totalAreaUnit}
+                    onChange={(e) => setTotalAreaUnit(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {AREA_UNIT_VALUES.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </form>
           )}
 
           {step === 2 && (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">
-                Optional — add a first tower and any units you have on hand. You can leave this
+                Optional — add a first block and any units you have on hand. You can leave this
                 blank and back-fill from the project page later.
               </p>
 
               <Input
-                label="Tower Name (defaults to “Tower 1”)"
-                placeholder="e.g. Tower B"
+                label="Block Name (defaults to “Block 1”)"
+                placeholder="e.g. Block B"
                 value={towerName}
                 onChange={(e) => setTowerName(e.target.value)}
               />

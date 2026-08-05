@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { PLANS } from './plans';
+import {
+  ASSET_TYPES, LISTING_TYPES, FURNISHINGS, INTERIOR_STATUSES, FACINGS, PREFERRED_TENANTS,
+  AREA_UNIT_VALUES, PROJECT_STATUS_VALUES, DEAL_TYPES,
+} from './unit-options';
 
 // ==================== PRIMITIVES ====================
 
@@ -612,13 +616,28 @@ export const updateUserPermissionsSchema = z.object({
 
 // ==================== PROJECTS (F17) ====================
 
+/** Optional select value constrained to a known option list; '' / missing → null. */
+const optionalOneOf = (values: readonly string[]) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((v) => v || null)
+    .refine((v) => v == null || values.includes(v), 'Invalid option');
+
+/** Optional non-negative money/area number; '' / missing → null. */
+const optionalNonNegNumber = z.coerce.number().min(0).max(1e12).optional().nullable();
+
 export const createProjectSchema = z.object({
   name: z.string().trim().min(2, 'Project name is required'),
   propertyType: z.enum(['Commercial', 'Residential']),
-  constructionStatus: z.enum(['ReadyToMove', 'UnderConstruction']),
+  constructionStatus: z.enum([...PROJECT_STATUS_VALUES] as [string, ...string[]]),
   city: optionalString,
   location: optionalString,
   sector: optionalString,
+  totalArea: z.coerce.number().min(0).max(1e12).optional().nullable(),
+  totalAreaUnit: optionalOneOf(AREA_UNIT_VALUES),
 }).strict();
 
 export const updateProjectSchema = createProjectSchema.partial().strip();
@@ -637,6 +656,39 @@ export const createUnitSchema = z.object({
   ownerPhones: z.array(z.string().trim().min(3)).optional().default([]),
   typology: optionalString,
   size: optionalString,
+  // F17b — richer inventory attributes.
+  assetType: optionalOneOf(ASSET_TYPES),
+  listingType: optionalOneOf(LISTING_TYPES),
+  furnishing: optionalOneOf(FURNISHINGS),
+  interiorStatus: optionalOneOf(INTERIOR_STATUSES),
+  areaValue: optionalNonNegNumber,
+  areaUnit: optionalOneOf(AREA_UNIT_VALUES),
+  areaSqft: optionalNonNegNumber,
+  pricePerSqft: optionalNonNegNumber,
+  price: optionalNonNegNumber,
+  // F17c — category-specific attributes.
+  facing: optionalOneOf(FACINGS),
+  bathrooms: z.coerce.number().int().min(0).max(50).optional().nullable(),
+  parking: optionalString,
+  plotDimensions: optionalString,
+  cornerPlot: z.boolean().optional().nullable(),
+  deposit: optionalNonNegNumber,
+  maintenanceMonthly: optionalNonNegNumber,
+  availableFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional().nullable(),
+  preferredTenant: optionalOneOf(PREFERRED_TENANTS),
+  lockInMonths: z.coerce.number().int().min(0).max(120).optional().nullable(),
+  reraId: optionalString,
+  // F17d — tags (public) + deal source (internal).
+  tags: z.array(z.string().trim().min(1).max(40)).max(20).optional().default([]),
+  dealType: optionalOneOf(DEAL_TYPES),
+  dealerName: optionalString,
+  dealerPhone: optionalString,
+  brokerageSharePct: z.coerce.number().min(0).max(100).optional().nullable(),
+  // Phase 3 — images (public) + cheque/cash split (internal).
+  imageUrls: z.array(z.string().trim().min(1).max(500)).max(20).optional().default([]),
+  splitPrice: z.boolean().optional().nullable(),
+  chequeAmount: optionalNonNegNumber,
+  cashAmount: optionalNonNegNumber,
   status: z.string().trim().default('Vacant'),
   remarks: optionalString,
   assignedTo: z.string().regex(/^[0-9a-fA-F]{24}$/).optional().nullable(),
