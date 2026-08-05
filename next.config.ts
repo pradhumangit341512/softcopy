@@ -83,9 +83,13 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Dev-only allowlist (ignored in production builds). LAN IPs are handed
+  // out by DHCP and drift over time, so allowlist the whole home/office
+  // subnets with a glob instead of pinning single addresses that go stale
+  // (e.g. the box now resolves as 192.168.1.59, not .7).
   allowedDevOrigins: [
-    "192.168.1.7",
-    "10.143.136.252",
+    "192.168.1.*",
+    "10.143.136.*",
     "localhost",
     "127.0.0.1",
   ],

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter, Poppins, Fraunces, Manrope, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { Analytics } from '@vercel/analytics/react';
 import './globals.css';
 import './landing.css';
@@ -7,39 +7,55 @@ import { ToastProvider } from '@/components/common/Toast';
 import { WhatsAppFAB } from '@/components/common/WhatsAppFAB';
 import { ConfirmProvider } from '@/components/common/ConfirmDialog';
 
-// App fonts
-const inter = Inter({
-  subsets: ['latin'],
+// Fonts are self-hosted via next/font/local — the woff2 files live in
+// app/fonts/ and are bundled at build time. This removes the compile-time
+// fetch to Google's font servers (next/font/google), which on a slow or
+// offline network stalled every cold build with "Request timed out after
+// 3000ms / Retrying …" per family. Same zero-CLS / inline-CSS / preload
+// benefits, no external DNS/TLS round-trip. Latin subset only, matching the
+// prior config.
+
+// App fonts. Inter is a variable font (single file spans the 100–900 axis).
+const inter = localFont({
+  src: './fonts/inter-latin-wght-normal.woff2',
+  weight: '100 900',
   variable: '--font-inter',
+  display: 'swap',
 });
 
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
+// Poppins is NOT a variable font, so each weight ships as its own file.
+const poppins = localFont({
+  src: [
+    { path: './fonts/poppins-latin-400-normal.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/poppins-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/poppins-latin-600-normal.woff2', weight: '600', style: 'normal' },
+    { path: './fonts/poppins-latin-700-normal.woff2', weight: '700', style: 'normal' },
+    { path: './fonts/poppins-latin-800-normal.woff2', weight: '800', style: 'normal' },
+  ],
   variable: '--font-poppins',
+  display: 'swap',
 });
 
-// Landing-page fonts — self-hosted by next/font/google (zero CLS, no external
-// DNS/TLS round-trip on first paint, and the font CSS ships inline in the
-// initial HTML so the landing page never shows an unstyled flash.
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  style: ['normal', 'italic'],
+// Landing-page fonts. Fraunces is variable with separate normal/italic files.
+const fraunces = localFont({
+  src: [
+    { path: './fonts/fraunces-latin-wght-normal.woff2', weight: '100 900', style: 'normal' },
+    { path: './fonts/fraunces-latin-wght-italic.woff2', weight: '100 900', style: 'italic' },
+  ],
   variable: '--font-fraunces',
   display: 'swap',
 });
 
-const manrope = Manrope({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
+const manrope = localFont({
+  src: './fonts/manrope-latin-wght-normal.woff2',
+  weight: '200 800',
   variable: '--font-manrope',
   display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
+const jetbrainsMono = localFont({
+  src: './fonts/jetbrains-mono-latin-wght-normal.woff2',
+  weight: '100 800',
   variable: '--font-jetbrains-mono',
   display: 'swap',
 });
@@ -93,8 +109,8 @@ export default function RootLayout({
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.svg" />
-        {/* next/font/google self-hosts the font files and emits its own
-            preconnect/preload hints automatically — manual ones aren't needed. */}
+        {/* next/font/local bundles the font files and emits its own
+            preload hints automatically — manual ones aren't needed. */}
 
         {/* Analytics (optional) */}
         {process.env.NEXT_PUBLIC_GA_ID && (
