@@ -132,6 +132,20 @@ export interface FollowUpEntry {
   nextDate?: Date | string | null;
 }
 
+/** Gap 1 — a company's inbound lead-capture webhook for one source. */
+export interface LeadWebhook extends BaseModel {
+  companyId?: string;
+  source: string;
+  token: string;
+  active: boolean;
+  assignTo: string;
+  createdBy?: string;
+  capturedCount?: number;
+  lastCapturedAt?: Date | string | null;
+  fbPageId?: string | null;
+  fbPageToken?: string | null;
+}
+
 export interface Client extends BaseModel {
   clientName: string;
   phone: string;
@@ -164,6 +178,11 @@ export interface Client extends BaseModel {
 
   source?: string;
   notes?: string;
+
+  /** Gap 3 — rule-based lead score (see lib/lead-score.ts). */
+  leadScore?: number | null;
+  leadScoreBand?: string | null;
+  leadScoreReasons?: string[];
 
   creatorId?: string;
   creator?: User;

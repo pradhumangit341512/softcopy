@@ -3,6 +3,7 @@ import { requireAuth, isValidObjectId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { assertCompanyOwnership, isTeamMember, isAdminRole } from "@/lib/authorize";
 import { recordAudit } from "@/lib/audit";
+import { scoreLead } from "@/lib/lead-score";
 
 export const runtime = "nodejs";
 
@@ -153,6 +154,21 @@ export async function PUT(
       where: { id },
       include: { creator: { select: { id: true, name: true } } },
     });
+
+    // Recompute the lead score from the merged post-update state.
+    if (updated) {
+      const s = scoreLead(updated);
+      if (s.score !== updated.leadScore || s.band !== updated.leadScoreBand) {
+        await db.client.update({
+          where: { id },
+          data: { leadScore: s.score, leadScoreBand: s.band, leadScoreReasons: s.reasons },
+        });
+        updated.leadScore = s.score;
+        updated.leadScoreBand = s.band;
+        updated.leadScoreReasons = s.reasons;
+      }
+    }
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error("Update client error:", error);

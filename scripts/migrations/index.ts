@@ -35,6 +35,8 @@ import { migration as m025 } from './025_unit_deal_tags';
 import { migration as m026 } from './026_project_total_area';
 import { migration as m027 } from './027_unit_images_price_split';
 import { migration as m028 } from './028_project_is_standalone';
+import { migration as m029 } from './029_client_lead_score';
+import { migration as m030 } from './030_lead_webhooks_init';
 
 export const ALL_MIGRATIONS: Migration[] = [
   m000,
@@ -66,4 +68,6 @@ export const ALL_MIGRATIONS: Migration[] = [
   m026,
   m027,
   m028,
+  m029,
+  m030,
 ];

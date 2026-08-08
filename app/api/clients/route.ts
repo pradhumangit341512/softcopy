@@ -5,6 +5,7 @@ import {
   isValidObjectId,
 } from "@/lib/auth";
 import { createClientSchema, parseBody } from "@/lib/validations";
+import { scoreLead } from "@/lib/lead-score";
 import { isTeamMember, isAdminRole } from "@/lib/authorize";
 import { escapeRegex } from "@/lib/utils";
 
@@ -92,6 +93,14 @@ export async function GET(req: NextRequest) {
       else if (sources.length > 1) where.source = { in: sources };
     }
 
+    // Lead-score band filter (Hot / Warm / Cold; comma-separated allowed)
+    const band = searchParams.get('band');
+    if (band) {
+      const bands = band.split(',').filter(Boolean);
+      if (bands.length === 1) where.leadScoreBand = bands[0];
+      else if (bands.length > 1) where.leadScoreBand = { in: bands };
+    }
+
     // Budget range
     if (budgetMin || budgetMax) {
       const budget: { gte?: number; lte?: number } = {};
@@ -139,11 +148,17 @@ export async function GET(req: NextRequest) {
       where.AND = andClauses;
     }
 
+    // Sort: default newest-first; `sort=score` ranks hottest leads first.
+    const orderBy =
+      searchParams.get('sort') === 'score'
+        ? [{ leadScore: 'desc' as const }, { createdAt: 'desc' as const }]
+        : { createdAt: 'desc' as const };
+
     const [clients, total] = await Promise.all([
       db.client.findMany({
         where,
         include: { creator: { select: { name: true } } },
-        orderBy: { createdAt: "desc" },
+        orderBy,
         skip,
         take: limit,
       }),
@@ -201,8 +216,24 @@ export async function POST(req: NextRequest) {
       assignTo = data.assignedTo;
     }
 
+    const score = scoreLead({
+      status: data.status,
+      inquiryType: data.inquiryType,
+      requirementType: data.requirementType,
+      budget: data.budget,
+      preferredLocation: data.preferredLocation,
+      email: data.email,
+      propertyVisited: data.propertyVisited,
+      followUps: [],
+      lastContactDate: null,
+      followUpDate: data.followUpDate,
+    });
+
     const client = await db.client.create({
       data: {
+        leadScore: score.score,
+        leadScoreBand: score.band,
+        leadScoreReasons: score.reasons,
         clientName: data.clientName,
         phone: data.phone,
         email: data.email,

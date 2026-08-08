@@ -7,7 +7,7 @@ import {
   BarChart3, Settings, X, Building2,
   GitBranch, Briefcase, UserCog, Award,
   CalendarCheck, FolderTree, Handshake, Sparkles,
-  BookOpen, Database, Wallet, MapPin, Receipt,
+  BookOpen, Database, Wallet, MapPin, Receipt, Webhook,
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { LucideIcon } from 'lucide-react';
@@ -82,6 +82,8 @@ const navItems: NavItem[] = [
     roles: ['admin', 'superadmin'] },
   { href: '/dashboard/payroll',              icon: Wallet,          label: 'Payroll',
     roles: ['admin', 'superadmin'], feature: 'feature.payroll' },
+  { href: '/dashboard/integrations',         icon: Webhook,         label: 'Lead Capture',
+    roles: ['admin', 'superadmin'] },
 
   // ── Everyone (bottom) ──
   { href: '/dashboard/settings',         icon: Settings,        label: 'Settings'          },

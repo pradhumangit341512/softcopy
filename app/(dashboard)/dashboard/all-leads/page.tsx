@@ -73,6 +73,8 @@ export default function ClientsPage() {
   const followUpFromUrl  = searchParams.get('followUp')  || '';
   const budgetMinFromUrl = searchParams.get('budgetMin') || '';
   const budgetMaxFromUrl = searchParams.get('budgetMax') || '';
+  const bandFromUrl      = searchParams.get('band')      || '';
+  const sortFromUrl      = searchParams.get('sort')      || '';
   const pageFromUrl      = parseInt(searchParams.get('page') || '1', 10);
 
   // Local state for filter UI — synced from URL
@@ -149,6 +151,8 @@ export default function ClientsPage() {
         ...(tabFilter.inquiryType && { inquiryType: tabFilter.inquiryType }),
         ...(dateFromUrl && { dateFrom: dateFromUrl }),
         ...(dateToUrl && { dateTo: dateToUrl }),
+        ...(bandFromUrl && { band: bandFromUrl }),
+        ...(sortFromUrl && { sort: sortFromUrl }),
         page: String(pageFromUrl),
       });
       const response = await fetch(`/api/clients?${params}`, {
@@ -167,7 +171,7 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, searchFromUrl, statusFromUrl, tabFromUrl, dateFromUrl, dateToUrl, pageFromUrl]);
+  }, [user?.id, searchFromUrl, statusFromUrl, tabFromUrl, dateFromUrl, dateToUrl, bandFromUrl, sortFromUrl, pageFromUrl]);
 
   useEffect(() => {
     if (authLoading || !user?.id) return;
@@ -405,6 +409,45 @@ export default function ClientsPage() {
           router.push(`/dashboard/all-leads?${params.toString()}`);
         }}
       />
+
+      {/* ══ LEAD SCORE FILTER (Gap 3) ══ */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-gray-400">Score:</span>
+        {(['Hot', 'Warm', 'Cold'] as const).map((b) => {
+          const active = bandFromUrl === b;
+          return (
+            <button
+              key={b}
+              type="button"
+              onClick={() => {
+                const params = new URLSearchParams(searchParams.toString());
+                if (active) params.delete('band'); else params.set('band', b);
+                params.set('page', '1');
+                router.push(`/dashboard/all-leads?${params.toString()}`);
+              }}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                active ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {b}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => {
+            const params = new URLSearchParams(searchParams.toString());
+            if (sortFromUrl === 'score') params.delete('sort'); else params.set('sort', 'score');
+            params.set('page', '1');
+            router.push(`/dashboard/all-leads?${params.toString()}`);
+          }}
+          className={`ml-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+            sortFromUrl === 'score' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          Sort by score
+        </button>
+      </div>
 
       {/* ══ BULK ACTION BAR ══ */}
       {selectedIds.size > 0 && (

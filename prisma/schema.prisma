@@ -213,6 +213,11 @@ model Client {
   status            String       @default("New")
   source            String?
   notes             String?
+  // Gap 3 — rule-based lead score (0–100), band (Hot/Warm/Cold), and the
+  // short list of reasons behind it. Recomputed on every meaningful write.
+  leadScore         Int?
+  leadScoreBand     String?
+  leadScoreReasons  String[]     @default([])
   companyId         String       @db.ObjectId
   createdBy         String       @db.ObjectId
   // Current owner of the lead. Defaults to createdBy on insert; flipped by
@@ -242,6 +247,32 @@ model Client {
   @@index([companyId, visitingDate])
   // Soft-delete-aware composite — every list query filters deletedAt: null
   @@index([companyId, deletedAt, createdAt])
+}
+
+// Gap 1 — inbound lead-capture endpoints. Each row is one company's webhook for
+// a given source (99acres / MagicBricks / Housing / Facebook / Website / Other).
+// The random `token` is embedded in the public inbound URL so a portal's POST
+// lands in the right tenant; captured leads are assigned to `assignTo`.
+model LeadWebhook {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  companyId     String    @db.ObjectId
+  source        String
+  token         String    @unique
+  active        Boolean   @default(true)
+  assignTo      String    @db.ObjectId
+  createdBy     String    @db.ObjectId
+  capturedCount Int       @default(0)
+  lastCapturedAt DateTime?
+  // Facebook Lead Ads only — page id + a long-lived page token to fetch the
+  // full lead via the Graph API. Stored per company; treat as secrets.
+  fbPageId      String?
+  fbPageToken   String?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  @@index([companyId, deletedAt])
+  @@index([fbPageId])
+  @@map("lead_webhooks")
 }
 
 model Commission {

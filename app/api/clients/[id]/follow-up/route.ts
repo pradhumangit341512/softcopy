@@ -25,6 +25,7 @@ import { requireAuth, isValidObjectId } from '@/lib/auth';
 import { isTeamMember } from '@/lib/authorize';
 import { recordAudit } from '@/lib/audit';
 import { getDisposition } from '@/lib/follow-up';
+import { scoreLead } from '@/lib/lead-score';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -133,6 +134,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       where: { id: lead.id },
       include: { creator: { select: { id: true, name: true } } },
     });
+
+    // A follow-up changes engagement/recency/status — rescore.
+    if (updated) {
+      const s = scoreLead(updated);
+      await db.client.update({
+        where: { id: lead.id },
+        data: { leadScore: s.score, leadScoreBand: s.band, leadScoreReasons: s.reasons },
+      });
+      updated.leadScore = s.score;
+      updated.leadScoreBand = s.band;
+      updated.leadScoreReasons = s.reasons;
+    }
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error('Complete follow-up error:', error);

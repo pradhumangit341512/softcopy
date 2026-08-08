@@ -646,6 +646,19 @@ export const createTowerSchema = z.object({
   name: z.string().trim().min(1, 'Tower name is required'),
 }).strict();
 
+// Gap 1 — lead-capture webhooks.
+export const createLeadWebhookSchema = z.object({
+  source: z.enum(['99acres', 'MagicBricks', 'Housing', 'Facebook', 'Website', 'Other']),
+  assignTo: objectIdSchema,
+}).strict();
+
+export const updateLeadWebhookSchema = z.object({
+  active: z.boolean().optional(),
+  assignTo: objectIdSchema.optional(),
+  fbPageId: optionalString,
+  fbPageToken: optionalString,
+}).strict();
+
 export const updateTowerSchema = createTowerSchema.partial().strip();
 
 export const createUnitSchema = z.object({

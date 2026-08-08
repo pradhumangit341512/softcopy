@@ -184,6 +184,28 @@ function NextFollowUpCell({ date }: { date: Date | string | undefined | null }) 
   );
 }
 
+const LEAD_BAND_STYLE: Record<string, string> = {
+  Hot: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70',
+  Warm: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/70',
+  Cold: 'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
+};
+
+/** Lead-score pill: band + numeric score, with the scoring reasons on hover. */
+function LeadScoreBadge({ client }: { client: Client }) {
+  if (client.leadScore == null || !client.leadScoreBand) {
+    return <span className="text-xs text-gray-300">—</span>;
+  }
+  const cls = LEAD_BAND_STYLE[client.leadScoreBand] ?? 'bg-gray-100 text-gray-600 ring-1 ring-gray-200';
+  return (
+    <span
+      title={client.leadScoreReasons?.join(' · ') || undefined}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cls}`}
+    >
+      {client.leadScoreBand} · {client.leadScore}
+    </span>
+  );
+}
+
 export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds, onSelectionChange, onCompleteFollowUp, onQuickUpdate }: ClientTableProps) {
   const selectable = !!selectedIds && !!onSelectionChange;
   const allSelected = selectable && clients.length > 0 && clients.every((c) => selectedIds.has(c.id));
@@ -292,6 +314,7 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds
             <th className="px-4 py-3 text-left">Follow Up</th>
             <th className="px-4 py-3 text-left">Next Follow Up</th>
             <th className="px-4 py-3 text-left">Visited</th>
+            <th className="px-4 py-3 text-left">Score</th>
             <th className="px-4 py-3 text-left">Status</th>
           </tr>
         </thead>
@@ -533,6 +556,11 @@ export function ClientTable({ clients, onEdit, onDelete, onTransfer, selectedIds
                 {/* VISITED */}
                 <td className="px-4 py-3">
                   <Badge label={client.propertyVisited ? 'Visited' : 'Not Visited'} variant={client.propertyVisited ? 'success' : 'warning'} />
+                </td>
+
+                {/* SCORE */}
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <LeadScoreBadge client={client} />
                 </td>
 
                 {/* STATUS */}
