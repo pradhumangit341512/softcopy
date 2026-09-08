@@ -73,6 +73,11 @@ export async function middleware(request: NextRequest) {
   const isPublicApi = publicApiPaths.includes(pathname);
   if (isPublicApi) return NextResponse.next();
 
+  // Public certificate verification (the QR-scan target). Anyone — including
+  // logged-out visitors — must be able to verify an internship certificate.
+  // Scoped `/verify/<id>` prefix only; the page itself validates the token.
+  if (pathname.startsWith('/verify/')) return NextResponse.next();
+
   const token = request.cookies.get('auth_token')?.value;
 
   if (!token) {

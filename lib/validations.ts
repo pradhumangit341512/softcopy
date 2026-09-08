@@ -838,3 +838,70 @@ export async function parseBody<T extends z.ZodTypeAny>(
 
   return { ok: true, data: parsed.data };
 }
+
+// ==================== INTERNSHIP CERTIFICATES ====================
+
+// Accepts a "YYYY-MM-DD" string or Date and normalizes to a Date. Rejects
+// unparseable values so we never persist an Invalid Date.
+const certDate = z
+  .union([z.string(), z.date()])
+  .transform((v) => new Date(v))
+  .refine((d) => !Number.isNaN(d.getTime()), 'Invalid date');
+
+// Optional trimmed string → null (for nullable DB columns).
+const optNullStr = (max: number) =>
+  z.string().trim().max(max).optional().transform((v) => v?.trim() || null);
+// Optional trimmed string → undefined (so a server default can apply).
+const optUndefStr = (max: number) =>
+  z.string().trim().max(max).optional().transform((v) => v?.trim() || undefined);
+
+export const createCertificateSchema = z
+  .object({
+    internName: z.string().trim().min(2, 'Intern name is too short').max(120),
+    role: z.string().trim().min(2, 'Role is too short').max(120),
+    team: z.string().trim().min(1, 'Team is required').max(60),
+    startDate: certDate,
+    endDate: certDate,
+    issueDate: certDate.optional(),
+    performance: optNullStr(600),
+    organization: optUndefStr(120),
+    // Optional student details.
+    fatherName: optNullStr(120),
+    rollNumber: optNullStr(60),
+    collegeName: optNullStr(160),
+    course: optNullStr(80),
+    semester: optNullStr(40),
+    signatoryName: optNullStr(120),
+    signatoryTitle: optNullStr(120),
+  })
+  .refine((d) => d.endDate.getTime() >= d.startDate.getTime(), {
+    message: 'End date must be on or after the start date',
+    path: ['endDate'],
+  });
+
+// Every field optional (PATCH). `status` toggles revoke/reinstate.
+export const updateCertificateSchema = z
+  .object({
+    internName: z.string().trim().min(2).max(120).optional(),
+    role: z.string().trim().min(2).max(120).optional(),
+    team: z.string().trim().min(1).max(60).optional(),
+    startDate: certDate.optional(),
+    endDate: certDate.optional(),
+    issueDate: certDate.optional(),
+    performance: z.string().trim().max(600).nullable().optional(),
+    organization: z.string().trim().min(1).max(120).optional(),
+    fatherName: z.string().trim().max(120).nullable().optional(),
+    rollNumber: z.string().trim().max(60).nullable().optional(),
+    collegeName: z.string().trim().max(160).nullable().optional(),
+    course: z.string().trim().max(80).nullable().optional(),
+    semester: z.string().trim().max(40).nullable().optional(),
+    signatoryName: z.string().trim().max(120).nullable().optional(),
+    signatoryTitle: z.string().trim().max(120).nullable().optional(),
+    status: z.enum(['active', 'revoked']).optional(),
+  })
+  .refine(
+    (d) =>
+      !(d.startDate && d.endDate) ||
+      d.endDate.getTime() >= d.startDate.getTime(),
+    { message: 'End date must be on or after the start date', path: ['endDate'] }
+  );

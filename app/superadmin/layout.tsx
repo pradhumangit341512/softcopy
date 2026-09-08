@@ -6,12 +6,13 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useInactivityLogout } from '@/hooks/useInactivityLogout';
 import { Loader } from '@/components/common/Loader';
-import { Building2, CreditCard, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
+import { Award, Building2, CreditCard, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
 
 const NAV = [
   { href: '/superadmin', label: 'Overview', icon: LayoutDashboard },
   { href: '/superadmin/companies', label: 'Companies', icon: Building2 },
   { href: '/superadmin/payments', label: 'Payments', icon: CreditCard },
+  { href: '/superadmin/certificates', label: 'Certificates', icon: Award },
 ];
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {

@@ -1092,3 +1092,61 @@ model Payslip {
   @@index([companyId, period])
   @@map("payslips")
 }
+
+// Lifecycle of an issued internship certificate.
+enum CertificateStatus {
+  active   // valid, verifiable
+  revoked  // issued in error / withdrawn — verification page shows "revoked"
+}
+
+/// Broker365 company internship-completion certificates issued by the
+/// superadmin. Company-branded (not academic): intern, role, team, and
+/// internship duration. Each carries a public human-readable `certificateId`
+/// printed on the document, plus an unguessable `verifyToken` embedded in its
+/// QR code so certificate ids can't be enumerated. A brand-new collection —
+/// MongoDB creates it lazily on first write, so no backfill migration is needed.
+model InternshipCertificate {
+  id             String            @id @default(auto()) @map("_id") @db.ObjectId
+  // Public id shown on the certificate and used in the verification URL,
+  // e.g. "INTERN-2026-K7P2QX". Unique across the system.
+  certificateId  String            @unique
+  // Unguessable secret embedded in the QR link (?t=…). The public verify page
+  // requires it, so knowing a certificateId alone is not enough to spoof one.
+  verifyToken    String
+
+  internName     String
+  role           String            // position held, e.g. "Sales Intern"
+  team           String            // department, e.g. "Sales"
+  startDate      DateTime
+  endDate        DateTime
+  issueDate      DateTime          @default(now())
+  // Optional performance / recognition remark shown on the certificate.
+  performance    String?
+
+  // ── Optional student details (for interns who are college students) ──
+  fatherName     String?
+  rollNumber     String?
+  collegeName    String?
+  course         String?           // e.g. "BA", "B.Com"
+  semester       String?           // e.g. "5th"
+  // Issuing organization. Defaults to the platform brand; kept per-row so the
+  // document + verify page stay self-consistent even if the brand changes.
+  organization   String            @default("Broker365")
+
+  // Optional authorized signatory shown above the signature line.
+  signatoryName  String?
+  signatoryTitle String?
+
+  status         CertificateStatus @default(active)
+  // Superadmin user id who issued this certificate. Audit trail.
+  issuedBy       String?           @db.ObjectId
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status])
+  @@index([team])
+  @@index([deletedAt])
+  @@index([createdAt])
+  @@map("internship_certificates")
+}
